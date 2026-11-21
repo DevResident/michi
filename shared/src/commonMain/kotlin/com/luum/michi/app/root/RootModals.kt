@@ -3,6 +3,8 @@ package com.luum.michi.app.root
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
+import com.luum.michi.app.core.auth.domain.effectiveScoreFormat
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.navigation.domain.DetailDestination
@@ -47,6 +49,7 @@ internal fun RootModals(
     holders: RootHolders,
     viewerId: Int?,
     settingsState: SettingsState,
+    capabilities: ProviderCapabilities,
     authServices: List<AuthService>,
     isAuthConfigured: Boolean,
     mediaListEntryRepository: MediaListEntryRepository,
@@ -57,7 +60,7 @@ internal fun RootModals(
 ) {
     // Editor score display in the user's format (translation lives in
     // settings pure functions so mediaDetail stays primitive-only).
-    val editorScoreFormat = settingsState.scoreFormat
+    val editorScoreFormat = capabilities.effectiveScoreFormat(settingsState.scoreFormat)
     val formatScore: (Float) -> String = { formatScoreValue(editorScoreFormat, it) }
     val parseScore: (String) -> Float? = { parseScoreValue(editorScoreFormat, it) }
     val scoreSuffix: String? = scoreSuffixFor(editorScoreFormat)
@@ -77,9 +80,10 @@ internal fun RootModals(
     }
     val editorId = state.editorMediaId
     if (state.isEditorOpen && editorId != null && viewerId != null) {
-        val editor = remember(editorId) {
+        val editor = remember(editorId, capabilities) {
             createMediaEntryEditorState(
                 mediaId = editorId,
+                capabilities = capabilities,
                 entryRepository = mediaListEntryRepository,
                 detailRepository = mediaDetailRepository,
                 scope = holders.listScope,
@@ -93,9 +97,10 @@ internal fun RootModals(
                 favouriteFromDetail = { holders.mediaDetail.favouriteFor(editorId) },
             )
         }
-        LaunchedEffect(editorId) { editor.load() }
+        LaunchedEffect(editor) { editor.load() }
         MediaEntryEditorSheet(
             editor = editor,
+            capabilities = capabilities,
             formatScore = formatScore,
             parseScore = parseScore,
             scoreSuffix = scoreSuffix,

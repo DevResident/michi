@@ -2,6 +2,7 @@ package com.luum.michi.app
 
 import com.luum.michi.app.core.auth.domain.AuthProvider
 import com.luum.michi.app.core.auth.domain.AuthToken
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.TokenStorage
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkResult
@@ -13,10 +14,26 @@ import com.luum.michi.app.core.session.domain.Viewer
 import kotlinx.coroutines.CompletableDeferred
 
 /** Scriptable provider used by the session, list and profile tests. */
+internal val MinimalProviderCapabilities = ProviderCapabilities(
+    advancedScores = false,
+    privateEntries = false,
+    hiddenFromStatusLists = false,
+    repeatCount = false,
+    priority = false,
+    notes = false,
+    repeatingStatus = false,
+    favourites = false,
+    notifications = false,
+    social = false,
+    profileStatistics = false,
+    remoteSettings = false,
+)
+
 internal class TestAuthProvider(
     override val id: ProviderId = ProviderId.AniList,
     override val label: String = "Test",
     override val isConfigured: Boolean = true,
+    override val capabilities: ProviderCapabilities = ProviderCapabilities.AniList,
     var viewerResult: NetworkResult<Viewer> = NetworkResult.Success(Viewer(id = 1, name = "user")),
     var refreshResult: NetworkResult<AuthToken>? = null,
     var callbackResult: (String) -> NetworkResult<AuthToken>? = { null },

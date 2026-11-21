@@ -4,6 +4,7 @@ import com.luum.michi.app.core.auth.domain.AuthProvider
 import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.AniListOAuthConfig
 import com.luum.michi.app.core.auth.domain.AniListOAuthLauncher
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.parseAniListOAuthCallback
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkResult
@@ -23,6 +24,7 @@ internal class AniListAuthProvider(
     override val id: ProviderId = ProviderId.AniList
     override val label: String = "AniList"
     override val isConfigured: Boolean get() = AniListOAuthConfig.isConfigured
+    override val capabilities: ProviderCapabilities = ProviderCapabilities.AniList
 
     override fun open() = launcher.open()
 

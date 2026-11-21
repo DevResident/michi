@@ -1,5 +1,7 @@
 package com.luum.michi.app.mediaDetail
 
+import com.luum.michi.app.MinimalProviderCapabilities
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.model.Page
 import com.luum.michi.app.mediaDetail.domain.media.model.MediaCharacterEntry
 import com.luum.michi.app.mediaDetail.domain.media.model.MediaRecommendationEntry
@@ -95,6 +97,7 @@ private fun editorWired(
     mediaId: Int = 101,
     advancedScoringEnabled: Boolean = false,
     advancedScoringAnimeNames: List<String> = emptyList(),
+    capabilities: ProviderCapabilities = ProviderCapabilities.AniList,
     scoreMax: Float = 10f,
     initialStatusOverride: MediaListStatus? = null,
     initialProgressOverride: Int? = null,
@@ -108,6 +111,7 @@ private fun editorWired(
     mediaId = mediaId,
     advancedScoringEnabled = advancedScoringEnabled,
     advancedScoringAnimeNames = advancedScoringAnimeNames,
+    capabilities = capabilities,
     scoreMax = scoreMax,
     initialStatusOverride = initialStatusOverride,
     initialProgressOverride = initialProgressOverride,
@@ -481,6 +485,30 @@ class MediaEntryEditorIntegrationTest {
         assertTrue(editor.isDirty)
 
         editor.updateNotes("note")
+        assertFalse(editor.hasChanges)
+        assertFalse(editor.isDirty)
+    }
+
+    @Test
+    fun hiddenFieldsNeverDirtyAPristineEntry() {
+        val editor = editorWired(
+            FakeGraphQL(listOf(buildJsonObject {})),
+            existingEntry(),
+            capabilities = MinimalProviderCapabilities,
+        )
+
+        editor.load()
+
+        // The entry carries notes, private, repeat and priority, but this
+        // provider hides all of them: opening must stay pristine.
+        assertFalse(editor.hasChanges)
+        assertFalse(editor.isDirty)
+
+        editor.updateProgress(6)
+        assertTrue(editor.hasChanges, "a visible field still marks the edit")
+        assertTrue(editor.isDirty)
+
+        editor.updateProgress(5)
         assertFalse(editor.hasChanges)
         assertFalse(editor.isDirty)
     }

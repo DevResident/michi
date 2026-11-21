@@ -19,9 +19,12 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import com.luum.michi.app.calendar.domain.CalendarRepository
 import com.luum.michi.app.calendar.ui.CalendarScreen
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
+import com.luum.michi.app.core.auth.domain.effectiveScoreFormat
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.favourite.domain.FavouriteRepository
 import com.luum.michi.app.core.media.domain.aniListRef
+import com.luum.michi.app.core.medialist.domain.parseScoreFormat
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.SortPersistence
 import com.luum.michi.app.core.navigation.domain.DetailDestination
@@ -69,6 +72,7 @@ import com.luum.michi.app.ui.language.searchHintFor
 @Composable
 internal fun Root(
     settingsState: SettingsState,
+    capabilities: ProviderCapabilities,
     viewer: Viewer? = null,
     providedState: State? = null,
     strings: LanguageStrings = Strings.current,
@@ -157,6 +161,7 @@ internal fun Root(
 
     val holders = rememberRootHolders(
         viewerId = viewerId,
+        notificationsEnabled = capabilities.notifications,
         settingsState = settingsState,
         strings = strings,
         animeListRepository = animeListRepository,
@@ -198,6 +203,8 @@ internal fun Root(
                 searchTab = searchTab,
                 holders = holders,
                 isGuest = viewerId == null,
+                showsNotifications = capabilities.notifications,
+                showsFavourite = capabilities.favourites,
                 strings = strings,
             )
         },
@@ -266,7 +273,9 @@ internal fun Root(
                                 strings = strings,
                                 bottomPadding = padding.calculateBottomPadding(),
                                 urlOpener = urlOpener,
-                                viewerScoreFormat = viewer?.scoreFormat,
+                                viewerScoreFormat = capabilities.effectiveScoreFormat(
+                                    parseScoreFormat(viewer?.scoreFormat),
+                                ),
                             )
                         } else if (state.isOpen(RootOverlay.Calendar)) {
                             // Airing schedule overlay (fullscreen, tab bar hidden):
@@ -304,6 +313,7 @@ internal fun Root(
                                 state = state,
                                 holders = holders,
                                 settingsState = settingsState,
+                                capabilities = capabilities,
                                 viewer = viewer,
                                 viewerId = viewerId,
                                 tabQuery = tabQuery,
@@ -322,6 +332,7 @@ internal fun Root(
                 holders = holders,
                 viewerId = viewerId,
                 settingsState = settingsState,
+                capabilities = capabilities,
                 authServices = authServices,
                 isAuthConfigured = isAuthConfigured,
                 mediaListEntryRepository = mediaListEntryRepository,

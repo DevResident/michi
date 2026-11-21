@@ -130,6 +130,7 @@ internal class RootHolders(
 @Composable
 internal fun rememberRootHolders(
     viewerId: Int?,
+    notificationsEnabled: Boolean,
     settingsState: SettingsState,
     strings: LanguageStrings,
     animeListRepository: AnimeListRepository,
@@ -276,8 +277,17 @@ internal fun rememberRootHolders(
     // Notifications: the feed holder, session-gated (the overlay entry is the
     // PROFILE bell). It owns the unread dot; the profile only feeds it.
     val notificationsScope = rememberHolderScope(listScope, viewerId)
-    val notificationsHolder = remember(viewerId, notificationsRepository, notificationsScope) {
-        viewerId?.let { createNotificationsStateHolder(notificationsRepository, notificationsScope) }
+    val notificationsHolder = remember(
+        viewerId,
+        notificationsRepository,
+        notificationsScope,
+        notificationsEnabled,
+    ) {
+        if (viewerId != null && notificationsEnabled) {
+            createNotificationsStateHolder(notificationsRepository, notificationsScope)
+        } else {
+            null
+        }
     }
     val profileScope = rememberHolderScope(listScope, viewerId)
     val profileHolder = remember(

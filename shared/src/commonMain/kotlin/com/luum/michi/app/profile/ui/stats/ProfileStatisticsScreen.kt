@@ -17,7 +17,6 @@ import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
-import com.luum.michi.app.core.medialist.domain.parseScoreFormat
 import com.luum.michi.app.profile.domain.model.ProfileMediaTypeStats
 import com.luum.michi.app.profile.domain.model.ProfileStatDistributionEntry
 import com.luum.michi.app.profile.ui.model.formatDistributionLabel
@@ -41,13 +40,13 @@ import com.luum.michi.app.ui.language.Strings
  * The viewer's statistics page. Data already travels on the profile query (0
  * requests of its own), so the screen only reads the profile holder. The
  * Anime/Manga selector seeds on the header counter the user tapped; changing it
- * returns to the top. The score distribution and the mean score are shown in the
- * viewer's own [ScoreFormat].
+ * returns to the top. The score distribution and the mean score are shown in
+ * the active provider's effective [ScoreFormat].
  */
 @Composable
 internal fun ProfileStatisticsScreen(
     holder: ProfileStateHolder,
-    scoreFormat: String?,
+    scoreFormat: ScoreFormat,
     initialType: MediaType,
     strings: LanguageStrings = Strings.current,
     bottomPadding: Dp = 0.dp,
@@ -55,7 +54,7 @@ internal fun ProfileStatisticsScreen(
     modifier: Modifier = Modifier,
 ) {
     var type by remember { mutableStateOf(initialType) }
-    val format = remember(scoreFormat) { parseScoreFormat(scoreFormat) }
+    val format = scoreFormat
     val stats = if (type == MediaType.ANIME) holder.stats.anime else holder.stats.manga
     val isManga = type == MediaType.MANGA
     val errorMessage = holder.error?.let { strings.networkErrorMessage(it) }

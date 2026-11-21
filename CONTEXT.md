@@ -148,7 +148,8 @@ converted at the UI boundary). Contents:
 ```text
 core/
   auth/domain|repository/       provider-neutral auth (`AuthToken`, `TokenStorage`,
-                                `AuthProvider`) + the AniList provider/launcher/parser
+                                `AuthProvider`, `ProviderCapabilities`) + the AniList
+                                provider/launcher/parser
   session/domain|repository/    viewer identity, SessionManager, SessionState, the active
                                 provider store and `validToken()` (single-flight refresh)
   network/domain|repository/    transport only: Ktor GraphQL client, NetworkResult, endpoints,
@@ -214,8 +215,9 @@ com.luum.michi.app
     AuthModal.kt            on-demand sign-in modal + language picker (MAL appends to AuthServices)
     state/State.kt          BackStep, State, RootOverlay/OverlayLayer (overlay set + open/close/isOpen), rememberState (no profile routes)
   core/
-    auth/domain|repository/   provider-neutral `AuthToken`/`TokenStorage`/`AuthProvider`
-                              + the AniList OAuth provider, launcher and callback parser
+    auth/domain|repository/   provider-neutral `AuthToken`/`TokenStorage`/`AuthProvider`/
+                              `ProviderCapabilities` + the AniList OAuth provider, launcher
+                              and callback parser
     session/domain|repository/ viewer identity + SessionManager (active provider,
                               `validToken()` with single-flight refresh)
     network/domain|repository/ transport only: Ktor GraphQL client, NetworkResult, endpoints,
@@ -276,7 +278,8 @@ appear only when real behavior justifies them.
 - No layer prefixes on class names: shared UI lives in `ui/` (`Toolbar`, `Icons`, `TabBar`), root scope in `root/` (`Root`, `State`). The package is the disambiguator — `ui.Icons` vs feature icons, `root.State` vs any other state.
 - `AniList*` for API/client/DTO-specific classes.
 - `EntityRef` / `ProviderId` for the `(provider, id)` reference that crosses navigation, cache-key and list-write boundaries: `ProviderId` is a string-backed value class (`AniList = "anilist"`) and the same id under two providers is a different entity. The domain models keep their `Int` id until 11.1b.
-- `AuthProvider` for one login service (id, brand label, configured flag, OAuth open/callback, refresh and viewer fetch). Only one provider is active at a time; switching closes the previous session and clears user data.
+- `AuthProvider` for one login service (id, brand label, configured flag, OAuth open/callback, refresh, viewer fetch and `ProviderCapabilities`). Only one provider is active at a time; switching closes the previous session and clears user data.
+- `ProviderCapabilities` for what the active account supports (`advancedScores`, `privateEntries`, `notes`, `favourites`, `notifications`, `social`, `profileStatistics`, `remoteSettings`, a fixed score format, …). The UI **hides** an unsupported account feature; the catalog (Discover, detail, search, calendar) stays AniList for everyone and is not gated by capabilities.
 
 ## Current State
 
@@ -377,6 +380,7 @@ Reglas rápidas; cada una apunta a su componente. Si algo no encaja, se arregla 
   - Spanish: `Descubrir`, `Anime`, `Manga`, `Perfil`.
   - English: `Discover`, `Anime`, `Manga`, `Profile`.
 - Home has no banner/avatar and no embedded search row. Search belongs in the topbar.
+- **Provider capabilities**: a feature the active account's provider does not support is **hidden**, never shown disabled and never with an extra notice. `ProviderCapabilities.AniList` is all `true`, so AniList looks exactly as before; only account features (lists, profile/favourites/social, notifications, remote settings) are gated. The catalog (Discover, detail, search, calendar) is AniList for all users, guests included, and is never conditioned on capabilities.
 - **Glass rule (validated sep-2026; tool recipe 5.4):** glass is reserved for floating tools — Toolbar, TabBar, buttons, interactive chips and `TrailingPill`. They take `toolContainerColor()` + `toolBorder()` (resolved from `SurfaceStyle`: translucent glass, or flat `surface` + `outlineVariant`). Content (cards, panels, bands, `OptionGroup`, `SheetTextField`) always uses the flat recipe (`solidContainerColor()` + `flatBorder()`). Buttons go through `ui/components/AppButton`: `Secondary` is the tool recipe, `Primary` (the flow-closing action — Save, Retry, Sign in) is an opaque `primaryContainer` fill with no border. A glass pilot on the session card washed out in light mode (translucency flattened, shadow + 40% border rendered a ghost edge).
 - **Glass corruption rule (validated sep-2026):** never chain `.shadow().clip()` on inline content — the offscreen compositing layer seals the container alpha and composites it as an opaque inner square. Inline surfaces take the flat recipe (`solidContainerColor` + `flatBorder`); floating tools carry elevation on their own `Surface`/`Button` (`shadowElevation`), never a chained modifier.
 - **Card vs edge-to-edge (validated oct-2026, radii unified 5.4):** on detail pages, a framed card (`MediaDetailPanel`) marks a **data block** — the information grid, the link rows and now the prose (synopsis and biographies) — because grouping tabular content and long text reads better boxed. The panel is **flat**: `surface` fill + `outlineVariant` border (exactly like the list cards), never glass — it groups, it does not float. A `SpoilerBlock` inside the prose panel passes `bordered = false` (no fill, dashed `outline` edge) so it never boxes a panel inside a panel. **Media stays edge-to-edge**: the banner hero, the horizontal rails (characters/staff/related/recommendations), the **stats band** (a flat band twin of the next-episode band, right under it: icon + bold value, label as accessibility description), the **chip rows** (media genres and tags under their header; a person's roles/occupations live inside the hero column as a `FlowRow` of `FlatChip`s) and the **next-episode band**: a single chip group needs no frame, and grouping labels reads worse boxed; the band is a flat full-width rectangle (`surface` + `outlineVariant`, 16dp radius, inert) so it does not read as a button. The **trailer** is a framed 16:9 panel (`surfaceVariant` + `outlineVariant`, 16dp radius, it opens the video). Radii are tokens (`ui/components/Shapes.kt`): `CoverShape` 12 (covers), `PanelShape` 16 (panels, cards, bands, groups, sheet fields), `PillShape` 24 (buttons, toolbar capsules, chips).

@@ -27,6 +27,7 @@ class ToolbarActionsTest {
         isDetailList: Boolean = false,
         isDetailFavourite: Boolean = false,
         isGuest: Boolean = false,
+        showsFavourite: Boolean = true,
     ): List<ToolbarAction> = toolbarActions(
         tab = TabSection.DISCOVER,
         isSearching = false,
@@ -43,6 +44,7 @@ class ToolbarActionsTest {
         isDetailList = isDetailList,
         isDetailFavourite = isDetailFavourite,
         isGuest = isGuest,
+        showsFavourite = showsFavourite,
         strings = EnglishStrings,
     )
 
@@ -55,6 +57,7 @@ class ToolbarActionsTest {
         hasExploreFilters: Boolean = false,
         isNotificationsOpen: Boolean = false,
         unreadNotificationCount: Int = 0,
+        showsNotifications: Boolean = true,
         isGuest: Boolean = false,
     ): List<ToolbarAction> = toolbarActions(
         tab = tab,
@@ -70,6 +73,7 @@ class ToolbarActionsTest {
         isGuest = isGuest,
         isNotificationsOpen = isNotificationsOpen,
         unreadNotificationCount = unreadNotificationCount,
+        showsNotifications = showsNotifications,
         isExploreResults = isExploreResults,
         isExploreMediaCategory = isExploreMediaCategory,
         hasExploreFilters = hasExploreFilters,
@@ -133,6 +137,19 @@ class ToolbarActionsTest {
     fun catalogDetailShowsOnlyTheSort() {
         assertEquals(listOf("sort"), ids(detailActions(isCatalogDetail = true)))
         assertEquals(listOf("sort"), ids(detailActions(isCatalogDetail = true, isGuest = true)))
+    }
+
+    @Test
+    fun aProviderWithoutFavouritesHidesTheHeartEverywhere() {
+        assertEquals(
+            listOf("edit", "more"),
+            ids(detailActions(isMediaDetail = true, showsFavourite = false)),
+        )
+        assertEquals(listOf("more"), ids(detailActions(showsFavourite = false)))
+        assertEquals(
+            listOf("sort", "more"),
+            ids(detailActions(isStudioDetail = true, showsFavourite = false)),
+        )
     }
 
     /** The filled twin is used once the entity is favourited (signed-in only). */
@@ -217,6 +234,14 @@ class ToolbarActionsTest {
         val unread = tabActions(tab = TabSection.PROFILE, unreadNotificationCount = 3)
             .first { it.id == "notifications" }
         assertTrue(unread.badge)
+    }
+
+    @Test
+    fun aProviderWithoutNotificationsHidesTheBell() {
+        assertEquals(
+            listOf("settings"),
+            ids(tabActions(tab = TabSection.PROFILE, showsNotifications = false)),
+        )
     }
 
     @Test

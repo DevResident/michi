@@ -17,9 +17,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.language.domain.networkErrorMessage
-import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.label
 import com.luum.michi.app.mediaDetail.ui.media.components.EditorCounterField
 import com.luum.michi.app.mediaDetail.ui.media.components.StatusChipRail
@@ -47,6 +47,7 @@ import com.luum.michi.app.ui.language.Strings
 @Composable
 internal fun MediaEntryEditorSheet(
     editor: MediaEntryEditorState,
+    capabilities: ProviderCapabilities = ProviderCapabilities.AniList,
     formatScore: (Float) -> String,
     parseScore: (String) -> Float?,
     scoreSuffix: String?,
@@ -73,19 +74,23 @@ internal fun MediaEntryEditorSheet(
         fullscreen = true,
         dismissBlocked = editor.hasChanges,
         onDismissBlocked = { confirmDiscard = true },
-        headerActions = listOf(
-            ToolbarAction(
-                id = ACTION_FAVOURITE,
-                icon = if (editor.isFavourite) {
-                    AppIcons.FavoriteFilled
-                } else {
-                    AppIcons.Favorite
-                },
-                contentDescription = strings.favouriteLabel,
-            ),
-        ),
+        headerActions = if (capabilities.favourites) {
+            listOf(
+                ToolbarAction(
+                    id = ACTION_FAVOURITE,
+                    icon = if (editor.isFavourite) {
+                        AppIcons.FavoriteFilled
+                    } else {
+                        AppIcons.Favorite
+                    },
+                    contentDescription = strings.favouriteLabel,
+                ),
+            )
+        } else {
+            emptyList()
+        },
         onHeaderAction = { id ->
-            if (id == ACTION_FAVOURITE) editor.toggleFavourite()
+            if (id == ACTION_FAVOURITE && capabilities.favourites) editor.toggleFavourite()
         },
         footer = {
             if (!editor.isLoadingDetail && editor.data != null) {
@@ -139,6 +144,7 @@ internal fun MediaEntryEditorSheet(
             else -> {
                 EditorBody(
                     editor = editor,
+                    capabilities = capabilities,
                     formatScore = formatScore,
                     parseScore = parseScore,
                     scoreSuffix = scoreSuffix,
@@ -236,6 +242,7 @@ internal fun MediaEntryEditorSheet(
 @Composable
 private fun EditorBody(
     editor: MediaEntryEditorState,
+    capabilities: ProviderCapabilities,
     formatScore: (Float) -> String,
     parseScore: (String) -> Float?,
     scoreSuffix: String?,
@@ -255,9 +262,10 @@ private fun EditorBody(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(8.dp))
+        val statuses = editor.editableStatuses
         StatusChipRail(
-            options = MediaListStatus.entries,
-            labels = MediaListStatus.entries.map { it.label(strings, editor.isManga) },
+            options = statuses,
+            labels = statuses.map { it.label(strings, editor.isManga) },
             selected = editor.status,
             onSelect = { editor.updateStatus(it) },
         )
@@ -344,53 +352,66 @@ private fun EditorBody(
             strings = strings,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-        IntCounterField(
-            label = strings.repeatLabel,
-            value = editor.repeat,
-            max = null,
-            onSet = { editor.updateRepeat(it) },
-            onDecrement = { editor.decrementRepeat() },
-            onIncrement = { editor.incrementRepeat() },
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        IntCounterField(
-            label = strings.priorityLabel,
-            value = editor.priority,
-            max = null,
-            onSet = { editor.updatePriority(it) },
-            onDecrement = { editor.decrementPriority() },
-            onIncrement = { editor.incrementPriority() },
-            incrementEnabled = editor.priority < 5,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        OptionGroup(title = null) {
-            ToggleRow(
-                title = strings.privateLabel,
-                checked = editor.isPrivate,
-                onCheckedChange = { editor.updatePrivate(it) },
-                divider = false,
-            )
-            ToggleRow(
-                title = strings.hiddenFromStatusListsLabel,
-                checked = editor.hiddenFromStatusLists,
-                onCheckedChange = { editor.updateHiddenFromStatusLists(it) },
+        if (capabilities.repeatCount) {
+            Spacer(modifier = Modifier.height(16.dp))
+            IntCounterField(
+                label = strings.repeatLabel,
+                value = editor.repeat,
+                max = null,
+                onSet = { editor.updateRepeat(it) },
+                onDecrement = { editor.decrementRepeat() },
+                onIncrement = { editor.incrementRepeat() },
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = strings.notesLabel,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        SheetTextField(
-            value = editor.notes,
-            onValueChange = { editor.updateNotes(it) },
-            minLines = 3,
-            maxLines = 6,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (capabilities.priority) {
+            Spacer(modifier = Modifier.height(16.dp))
+            IntCounterField(
+                label = strings.priorityLabel,
+                value = editor.priority,
+                max = null,
+                onSet = { editor.updatePriority(it) },
+                onDecrement = { editor.decrementPriority() },
+                onIncrement = { editor.incrementPriority() },
+                incrementEnabled = editor.priority < 5,
+            )
+        }
+        if (capabilities.privateEntries || capabilities.hiddenFromStatusLists) {
+            Spacer(modifier = Modifier.height(16.dp))
+            OptionGroup(title = null) {
+                if (capabilities.privateEntries) {
+                    ToggleRow(
+                        title = strings.privateLabel,
+                        checked = editor.isPrivate,
+                        onCheckedChange = { editor.updatePrivate(it) },
+                        divider = false,
+                    )
+                }
+                if (capabilities.hiddenFromStatusLists) {
+                    ToggleRow(
+                        title = strings.hiddenFromStatusListsLabel,
+                        checked = editor.hiddenFromStatusLists,
+                        onCheckedChange = { editor.updateHiddenFromStatusLists(it) },
+                        divider = capabilities.privateEntries,
+                    )
+                }
+            }
+        }
+        if (capabilities.notes) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = strings.notesLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SheetTextField(
+                value = editor.notes,
+                onValueChange = { editor.updateNotes(it) },
+                minLines = 3,
+                maxLines = 6,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

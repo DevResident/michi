@@ -11,6 +11,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
+import com.luum.michi.app.core.auth.domain.effectiveScoreFormat
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.aniListRef
@@ -108,6 +110,7 @@ internal fun RootTabContent(
     state: State,
     holders: RootHolders,
     settingsState: SettingsState,
+    capabilities: ProviderCapabilities,
     viewer: Viewer?,
     viewerId: Int?,
     tabQuery: String,
@@ -116,7 +119,7 @@ internal fun RootTabContent(
 ) {
     // Card smiley pill: translated here so settings types never cross
     // into mediaList (same rule as the editor score lambdas).
-    val editorScoreFormat = settingsState.scoreFormat
+    val editorScoreFormat = capabilities.effectiveScoreFormat(settingsState.scoreFormat)
     val isSmileyFormat: Boolean = editorScoreFormat == ScoreFormat.POINT_3_SMILEYS
     val formatSmiley: (Float) -> String = remember {
         { value: Float -> formatScoreValue(ScoreFormat.POINT_3_SMILEYS, value) }
@@ -259,6 +262,9 @@ internal fun RootTabContent(
             onOpenFollowing = { state.openProfileFollows(ProfileFollowsKind.FOLLOWING.name) },
             onOpenFollowers = { state.openProfileFollows(ProfileFollowsKind.FOLLOWERS.name) },
             onOpenReviews = { state.openProfileReviews() },
+            showsFavourites = capabilities.favourites,
+            showsSocial = capabilities.social,
+            showsStatistics = capabilities.profileStatistics,
         )
     } else if (
         (activeTab == TabSection.ANIME || activeTab == TabSection.MANGA ||

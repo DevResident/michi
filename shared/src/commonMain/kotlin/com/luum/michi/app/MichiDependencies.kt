@@ -13,6 +13,7 @@ import com.luum.michi.app.mediaDetail.repository.character.CharacterDetailReposi
 import com.luum.michi.app.mediaDetail.domain.character.CharacterDetailRepository
 import com.luum.michi.app.core.auth.domain.AuthProvider
 import com.luum.michi.app.core.auth.domain.AniListOAuthLauncher
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.TokenStorage
 import com.luum.michi.app.core.auth.repository.AniListAuthProvider
 import com.luum.michi.app.core.media.domain.ProviderId
@@ -123,6 +124,11 @@ class MichiDependencies internal constructor(
     internal val authProviders: List<AuthProvider> = listOf(
         AniListAuthProvider(aniListOAuthLauncher, viewerRepository),
     )
+
+    /** The active account's capabilities; AniList when the provider is unknown. */
+    internal fun capabilitiesFor(provider: ProviderId): ProviderCapabilities =
+        authProviders.firstOrNull { it.id == provider }?.capabilities
+            ?: ProviderCapabilities.AniList
 
     /** One cache instance serves both list repositories and the session wipe. */
     private val mediaListCache: MediaListDiskCache = MediaListDiskCache(fileStore)

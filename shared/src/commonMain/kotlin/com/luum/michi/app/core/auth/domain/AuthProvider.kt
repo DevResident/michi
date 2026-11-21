@@ -16,6 +16,9 @@ internal interface AuthProvider {
 
     val isConfigured: Boolean
 
+    /** What this provider's account supports; the UI hides the rest. */
+    val capabilities: ProviderCapabilities
+
     /** Opens the provider's authorization page. */
     fun open()
 

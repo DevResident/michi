@@ -7,6 +7,7 @@ import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.media.domain.requireAniListId
+import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.DetailListKind
 import com.luum.michi.app.core.platform.domain.UrlOpener
@@ -46,7 +47,7 @@ internal fun RootDetailHost(
     strings: LanguageStrings,
     bottomPadding: Dp,
     urlOpener: UrlOpener,
-    viewerScoreFormat: String?,
+    viewerScoreFormat: ScoreFormat,
 ) {
     when (destination) {
         is DetailDestination.Media -> MediaDetailScreen(

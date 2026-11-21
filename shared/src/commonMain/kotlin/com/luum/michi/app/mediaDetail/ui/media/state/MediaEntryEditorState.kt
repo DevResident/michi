@@ -1,5 +1,7 @@
 package com.luum.michi.app.mediaDetail.ui.media.state
 
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
+import com.luum.michi.app.core.auth.domain.editableStatuses
 import com.luum.michi.app.core.favourite.domain.FavouriteTarget
 import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.network.domain.NetworkError
@@ -21,6 +23,7 @@ internal class MediaEntryEditorState(
     private val detailRepository: MediaDetailRepository,
     private val scope: CoroutineScope,
     val mediaId: Int,
+    private val capabilities: ProviderCapabilities = ProviderCapabilities.AniList,
     private val initialStatusOverride: MediaListStatus? = null,
     private val initialProgressOverride: Int? = null,
     private val advancedScoringEnabled: Boolean = false,
@@ -86,8 +89,10 @@ internal class MediaEntryEditorState(
     val isManga: Boolean get() = data?.type == MediaDetailType.MANGA
     val advancedScoringNames: List<String>
         get() = if (isManga) advancedScoringMangaNames else advancedScoringAnimeNames
+    /** The statuses this provider offers, in the editor's existing order. */
+    val editableStatuses: List<MediaListStatus> get() = capabilities.editableStatuses()
     val showAdvancedScoring: Boolean
-        get() = advancedScoringEnabled && advancedScoringNames.isNotEmpty()
+        get() = capabilities.advancedScores && advancedScoringEnabled && advancedScoringNames.isNotEmpty()
     val maxProgress: Int? get() = data?.let { if (it.type == MediaDetailType.MANGA) it.chapters else it.episodes }
     val maxProgressVolumes: Int? get() = data?.volumes
     val isExisting: Boolean get() = data?.viewerEntry != null
@@ -251,12 +256,18 @@ internal class MediaEntryEditorState(
         progress = progress,
         progressVolumes = progressVolumes,
         score = score,
-        advancedScoreValues = advancedScoreValues,
-        notes = notes,
-        repeat = repeat,
-        priority = priority,
-        isPrivate = isPrivate,
-        hiddenFromStatusLists = hiddenFromStatusLists,
+        // Unsupported fields stay in the state (and are still saved); only the
+        // dirty/discard comparison ignores them, so hiding them never prompts.
+        advancedScoreValues = if (capabilities.advancedScores) advancedScoreValues else emptyList(),
+        notes = if (capabilities.notes) notes else "",
+        repeat = if (capabilities.repeatCount) repeat else 0,
+        priority = if (capabilities.priority) priority else 0,
+        isPrivate = if (capabilities.privateEntries) isPrivate else false,
+        hiddenFromStatusLists = if (capabilities.hiddenFromStatusLists) {
+            hiddenFromStatusLists
+        } else {
+            false
+        },
         startedAtMillis = startedAtMillis,
         completedAtMillis = completedAtMillis,
     )
@@ -364,6 +375,7 @@ internal fun createMediaEntryEditorState(
     entryRepository: MediaListEntryRepository,
     detailRepository: MediaDetailRepository,
     scope: CoroutineScope,
+    capabilities: ProviderCapabilities = ProviderCapabilities.AniList,
     initialStatusOverride: MediaListStatus? = null,
     initialProgressOverride: Int? = null,
     advancedScoringEnabled: Boolean = false,
@@ -379,6 +391,7 @@ internal fun createMediaEntryEditorState(
         detailRepository = detailRepository,
         scope = scope,
         mediaId = mediaId,
+        capabilities = capabilities,
         initialStatusOverride = initialStatusOverride,
         initialProgressOverride = initialProgressOverride,
         advancedScoringEnabled = advancedScoringEnabled,

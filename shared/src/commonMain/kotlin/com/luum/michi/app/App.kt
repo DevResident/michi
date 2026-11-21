@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.language.domain.getLanguageStrings
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.language.domain.networkErrorMessage
@@ -70,6 +71,12 @@ fun App(
     val deepLinkDestination by dependencies.pendingDeepLink.collectAsState()
     val scope = rememberCoroutineScope()
 
+    // Account capabilities of the active provider. Guests use AniList (the
+    // account-only features they cannot use are already blocked by isGuest).
+    val capabilities = (session as? SessionState.Authenticated)
+        ?.let { dependencies.capabilitiesFor(it.provider) }
+        ?: ProviderCapabilities.AniList
+
     // Synced settings holder: one per session. Guests get canSync = false
     // (local-only, never touches the network); login/logout recreates it. It
     // also owns the app appearance prefs (language, theme, font, surfaces),
@@ -78,7 +85,7 @@ fun App(
         repository = dependencies.settingsRepository,
         store = dependencies.settingsStore,
         scope = scope,
-        canSync = session is SessionState.Authenticated,
+        canSync = session is SessionState.Authenticated && capabilities.remoteSettings,
     )
 
     val strings = getLanguageStrings(settingsState.language)
@@ -194,6 +201,7 @@ fun App(
                     AppRoute.SHELL -> {
                         Root(
                             settingsState = settingsState,
+                            capabilities = capabilities,
                             viewer = (current as? SessionState.Authenticated)?.viewer,
                             onLogout = {
                                 dependencies.logout()

@@ -44,6 +44,8 @@ internal fun RootToolbar(
     searchTab: TabSection?,
     holders: RootHolders,
     isGuest: Boolean,
+    showsNotifications: Boolean,
+    showsFavourite: Boolean,
     strings: LanguageStrings,
 ) {
     // The heart reads the holder that owns the active destination (media keeps
@@ -97,8 +99,10 @@ internal fun RootToolbar(
                 isDetailList = state.currentDetail is DetailDestination.DetailList,
                 isDetailFavourite = isDetailFavourite,
                 isGuest = isGuest,
+                showsFavourite = showsFavourite,
                 isNotificationsOpen = state.isOpen(RootOverlay.Notifications),
                 unreadNotificationCount = holders.notifications?.unreadCount ?: 0,
+                showsNotifications = showsNotifications,
                 isExploreResults = isExploreResults,
                 isExploreMediaCategory = exploreMediaCategory,
                 hasExploreFilters = exploreFiltersActive,
@@ -130,11 +134,13 @@ internal fun RootToolbar(
                     ACTION_CALENDAR -> state.open(RootOverlay.Calendar)
                     ACTION_CALENDAR_FILTER -> state.open(RootOverlay.CalendarFilter)
                     ACTION_FAVORITES_EDIT -> state.toggleFavoritesEditing()
-                    ACTION_NOTIFICATIONS -> state.open(RootOverlay.Notifications)
+                    ACTION_NOTIFICATIONS -> if (showsNotifications) {
+                        state.open(RootOverlay.Notifications)
+                    }
                     ACTION_EDIT -> if (!isGuest) {
                         holders.mediaDetail.detail?.id?.let { state.openEditor(it) }
                     }
-                    ACTION_FAVOURITE -> if (!isGuest) {
+                    ACTION_FAVOURITE -> if (!isGuest && showsFavourite) {
                         holders.detailHolderFor(state.currentDetail)?.toggleFavourite()
                     }
                     ACTION_MORE -> state.open(RootOverlay.DetailMenu)
@@ -193,11 +199,15 @@ internal fun toolbarActions(
     isDetailList: Boolean,
     isDetailFavourite: Boolean,
     isGuest: Boolean,
+    // The active provider supports favouriting entities.
+    showsFavourite: Boolean = true,
     // The favourites "View all" page's edit toggle (pencil / check).
     isProfileFavoritesEditing: Boolean = false,
     // PROFILE's notifications bell (session only): badge = unread > 0.
     isNotificationsOpen: Boolean = false,
     unreadNotificationCount: Int = 0,
+    // The active provider supports the notifications feed.
+    showsNotifications: Boolean = true,
     // Explore results mode owns DISCOVER: filter+sort (media only) + magnifier.
     isExploreResults: Boolean = false,
     isExploreMediaCategory: Boolean = false,
@@ -232,11 +242,15 @@ internal fun toolbarActions(
         }
         // A catalog page is not an entity: it only carries the sort.
         if (isCatalogDetail) return listOf(sort)
-        val favourite = ToolbarAction(
-            id = ACTION_FAVOURITE,
-            icon = if (isDetailFavourite) AppIcons.FavoriteFilled else AppIcons.Favorite,
-            contentDescription = strings.favouriteLabel,
-        )
+        val favourite = if (showsFavourite) {
+            ToolbarAction(
+                id = ACTION_FAVOURITE,
+                icon = if (isDetailFavourite) AppIcons.FavoriteFilled else AppIcons.Favorite,
+                contentDescription = strings.favouriteLabel,
+            )
+        } else {
+            null
+        }
         val more = ToolbarAction(
             id = ACTION_MORE,
             icon = AppIcons.More,
@@ -257,14 +271,10 @@ internal fun toolbarActions(
             )
         }
         if (isStudioDetail) {
-            return listOf(
-                sort,
-                favourite,
-                more,
-            )
+            return listOfNotNull(sort, favourite, more)
         }
-        if (!isMediaDetail) return listOf(favourite, more)
-        return listOf(
+        if (!isMediaDetail) return listOfNotNull(favourite, more)
+        return listOfNotNull(
             ToolbarAction(
                 id = ACTION_EDIT,
                 icon = AppIcons.Edit,
@@ -364,7 +374,7 @@ internal fun toolbarActions(
             }
         } else {
             // PROFILE: the notifications bell and the gear, each its own circle.
-            if (!isGuest) {
+            if (!isGuest && showsNotifications) {
                 add(
                     ToolbarAction(
                         id = ACTION_NOTIFICATIONS,

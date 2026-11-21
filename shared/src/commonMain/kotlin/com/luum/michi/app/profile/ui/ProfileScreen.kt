@@ -73,6 +73,9 @@ internal fun ProfileScreen(
     onOpenFollowing: () -> Unit,
     onOpenFollowers: () -> Unit,
     onOpenReviews: () -> Unit,
+    showsFavourites: Boolean = true,
+    showsSocial: Boolean = true,
+    showsStatistics: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     // Explicit load on entry: the TTL dedups re-entries (0 requests while fresh).
@@ -90,6 +93,9 @@ internal fun ProfileScreen(
         onOpenFollowing = onOpenFollowing,
         onOpenFollowers = onOpenFollowers,
         onOpenReviews = onOpenReviews,
+        showsFavourites = showsFavourites,
+        showsSocial = showsSocial,
+        showsStatistics = showsStatistics,
         modifier = modifier,
     )
 }
@@ -106,6 +112,9 @@ private fun ProfileContent(
     onOpenFollowing: () -> Unit,
     onOpenFollowers: () -> Unit,
     onOpenReviews: () -> Unit,
+    showsFavourites: Boolean,
+    showsSocial: Boolean,
+    showsStatistics: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val errorMessage = holder.error?.let { strings.networkErrorMessage(it) }
@@ -138,57 +147,63 @@ private fun ProfileContent(
                     onOpenStatistics = onOpenStatistics,
                     onOpenFollowing = onOpenFollowing,
                     onOpenFollowers = onOpenFollowers,
+                    showsSocial = showsSocial,
+                    showsStatistics = showsStatistics,
                 )
             }
-            item(key = "profile-reviews") {
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    OptionGroup(title = null) {
-                        SettingsRow(
-                            label = strings.profileReviewsTitle,
-                            value = "",
-                            onClick = onOpenReviews,
-                            divider = false,
-                        )
+            if (showsSocial) {
+                item(key = "profile-reviews") {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        OptionGroup(title = null) {
+                            SettingsRow(
+                                label = strings.profileReviewsTitle,
+                                value = "",
+                                onClick = onOpenReviews,
+                                divider = false,
+                            )
+                        }
                     }
                 }
             }
-            if (categories.isEmpty()) {
-                item(key = "profile-favorites-empty") {
-                    Text(
-                        text = strings.profileFavoritesGridEmptyLabel,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
+            if (showsFavourites) {
+                if (categories.isEmpty()) {
+                    item(key = "profile-favorites-empty") {
+                        Text(
+                            text = strings.profileFavoritesGridEmptyLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
                 }
-            }
-            categories.forEach { category ->
-                val items = favorites.itemsFor(category)
-                item(key = "profile-favorites-${category.name}") {
-                    when (category) {
-                        ProfileFavoritesCategory.ANIME,
-                        ProfileFavoritesCategory.MANGA -> MediaCardRail(
-                            title = category.title(strings),
-                            items = items.map { it.toRailItem() },
-                            onSelect = { id -> onOpenFavorite(category, id) },
-                            onViewAll = { onViewAll(category) },
-                            viewAllLabel = strings.viewAllAction,
-                        )
-                        ProfileFavoritesCategory.CHARACTERS,
-                        ProfileFavoritesCategory.STAFF -> PersonCardRail(
-                            title = category.title(strings),
-                            items = items.map { it.toPersonItem() },
-                            onSelectPrimary = { id -> onOpenFavorite(category, id) },
-                            onViewAll = { onViewAll(category) },
-                            viewAllLabel = strings.viewAllAction,
-                        )
-                        ProfileFavoritesCategory.STUDIOS -> ProfileStudioSection(
-                            items = items,
-                            title = category.title(strings),
-                            viewAllLabel = strings.viewAllAction,
-                            onSelect = { id -> onOpenFavorite(category, id) },
-                            onViewAll = { onViewAll(category) },
-                        )
+                categories.forEach { category ->
+                    val items = favorites.itemsFor(category)
+                    item(key = "profile-favorites-${category.name}") {
+                        when (category) {
+                            ProfileFavoritesCategory.ANIME,
+                            ProfileFavoritesCategory.MANGA -> MediaCardRail(
+                                title = category.title(strings),
+                                items = items.map { it.toRailItem() },
+                                onSelect = { id -> onOpenFavorite(category, id) },
+                                onViewAll = { onViewAll(category) },
+                                viewAllLabel = strings.viewAllAction,
+                            )
+                            ProfileFavoritesCategory.CHARACTERS,
+                            ProfileFavoritesCategory.STAFF -> PersonCardRail(
+                                title = category.title(strings),
+                                items = items.map { it.toPersonItem() },
+                                onSelectPrimary = { id -> onOpenFavorite(category, id) },
+                                onViewAll = { onViewAll(category) },
+                                viewAllLabel = strings.viewAllAction,
+                            )
+                            ProfileFavoritesCategory.STUDIOS -> ProfileStudioSection(
+                                items = items,
+                                title = category.title(strings),
+                                viewAllLabel = strings.viewAllAction,
+                                onSelect = { id -> onOpenFavorite(category, id) },
+                                onViewAll = { onViewAll(category) },
+                            )
+                        }
                     }
                 }
             }
@@ -207,6 +222,8 @@ private fun ProfileHeader(
     onOpenStatistics: (MediaType) -> Unit,
     onOpenFollowing: () -> Unit,
     onOpenFollowers: () -> Unit,
+    showsSocial: Boolean,
+    showsStatistics: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -254,25 +271,33 @@ private fun ProfileHeader(
             ProfileStatColumn(
                 value = stats.animeCount.compactCount(),
                 label = strings.animeLabel,
-                onClick = { onOpenStatistics(MediaType.ANIME) },
+                onClick = if (showsStatistics) {
+                    ({ onOpenStatistics(MediaType.ANIME) })
+                } else {
+                    null
+                },
                 modifier = Modifier.weight(1f),
             )
             ProfileStatColumn(
                 value = stats.mangaCount.compactCount(),
                 label = strings.mangaLabel,
-                onClick = { onOpenStatistics(MediaType.MANGA) },
+                onClick = if (showsStatistics) {
+                    ({ onOpenStatistics(MediaType.MANGA) })
+                } else {
+                    null
+                },
                 modifier = Modifier.weight(1f),
             )
             ProfileStatColumn(
                 value = stats.followingCount.compactCount(),
                 label = strings.profileFollowingLabel,
-                onClick = onOpenFollowing,
+                onClick = if (showsSocial) onOpenFollowing else null,
                 modifier = Modifier.weight(1f),
             )
             ProfileStatColumn(
                 value = stats.followersCount.compactCount(),
                 label = strings.profileFollowersLabel,
-                onClick = onOpenFollowers,
+                onClick = if (showsSocial) onOpenFollowers else null,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -284,13 +309,19 @@ private fun ProfileHeader(
 private fun ProfileStatColumn(
     value: String,
     label: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-            .clickable(role = Role.Button, onClick = onClick)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(role = Role.Button, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
