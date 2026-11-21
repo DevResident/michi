@@ -23,4 +23,6 @@ internal object SettingsStoreKeys {
     const val SurfaceStyle = "surface_style"
     /** Last resolved Viewer, for an instant shell on cold start. */
     const val CachedViewer = "cached_viewer"
+    /** Which auth provider currently owns the session (AniList by default). */
+    const val ActiveProvider = "active_auth_provider"
 }

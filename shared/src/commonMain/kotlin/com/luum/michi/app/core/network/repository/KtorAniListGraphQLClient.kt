@@ -1,6 +1,6 @@
 package com.luum.michi.app.core.network.repository
 
-import com.luum.michi.app.core.auth.domain.AniListToken
+import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.network.domain.AniListEndpoints
 import com.luum.michi.app.core.network.domain.AniListGraphQLClient
 import com.luum.michi.app.core.network.domain.AniListGraphQLEnvelope
@@ -62,14 +62,14 @@ internal fun throwableToNetworkError(throwable: Throwable): NetworkError {
  */
 internal class KtorAniListGraphQLClient(
     private val httpClient: HttpClient,
-    private val tokenProvider: suspend () -> AniListToken?,
+    private val tokenProvider: suspend () -> AuthToken?,
     private val json: Json = AniListJson,
     private val rateLimiter: AniListRateLimiter = AniListRateLimiter(),
     // Debug builds only: logs each operation's duration (operationName + ms).
     private val debugLogging: Boolean = false,
     // Fired when a request that carried a token gets a 401, so the session can
     // drop the dead token. Never fired for anonymous requests.
-    private val onUnauthorized: (AniListToken) -> Unit = {},
+    private val onUnauthorized: (AuthToken) -> Unit = {},
 ) : AniListGraphQLClient {
 
     override suspend fun <T> execute(

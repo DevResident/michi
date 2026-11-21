@@ -1,8 +1,9 @@
 package com.luum.michi.app.mediaList
 
 import com.luum.michi.app.FakeGraphQL
-import com.luum.michi.app.core.auth.domain.AniListToken
-import com.luum.michi.app.core.auth.domain.InMemoryAniListTokenStorage
+import com.luum.michi.app.TestAuthProvider
+import com.luum.michi.app.core.auth.domain.AuthToken
+import com.luum.michi.app.core.auth.domain.InMemoryTokenStorage
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.favourite.repository.FavouriteRepositoryImpl
 import com.luum.michi.app.core.media.domain.EntityRef
@@ -16,9 +17,7 @@ import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
-import com.luum.michi.app.core.session.domain.AniListViewerRepository
 import com.luum.michi.app.core.session.domain.CachedViewerStore
-import com.luum.michi.app.core.session.domain.SessionManager
 import com.luum.michi.app.core.session.domain.Viewer
 import com.luum.michi.app.mediaList.domain.anime.model.AnimeListSection
 import com.luum.michi.app.mediaList.repository.MediaListDiskCache
@@ -28,6 +27,7 @@ import com.luum.michi.app.mediaList.repository.manga.MangaListRepositoryImpl
 import com.luum.michi.app.mediaList.repository.listCacheFileName
 import com.luum.michi.app.mediaList.ui.anime.state.AnimeListStateHolder
 import com.luum.michi.app.mediaList.ui.manga.state.MangaListStateHolder
+import com.luum.michi.app.testSessionManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -167,21 +167,17 @@ private class CountingEntryRepository : MediaListEntryRepository {
 
 private fun viewer() = Viewer(id = 1, name = "user")
 
-private fun freshToken() = AniListToken(
+private fun freshToken() = AuthToken(
     accessToken = "abc",
     savedAtEpochSeconds = currentEpochSeconds(),
     expiresInSeconds = 3600L,
 )
 
-private fun expiredToken() = AniListToken(
+private fun expiredToken() = AuthToken(
     accessToken = "abc",
     savedAtEpochSeconds = 1L,
     expiresInSeconds = 1L,
 )
-
-private class FakeViewerRepo(private val result: NetworkResult<Viewer>) : AniListViewerRepository {
-    override suspend fun fetchViewer(): NetworkResult<Viewer> = result
-}
 
 private class FakeCachedViewerStore : CachedViewerStore {
     override fun load(): Viewer? = null
@@ -343,14 +339,14 @@ class MediaListCacheTest {
     fun logoutDeletesTheListFiles() {
         val store = InMemoryFileStore()
         val cache = diskCache(store)
-        val storage = InMemoryAniListTokenStorage()
+        val storage = InMemoryTokenStorage()
 
         runBlocking {
             storage.save(freshToken())
             cache.write(1, MediaType.ANIME, listOf(cachedAnimeDto(101, "A")))
-            val manager = SessionManager(
-                tokenStorage = storage,
-                viewerRepository = FakeViewerRepo(NetworkResult.Success(viewer())),
+            val manager = testSessionManager(
+                storage = storage,
+                provider = TestAuthProvider(viewerResult = NetworkResult.Success(viewer())),
                 cachedViewerStore = FakeCachedViewerStore(),
                 onClearUserData = { cache.clear() },
             )
@@ -366,15 +362,15 @@ class MediaListCacheTest {
     fun aMidSessionUnauthorizedDeletesTheListFiles() {
         val store = InMemoryFileStore()
         val cache = diskCache(store)
-        val storage = InMemoryAniListTokenStorage()
+        val storage = InMemoryTokenStorage()
         val token = freshToken()
 
         runBlocking {
             storage.save(token)
             cache.write(1, MediaType.ANIME, listOf(cachedAnimeDto(101, "A")))
-            val manager = SessionManager(
-                tokenStorage = storage,
-                viewerRepository = FakeViewerRepo(NetworkResult.Success(viewer())),
+            val manager = testSessionManager(
+                storage = storage,
+                provider = TestAuthProvider(viewerResult = NetworkResult.Success(viewer())),
                 cachedViewerStore = FakeCachedViewerStore(),
                 onClearUserData = { cache.clear() },
             )
@@ -389,14 +385,16 @@ class MediaListCacheTest {
     fun anUnauthorizedRefreshDeletesTheListFiles() {
         val store = InMemoryFileStore()
         val cache = diskCache(store)
-        val storage = InMemoryAniListTokenStorage()
+        val storage = InMemoryTokenStorage()
 
         runBlocking {
             storage.save(freshToken())
             cache.write(1, MediaType.ANIME, listOf(cachedAnimeDto(101, "A")))
-            val manager = SessionManager(
-                tokenStorage = storage,
-                viewerRepository = FakeViewerRepo(NetworkResult.Failure(NetworkError.Unauthorized(null))),
+            val manager = testSessionManager(
+                storage = storage,
+                provider = TestAuthProvider(
+                    viewerResult = NetworkResult.Failure(NetworkError.Unauthorized(null)),
+                ),
                 cachedViewerStore = FakeCachedViewerStore(),
                 onClearUserData = { cache.clear() },
             )
@@ -410,14 +408,14 @@ class MediaListCacheTest {
     fun anExpiredTokenAtStartupDeletesTheListFiles() {
         val store = InMemoryFileStore()
         val cache = diskCache(store)
-        val storage = InMemoryAniListTokenStorage()
+        val storage = InMemoryTokenStorage()
 
         runBlocking {
             storage.save(expiredToken())
             cache.write(1, MediaType.ANIME, listOf(cachedAnimeDto(101, "A")))
-            val manager = SessionManager(
-                tokenStorage = storage,
-                viewerRepository = FakeViewerRepo(NetworkResult.Success(viewer())),
+            val manager = testSessionManager(
+                storage = storage,
+                provider = TestAuthProvider(viewerResult = NetworkResult.Success(viewer())),
                 cachedViewerStore = FakeCachedViewerStore(),
                 onClearUserData = { cache.clear() },
             )

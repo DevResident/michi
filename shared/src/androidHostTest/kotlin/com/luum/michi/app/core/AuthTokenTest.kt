@@ -1,8 +1,8 @@
 package com.luum.michi.app.core
 
 import com.luum.michi.app.core.auth.domain.AniListOAuthConfig
-import com.luum.michi.app.core.auth.domain.AniListToken
-import com.luum.michi.app.core.auth.domain.InMemoryAniListTokenStorage
+import com.luum.michi.app.core.auth.domain.AuthToken
+import com.luum.michi.app.core.auth.domain.InMemoryTokenStorage
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.auth.domain.parseAniListOAuthCallback
 import kotlinx.coroutines.runBlocking
@@ -61,8 +61,8 @@ class AuthTokenTest {
 
     @Test
     fun inMemoryStorageRoundtrips() {
-        val storage = InMemoryAniListTokenStorage()
-        val token = AniListToken(accessToken = "abc", savedAtEpochSeconds = 1L)
+        val storage = InMemoryTokenStorage()
+        val token = AuthToken(accessToken = "abc", savedAtEpochSeconds = 1L)
         runBlocking {
             assertNull(storage.load())
             storage.save(token)
@@ -74,24 +74,42 @@ class AuthTokenTest {
 
     @Test
     fun tokenWithoutExpiryNeverExpires() {
-        assertFalse(AniListToken(accessToken = "a", savedAtEpochSeconds = 1L).isExpired)
+        val token = AuthToken(accessToken = "a", savedAtEpochSeconds = 1L)
+        assertFalse(token.isExpired)
+        assertFalse(token.expiresWithin(60), "no expiry means it never expires within a margin")
     }
 
     @Test
     fun oldTokenIsExpired() {
         assertTrue(
-            AniListToken(accessToken = "a", savedAtEpochSeconds = 1L, expiresInSeconds = 3600L).isExpired,
+            AuthToken(accessToken = "a", savedAtEpochSeconds = 1L, expiresInSeconds = 3600L).isExpired,
         )
     }
 
     @Test
     fun freshTokenIsNotExpired() {
-        assertFalse(
-            AniListToken(
-                accessToken = "a",
-                savedAtEpochSeconds = currentEpochSeconds(),
-                expiresInSeconds = 3600L,
-            ).isExpired,
+        val token = AuthToken(
+            accessToken = "a",
+            savedAtEpochSeconds = currentEpochSeconds(),
+            expiresInSeconds = 3600L,
         )
+        assertFalse(token.isExpired)
+        assertFalse(token.expiresWithin(60), "an hour is well beyond the refresh margin")
+    }
+
+    @Test
+    fun expiresWithinUsesTheRefreshMargin() {
+        val nearlyExpired = AuthToken(
+            accessToken = "a",
+            savedAtEpochSeconds = currentEpochSeconds() - 3550L,
+            expiresInSeconds = 3600L,
+        )
+        assertFalse(nearlyExpired.isExpired)
+        assertTrue(nearlyExpired.expiresWithin(60), "50 s left is inside the 60 s margin")
+    }
+
+    @Test
+    fun refreshTokenDefaultsToNull() {
+        assertNull(AuthToken(accessToken = "a", savedAtEpochSeconds = 1L).refreshToken)
     }
 }

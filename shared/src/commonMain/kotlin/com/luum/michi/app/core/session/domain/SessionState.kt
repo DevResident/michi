@@ -1,5 +1,6 @@
 package com.luum.michi.app.core.session.domain
 
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkError
 
 internal sealed class SessionState {
@@ -10,7 +11,10 @@ internal sealed class SessionState {
     data object Anonymous : SessionState()
 
     /** A valid token and viewer were resolved. The shell should be shown. */
-    data class Authenticated(val viewer: Viewer) : SessionState()
+    data class Authenticated(val viewer: Viewer) : SessionState() {
+        /** The provider is owned by the viewer: one source of truth. */
+        val provider: ProviderId get() = viewer.provider
+    }
 
     /** Token exists but viewer fetch failed (network error, expired token, etc.). */
     data class Error(val error: NetworkError) : SessionState()

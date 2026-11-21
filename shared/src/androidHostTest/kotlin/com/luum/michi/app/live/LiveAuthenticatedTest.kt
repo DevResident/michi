@@ -1,9 +1,13 @@
 package com.luum.michi.app.live
 
+import com.luum.michi.app.InMemoryActiveProviderStore
 import com.luum.michi.app.profile.repository.ProfileRepositoryImpl
-import com.luum.michi.app.core.auth.domain.AniListToken
-import com.luum.michi.app.core.auth.domain.InMemoryAniListTokenStorage
+import com.luum.michi.app.core.auth.domain.AuthToken
+import com.luum.michi.app.core.auth.domain.AniListOAuthLauncher
+import com.luum.michi.app.core.auth.domain.InMemoryTokenStorage
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
+import com.luum.michi.app.core.auth.repository.AniListAuthProvider
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.repository.AniListRateLimiter
 import com.luum.michi.app.core.network.repository.KtorAniListGraphQLClient
@@ -35,14 +39,25 @@ private fun requireToken(): String =
         ?: error("Missing ANILIST_TEST_TOKEN (set anilistTestToken in local.properties)")
 
 private class LiveStack(private val token: String) {
-    private val storage = InMemoryAniListTokenStorage()
+    private val storage = InMemoryTokenStorage()
     private val graphQLClient = KtorAniListGraphQLClient(
         httpClient = createAniListHttpClient(engine = OkHttp.create()),
         tokenProvider = { storage.load() },
         rateLimiter = AniListRateLimiter(),
     )
     private val viewerRepository = AniListViewerRepositoryImpl(graphQLClient)
-    val sessionManager = SessionManager(storage, viewerRepository, NoopCachedViewerStore())
+    private val authProvider = AniListAuthProvider(
+        launcher = object : AniListOAuthLauncher {
+            override fun open() = Unit
+        },
+        viewerRepository = viewerRepository,
+    )
+    val sessionManager = SessionManager(
+        providers = listOf(authProvider),
+        tokenStorages = mapOf(ProviderId.AniList to storage),
+        activeProviderStore = InMemoryActiveProviderStore(),
+        cachedViewerStore = NoopCachedViewerStore(),
+    )
     val animeListRepository: AnimeListRepository = AnimeListRepositoryImpl(graphQLClient)
     val mangaListRepository: MangaListRepository = MangaListRepositoryImpl(graphQLClient)
     val profileRepository = ProfileRepositoryImpl(graphQLClient)
@@ -50,7 +65,7 @@ private class LiveStack(private val token: String) {
     val rawToken: String = token
 
     suspend fun bootstrapAuthenticated(): Int {
-        storage.save(AniListToken(accessToken = token, savedAtEpochSeconds = currentEpochSeconds()))
+        storage.save(AuthToken(accessToken = token, savedAtEpochSeconds = currentEpochSeconds()))
         sessionManager.bootstrap()
         val state = sessionManager.state.value
         assertTrue(state is SessionState.Authenticated, "expected Authenticated but was $state")

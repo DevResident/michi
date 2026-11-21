@@ -1,15 +1,15 @@
 package com.luum.michi.app.profile
 
-import com.luum.michi.app.core.auth.domain.AniListToken
-import com.luum.michi.app.core.auth.domain.InMemoryAniListTokenStorage
+import com.luum.michi.app.TestAuthProvider
+import com.luum.michi.app.core.auth.domain.AuthToken
+import com.luum.michi.app.core.auth.domain.InMemoryTokenStorage
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.model.CoverSizes
 import com.luum.michi.app.core.network.domain.NetworkResult
-import com.luum.michi.app.core.session.domain.AniListViewerRepository
 import com.luum.michi.app.core.session.domain.CachedViewerStore
-import com.luum.michi.app.core.session.domain.SessionManager
 import com.luum.michi.app.core.session.domain.Viewer
 import com.luum.michi.app.mediaList.InMemoryFileStore
+import com.luum.michi.app.testSessionManager
 import com.luum.michi.app.profile.domain.ProfileData
 import com.luum.michi.app.profile.domain.model.ProfileFavorite
 import com.luum.michi.app.profile.domain.model.ProfileFavorites
@@ -68,15 +68,11 @@ private fun richProfile(): ProfileData = ProfileData(
 
 private fun viewer() = Viewer(id = 1, name = "user")
 
-private fun freshToken() = AniListToken(
+private fun freshToken() = AuthToken(
     accessToken = "abc",
     savedAtEpochSeconds = currentEpochSeconds(),
     expiresInSeconds = 3600L,
 )
-
-private class FakeViewerRepo(private val result: NetworkResult<Viewer>) : AniListViewerRepository {
-    override suspend fun fetchViewer(): NetworkResult<Viewer> = result
-}
 
 private class FakeCachedViewerStore : CachedViewerStore {
     override fun load(): Viewer? = null
@@ -200,14 +196,14 @@ class ProfileCacheTest {
     fun logoutDeletesTheProfileFile() {
         val store = InMemoryFileStore()
         val cache = diskCache(store)
-        val storage = InMemoryAniListTokenStorage()
+        val storage = InMemoryTokenStorage()
 
         runBlocking {
             storage.save(freshToken())
             cache.write(1, richProfile())
-            val manager = SessionManager(
-                tokenStorage = storage,
-                viewerRepository = FakeViewerRepo(NetworkResult.Success(viewer())),
+            val manager = testSessionManager(
+                storage = storage,
+                provider = TestAuthProvider(viewerResult = NetworkResult.Success(viewer())),
                 cachedViewerStore = FakeCachedViewerStore(),
                 onClearUserData = { cache.clear() },
             )

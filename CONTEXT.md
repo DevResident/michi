@@ -147,8 +147,10 @@ converted at the UI boundary). Contents:
 
 ```text
 core/
-  auth/domain|repository/       AniList OAuth flow + token storage (launchers, stores)
-  session/domain|repository/    viewer identity, SessionManager, SessionState
+  auth/domain|repository/       provider-neutral auth (`AuthToken`, `TokenStorage`,
+                                `AuthProvider`) + the AniList provider/launcher/parser
+  session/domain|repository/    viewer identity, SessionManager, SessionState, the active
+                                provider store and `validToken()` (single-flight refresh)
   network/domain|repository/    transport only: Ktor GraphQL client, NetworkResult, endpoints,
                                 rate limiter, HTTP client + `PageInfoDto` (never import DTOs
                                 from UI directly, map at feature boundaries)
@@ -212,8 +214,10 @@ com.luum.michi.app
     AuthModal.kt            on-demand sign-in modal + language picker (MAL appends to AuthServices)
     state/State.kt          BackStep, State, RootOverlay/OverlayLayer (overlay set + open/close/isOpen), rememberState (no profile routes)
   core/
-    auth/domain|repository/   AniList OAuth flow + token storage
-    session/domain|repository/ viewer identity + SessionManager
+    auth/domain|repository/   provider-neutral `AuthToken`/`TokenStorage`/`AuthProvider`
+                              + the AniList OAuth provider, launcher and callback parser
+    session/domain|repository/ viewer identity + SessionManager (active provider,
+                              `validToken()` with single-flight refresh)
     network/domain|repository/ transport only: Ktor GraphQL client, NetworkResult, endpoints,
                               rate limiter, HTTP client + `PageInfoDto`
     platform/domain|repository/ system services: connectivity, url opener, share launcher
@@ -272,6 +276,7 @@ appear only when real behavior justifies them.
 - No layer prefixes on class names: shared UI lives in `ui/` (`Toolbar`, `Icons`, `TabBar`), root scope in `root/` (`Root`, `State`). The package is the disambiguator — `ui.Icons` vs feature icons, `root.State` vs any other state.
 - `AniList*` for API/client/DTO-specific classes.
 - `EntityRef` / `ProviderId` for the `(provider, id)` reference that crosses navigation, cache-key and list-write boundaries: `ProviderId` is a string-backed value class (`AniList = "anilist"`) and the same id under two providers is a different entity. The domain models keep their `Int` id until 11.1b.
+- `AuthProvider` for one login service (id, brand label, configured flag, OAuth open/callback, refresh and viewer fetch). Only one provider is active at a time; switching closes the previous session and clears user data.
 
 ## Current State
 
@@ -286,7 +291,7 @@ appear only when real behavior justifies them.
 - Every tab except Settings, the two lists, the Discover dashboard and the session PROFILE renders a `MessagePanel` placeholder (title + icon, no actions) — guests on the gated tabs and any surface not built yet.
 - App language support: Spanish (`es`) and English (`en`).
 - App name `Michi` is a brand name; do not move it to translatable XML unless the user changes direction.
-- Dropped directions (do not re-propose): multi-account (multi-service auth via `AuthServices` is the path instead); Niro-style adult-cover censoring (hide-behind-18+ stays); a dedicated guest profile surface (guest profile = sign-in prompt via `AuthModal`); favourite hearts on list cards (saturates the lists).
+- Dropped directions (do not re-propose): multi-account (multi-service auth via `AuthServices`/`AuthProvider` is the path instead, but with a single active provider — switching closes the previous session); Niro-style adult-cover censoring (hide-behind-18+ stays); a dedicated guest profile surface (guest profile = sign-in prompt via `AuthModal`); favourite hearts on list cards (saturates the lists).
 
 ## Lazy Loading Network Strategy (HTTP 429 Prevention)
 

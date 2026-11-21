@@ -1,8 +1,9 @@
 package com.luum.michi.app
 
 import androidx.compose.ui.window.ComposeUIViewController
-import com.luum.michi.app.core.auth.repository.NSUserDefaultsAniListTokenStorage
+import com.luum.michi.app.core.auth.repository.NSUserDefaultsTokenStorage
 import com.luum.michi.app.core.auth.repository.SafariOAuthLauncher
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.repository.IosUrlOpener
 import com.luum.michi.app.core.platform.repository.IosShareLauncher
 import com.luum.michi.app.core.storage.repository.NSUserDefaultsSettingsStore
@@ -39,8 +40,10 @@ private object IosMichiDependencies {
     @OptIn(kotlin.experimental.ExperimentalNativeApi::class)
     fun getOrCreate(): MichiDependencies =
         current ?: MichiDependencies(
-            tokenStorage = NSUserDefaultsAniListTokenStorage(),
-            oAuthLauncher = SafariOAuthLauncher(),
+            tokenStorages = mapOf(
+                ProviderId.AniList to NSUserDefaultsTokenStorage(ProviderId.AniList),
+            ),
+            aniListOAuthLauncher = SafariOAuthLauncher(),
             urlOpener = IosUrlOpener(),
             shareLauncher = IosShareLauncher(),
             settingsStore = NSUserDefaultsSettingsStore(),

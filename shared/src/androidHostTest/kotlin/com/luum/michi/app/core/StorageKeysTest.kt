@@ -17,7 +17,8 @@ class StorageKeysTest {
             SettingsStoreKeys.StartAnimeSection,
             SettingsStoreKeys.StartMangaSection,
             SettingsStoreKeys.StartCatalogType,
+            SettingsStoreKeys.ActiveProvider,
         )
-        assertEquals(8, keys.size)
+        assertEquals(9, keys.size)
     }
 }

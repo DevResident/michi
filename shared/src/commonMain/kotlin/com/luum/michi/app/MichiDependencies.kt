@@ -11,13 +11,15 @@ import com.luum.michi.app.calendar.repository.CalendarRepositoryImpl
 import com.luum.michi.app.calendar.domain.CalendarRepository
 import com.luum.michi.app.mediaDetail.repository.character.CharacterDetailRepositoryImpl
 import com.luum.michi.app.mediaDetail.domain.character.CharacterDetailRepository
+import com.luum.michi.app.core.auth.domain.AuthProvider
 import com.luum.michi.app.core.auth.domain.AniListOAuthLauncher
+import com.luum.michi.app.core.auth.domain.TokenStorage
+import com.luum.michi.app.core.auth.repository.AniListAuthProvider
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.domain.UrlOpener
 import com.luum.michi.app.core.platform.domain.ShareLauncher
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.parseAniListDestination
-import com.luum.michi.app.core.auth.domain.AniListTokenStorage
-import com.luum.michi.app.core.auth.domain.parseAniListOAuthCallback
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.network.domain.AniListGraphQLClient
 import com.luum.michi.app.core.network.domain.NetworkThrottle
@@ -27,6 +29,7 @@ import com.luum.michi.app.core.network.repository.createAniListHttpClient
 import com.luum.michi.app.core.session.domain.AniListViewerRepository
 import com.luum.michi.app.core.session.repository.AniListViewerRepositoryImpl
 import com.luum.michi.app.core.session.domain.SessionManager
+import com.luum.michi.app.core.session.repository.SettingsStoreActiveProviderStore
 import com.luum.michi.app.core.session.repository.SettingsStoreCachedViewerStore
 import com.luum.michi.app.core.storage.domain.SettingsStore
 import com.luum.michi.app.core.storage.domain.FileStore
@@ -67,16 +70,17 @@ import com.luum.michi.app.mediaDetail.repository.ExternalLinkCatalogRepositoryIm
 /**
  * App-level composition root. Lives exactly once per process: owned by
  * `MichiApplication` on Android and by the `IosMichiDependencies` holder on
- * iOS, which provide the platform-specific [tokenStorage] and [oAuthLauncher].
- * Never construct it from a recreated UI entry (Activity / view controller),
- * or each recreation would leak a CoroutineScope + HttpClient.
+ * iOS, which provide the platform-specific token storages (one per provider)
+ * and the AniList launcher. Never construct it from a recreated UI entry
+ * (Activity / view controller), or each recreation would leak a CoroutineScope
+ * + HttpClient.
  *
  * The Android entry must also dispatch deep links (`michi://oauth/callback`) to
  * [onOAuthCallback]; iOS does the same from its `onOpenURL` handler.
  */
 class MichiDependencies internal constructor(
-    internal val tokenStorage: AniListTokenStorage,
-    internal val oAuthLauncher: AniListOAuthLauncher,
+    private val tokenStorages: Map<ProviderId, TokenStorage>,
+    private val aniListOAuthLauncher: AniListOAuthLauncher,
     internal val urlOpener: UrlOpener,
     internal val shareLauncher: ShareLauncher,
     internal val settingsStore: SettingsStore,
@@ -103,18 +107,9 @@ class MichiDependencies internal constructor(
 
     internal val graphQLClient: AniListGraphQLClient = KtorAniListGraphQLClient(
         httpClient = httpClient,
-        // Never send an expired token: it would 401 forever, so an expired stored
-        // token closes the session instead.
-        tokenProvider = {
-            tokenStorage.load()?.let { token ->
-                if (token.isExpired) {
-                    sessionManager.onUnauthorized(token)
-                    null
-                } else {
-                    token
-                }
-            }
-        },
+        // Never send an expired token; `validToken` refreshes when possible and
+        // closes the session when a token is dead beyond recovery.
+        tokenProvider = { sessionManager.validToken() },
         debugLogging = isDebug,
         rateLimiter = rateLimiter,
         // A mid-session 401 closes the session only if that token is still the
@@ -123,6 +118,11 @@ class MichiDependencies internal constructor(
     )
     internal val viewerRepository: AniListViewerRepository =
         AniListViewerRepositoryImpl(graphQLClient)
+
+    /** Login services exposed to the sign-in modal (AniList today). */
+    internal val authProviders: List<AuthProvider> = listOf(
+        AniListAuthProvider(aniListOAuthLauncher, viewerRepository),
+    )
 
     /** One cache instance serves both list repositories and the session wipe. */
     private val mediaListCache: MediaListDiskCache = MediaListDiskCache(fileStore)
@@ -180,8 +180,9 @@ class MichiDependencies internal constructor(
 
     internal val sessionManager: SessionManager =
         SessionManager(
-            tokenStorage = tokenStorage,
-            viewerRepository = viewerRepository,
+            providers = authProviders,
+            tokenStorages = tokenStorages,
+            activeProviderStore = SettingsStoreActiveProviderStore(settingsStore),
             cachedViewerStore = SettingsStoreCachedViewerStore(settingsStore),
             onClearUserData = {
                 // Both caches live in the same FileStore/folder; clear both for
@@ -202,13 +203,12 @@ class MichiDependencies internal constructor(
     }
 
     /**
-     * Called by the platform when the OAuth deep link fires. Parses the URI
-     * fragment and, on success, stores the token and refreshes the session.
-     * No-op when the URI is not a valid AniList callback.
+     * Called by the platform when an OAuth deep link fires. The provider that
+     * recognizes the URI stores the token and refreshes the session; an
+     * unknown URI is a no-op.
      */
     fun onOAuthCallback(uri: String) {
-        val token = parseAniListOAuthCallback(uri) ?: return
-        scope.launch { sessionManager.onOAuthCallback(token) }
+        scope.launch { sessionManager.onOAuthCallback(uri) }
     }
 
     /**

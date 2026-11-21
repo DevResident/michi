@@ -9,7 +9,7 @@ package com.luum.michi.app.core.auth.domain
  * Returns `null` if the URI is not a valid AniList OAuth callback (wrong scheme,
  * missing fragment, or missing access_token).
  */
-internal fun parseAniListOAuthCallback(uri: String): AniListToken? {
+internal fun parseAniListOAuthCallback(uri: String): AuthToken? {
     if (!uri.startsWith(AniListOAuthConfig.RedirectUri)) return null
 
     val fragmentIndex = uri.indexOf('#')
@@ -31,7 +31,7 @@ internal fun parseAniListOAuthCallback(uri: String): AniListToken? {
     val tokenType = params["token_type"]?.takeIf { it.isNotBlank() } ?: "Bearer"
     val expiresIn = params["expires_in"]?.toLongOrNull()
 
-    return AniListToken(
+    return AuthToken(
         accessToken = accessToken,
         tokenType = tokenType,
         expiresInSeconds = expiresIn,

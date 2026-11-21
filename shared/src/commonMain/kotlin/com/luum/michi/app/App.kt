@@ -31,8 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.luum.michi.app.core.auth.domain.AniListOAuthConfig
 import com.luum.michi.app.core.language.domain.getLanguageStrings
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.session.domain.SessionState
 import com.luum.michi.app.core.storage.domain.SettingsStoreKeys
@@ -88,16 +88,19 @@ fun App(
     PlatformThemeModeEffect(settingsState.themeType)
 
     // Login services (AniList today; MAL appends here tomorrow): shared by
-    // the sign-in modal everywhere it opens.
-    val authServices = listOf(
+    // the sign-in modal everywhere it opens. The visible AniList label stays
+    // the translated action; a future provider falls back to its brand name.
+    val authServices = dependencies.authProviders.map { provider ->
+        val isAniList = provider.id == ProviderId.AniList
         AuthService(
-            id = "anilist",
-            label = strings.authLoginAction,
-            onLogin = { dependencies.oAuthLauncher.open() },
-            icon = AppIcons.AniList,
-            brandHex = ANILIST_BRAND_HEX,
-        ),
-    )
+            id = provider.id.value,
+            label = if (isAniList) strings.authLoginAction else provider.label,
+            onLogin = provider::open,
+            icon = if (isAniList) AppIcons.AniList else null,
+            brandHex = if (isAniList) ANILIST_BRAND_HEX else null,
+        )
+    }
+    val isAuthConfigured = dependencies.authProviders.any { it.isConfigured }
     // Sort memory backing (Settings persist toggle, per tab): store-owned,
     // session-independent — Root hydrates holders from it, holders save
     // into it. Local-only, like theme/language.
@@ -213,7 +216,7 @@ fun App(
                             shareLauncher = dependencies.shareLauncher,
                             sortPersistence = sortPersistence,
                             authServices = authServices,
-                            isAuthConfigured = AniListOAuthConfig.isConfigured,
+                            isAuthConfigured = isAuthConfigured,
                             autoOpenSignIn = autoOpenSignIn,
                             onAutoSignInShown = {
                                 store.putBoolean(SettingsStoreKeys.SeenSignIn, true)

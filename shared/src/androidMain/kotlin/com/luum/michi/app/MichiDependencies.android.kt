@@ -3,7 +3,8 @@ package com.luum.michi.app
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import com.luum.michi.app.core.auth.repository.ChromeCustomTabsOAuthLauncher
-import com.luum.michi.app.core.auth.repository.SharedPreferencesAniListTokenStorage
+import com.luum.michi.app.core.auth.repository.SharedPreferencesTokenStorage
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.repository.AndroidUrlOpener
 import com.luum.michi.app.core.platform.repository.AndroidShareLauncher
 import com.luum.michi.app.core.storage.repository.SharedPreferencesSettingsStore
@@ -16,8 +17,11 @@ import com.luum.michi.app.core.platform.repository.AndroidConnectivity
  * `androidApp` module never sees the platform impl types directly.
  */
 fun createMichiDependencies(context: Context): MichiDependencies = MichiDependencies(
-    tokenStorage = SharedPreferencesAniListTokenStorage(context.applicationContext),
-    oAuthLauncher = ChromeCustomTabsOAuthLauncher(context.applicationContext),
+    tokenStorages = mapOf(
+        ProviderId.AniList to
+            SharedPreferencesTokenStorage(context.applicationContext, ProviderId.AniList),
+    ),
+    aniListOAuthLauncher = ChromeCustomTabsOAuthLauncher(context.applicationContext),
     urlOpener = AndroidUrlOpener(context.applicationContext),
     shareLauncher = AndroidShareLauncher(context.applicationContext),
     settingsStore = SharedPreferencesSettingsStore(context.applicationContext),

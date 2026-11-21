@@ -1,6 +1,9 @@
 package com.luum.michi.app.core.session.domain
 
+import com.luum.michi.app.core.media.domain.ProviderId
+
 internal data class Viewer(
+    val provider: ProviderId = ProviderId.AniList,
     val id: Int,
     val name: String,
     val avatarUrl: String? = null,
