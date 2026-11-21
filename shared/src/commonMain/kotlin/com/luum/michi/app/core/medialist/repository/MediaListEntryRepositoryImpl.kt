@@ -2,6 +2,8 @@ package com.luum.michi.app.core.medialist.repository
 
 import com.luum.michi.app.core.favourite.domain.FavouriteRepository
 import com.luum.michi.app.core.favourite.domain.FavouriteTarget
+import com.luum.michi.app.core.media.domain.EntityRef
+import com.luum.michi.app.core.media.domain.requireAniListId
 import com.luum.michi.app.core.media.repository.dto.MediaViewerListEntryDto
 import com.luum.michi.app.core.media.repository.dto.toMillisOrNull
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
@@ -124,7 +126,7 @@ internal class MediaListEntryRepositoryImpl(
 ) : MediaListEntryRepository {
 
     override suspend fun saveEntry(
-        mediaId: Int,
+        mediaRef: EntityRef,
         status: MediaListStatus,
         progress: Int,
         progressVolumes: Int?,
@@ -138,6 +140,7 @@ internal class MediaListEntryRepositoryImpl(
         startedAtMillis: Long?,
         completedAtMillis: Long?,
     ): NetworkResult<MediaListViewerEntry> {
+        val mediaId = mediaRef.requireAniListId()
         val variables = buildMap<String, JsonElement> {
             put("mediaId", JsonPrimitive(mediaId))
             put("status", JsonPrimitive(status.toApiValue()))
@@ -194,11 +197,12 @@ internal class MediaListEntryRepositoryImpl(
     }
 
     override suspend fun saveProgress(
-        mediaId: Int,
+        mediaRef: EntityRef,
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
     ): NetworkResult<Unit> {
+        val mediaId = mediaRef.requireAniListId()
         val variables = buildMap<String, JsonElement> {
             put("mediaId", JsonPrimitive(mediaId))
             if (progress != null) {
@@ -221,10 +225,15 @@ internal class MediaListEntryRepositoryImpl(
         }.map { }
     }
 
-    override suspend fun toggleFavourite(mediaId: Int, isManga: Boolean): NetworkResult<Unit> =
-        favouriteRepository.toggleFavourite(
+    override suspend fun toggleFavourite(
+        mediaRef: EntityRef,
+        isManga: Boolean,
+    ): NetworkResult<Unit> {
+        val mediaId = mediaRef.requireAniListId()
+        return favouriteRepository.toggleFavourite(
             if (isManga) FavouriteTarget.Manga(mediaId) else FavouriteTarget.Anime(mediaId),
         )
+    }
 
     override suspend fun deleteEntry(entryId: Int): NetworkResult<Unit> {
         val variables = buildMap<String, JsonElement> {

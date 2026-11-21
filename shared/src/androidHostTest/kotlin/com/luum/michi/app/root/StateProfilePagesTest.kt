@@ -1,6 +1,7 @@
 package com.luum.michi.app.root
 
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.profile.domain.model.ProfileFollow
 import com.luum.michi.app.profile.domain.model.ProfileFollowsKind
@@ -45,8 +46,8 @@ class StateProfilePagesTest {
     fun aReviewOpensItsMediaOverThePage() {
         val state = State()
         state.openProfileReviews()
-        state.openMedia(42)
-        assertEquals(DetailDestination.Media(42), state.currentDetail)
+        state.openMedia(aniListRef(42))
+        assertEquals(DetailDestination.Media(aniListRef(42)), state.currentDetail)
         assertTrue(state.applyBackStep())
         assertEquals(DetailDestination.ProfileReviews, state.currentDetail)
     }

@@ -1,5 +1,6 @@
 package com.luum.michi.app.root
 
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.TabSection
 import com.luum.michi.app.root.state.BackStep
@@ -49,7 +50,7 @@ class StateOverlayTest {
     @Test
     fun detailClosesBeforeTheOverlayBelowIt() {
         val state = State()
-        state.openMedia(1)
+        state.openMedia(aniListRef(1))
         state.open(RootOverlay.Calendar)
 
         assertEquals(BackStep.CloseDetail, state.nextBackStep())
@@ -67,7 +68,7 @@ class StateOverlayTest {
         val state = State()
         state.openSearch(TabSection.DISCOVER)
         state.updateSearch(TabSection.DISCOVER, "naruto")
-        state.openMedia(1)
+        state.openMedia(aniListRef(1))
 
         // The first back closes the detail; the search behind it survives.
         assertEquals(BackStep.CloseDetail, state.nextBackStep())
@@ -102,7 +103,7 @@ class StateOverlayTest {
         assertTrue(state.isSearchVisible)
 
         // A detail opened from the results replaces the search field...
-        state.openMedia(1)
+        state.openMedia(aniListRef(1))
         assertFalse(state.isSearchVisible, "the detail owns the toolbar")
         assertTrue(state.isSearchActive, "but the search itself stays open")
 
@@ -133,7 +134,7 @@ class StateOverlayTest {
     fun aDetailOpenedFromExploreResultsClosesBeforeTheResults() {
         val state = State()
         state.enterExploreResults("naruto")
-        state.openMedia(1)
+        state.openMedia(aniListRef(1))
 
         assertEquals(BackStep.CloseDetail, state.nextBackStep())
         assertTrue(state.applyBackStep())
@@ -196,7 +197,7 @@ class StateOverlayTest {
     fun openingADetailFromTheCatalogKeepsIt() {
         val state = State()
         state.openCatalog("POPULAR_ANIME")
-        state.openMedia(5)
+        state.openMedia(aniListRef(5))
 
         assertTrue(state.applyBackStep())
         assertEquals(
@@ -212,7 +213,7 @@ class StateOverlayTest {
         state.open(RootOverlay.Settings)
         state.open(RootOverlay.Calendar)
         state.open(RootOverlay.SectionFilter)
-        state.openMedia(1)
+        state.openMedia(aniListRef(1))
 
         state.reset()
 

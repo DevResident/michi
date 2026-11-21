@@ -1,5 +1,6 @@
 package com.luum.michi.app.root
 
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.root.state.BackStep
 import com.luum.michi.app.root.state.RootOverlay
 import com.luum.michi.app.root.state.State
@@ -15,7 +16,7 @@ class StateDetailSortTest {
     @Test
     fun detailSortClosesBeforeThePageItSitsOn() {
         val state = newState()
-        state.openStudio(5)
+        state.openStudio(aniListRef(5))
         state.open(RootOverlay.DetailSort)
 
         assertEquals(BackStep.CloseSheet, state.nextBackStep())
@@ -29,12 +30,12 @@ class StateDetailSortTest {
     @Test
     fun leavingOrReplacingTheDetailDropsTheSortFlag() {
         val state = newState()
-        state.openStudio(5)
+        state.openStudio(aniListRef(5))
         state.open(RootOverlay.DetailSort)
-        state.openMedia(9)
+        state.openMedia(aniListRef(9))
         assertFalse(state.isOpen(RootOverlay.DetailSort))
 
-        state.openStudio(6)
+        state.openStudio(aniListRef(6))
         state.open(RootOverlay.DetailSort)
         state.closeDetail()
         assertFalse(state.isOpen(RootOverlay.DetailSort))

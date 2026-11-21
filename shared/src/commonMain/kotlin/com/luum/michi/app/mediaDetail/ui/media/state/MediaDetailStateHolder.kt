@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.model.Page
 import com.luum.michi.app.core.network.domain.NetworkResult
@@ -210,5 +211,5 @@ internal class MediaDetailStateHolder(
     override fun isFavouriteOfSnapshot(snapshot: MediaDetailSnapshot): Boolean = snapshot.detail.isFavourite
 
     override suspend fun requestToggleFavourite(id: Int, detail: MediaDetail): NetworkResult<Unit> =
-        entryRepository.toggleFavourite(id, detail.type == MediaDetailType.MANGA)
+        entryRepository.toggleFavourite(aniListRef(id), detail.type == MediaDetailType.MANGA)
 }

@@ -5,7 +5,9 @@ import com.luum.michi.app.core.auth.domain.AniListToken
 import com.luum.michi.app.core.auth.domain.InMemoryAniListTokenStorage
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.favourite.repository.FavouriteRepositoryImpl
+import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.media.repository.dto.MediaDto
 import com.luum.michi.app.core.media.repository.dto.MediaTitleDto
 import com.luum.michi.app.core.medialist.repository.MediaListEntryRepositoryImpl
@@ -33,6 +35,8 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -130,7 +134,7 @@ private class CountingEntryRepository : MediaListEntryRepository {
         private set
 
     override suspend fun saveEntry(
-        mediaId: Int,
+        mediaRef: EntityRef,
         status: MediaListStatus,
         progress: Int,
         progressVolumes: Int?,
@@ -146,7 +150,7 @@ private class CountingEntryRepository : MediaListEntryRepository {
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(
-        mediaId: Int,
+        mediaRef: EntityRef,
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
@@ -155,7 +159,7 @@ private class CountingEntryRepository : MediaListEntryRepository {
         return NetworkResult.Success(Unit)
     }
 
-    override suspend fun toggleFavourite(mediaId: Int, isManga: Boolean): NetworkResult<Unit> =
+    override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =
         NetworkResult.Success(Unit)
 
     override suspend fun deleteEntry(entryId: Int): NetworkResult<Unit> = NetworkResult.Success(Unit)
@@ -257,6 +261,48 @@ class MediaListCacheTest {
         runBlocking { repository.loadList(7, splitCompleted = true) }
 
         assertTrue(store.contains(listCacheFileName(7, MediaType.ANIME)), "the load is persisted")
+    }
+
+    @Test
+    fun theListFileKeyIncludesTheProvider() {
+        val store = InMemoryFileStore()
+        val cache = diskCache(store)
+        val otherProvider = ProviderId("other")
+        runBlocking {
+            cache.write(7, MediaType.ANIME, listOf(cachedAnimeDto(101, "AniList")), ProviderId.AniList)
+            cache.write(7, MediaType.ANIME, listOf(cachedAnimeDto(202, "Other")), otherProvider)
+        }
+
+        assertNotEquals(
+            listCacheFileName(7, MediaType.ANIME, ProviderId.AniList),
+            listCacheFileName(7, MediaType.ANIME, otherProvider),
+        )
+        runBlocking {
+            assertEquals(
+                listOf(101),
+                cache.read(7, MediaType.ANIME, ProviderId.AniList)?.map { it.id },
+            )
+            assertEquals(
+                listOf(202),
+                cache.read(7, MediaType.ANIME, otherProvider)?.map { it.id },
+            )
+        }
+    }
+
+    @Test
+    fun aV1FileIsIgnoredAndDeletedOnTheFirstV2Write() {
+        val store = InMemoryFileStore()
+        val cache = diskCache(store)
+        val legacyName = "media_list_v1_anime_7.json"
+        store.put(legacyName, "[]")
+
+        assertNull(runBlocking { cache.read(7, MediaType.ANIME) }, "v1 is never read")
+        assertTrue(store.contains(legacyName), "a read does not delete it")
+
+        runBlocking { cache.write(7, MediaType.ANIME, listOf(cachedAnimeDto(101, "A"))) }
+
+        assertTrue(store.contains(listCacheFileName(7, MediaType.ANIME)), "v2 was written")
+        assertFalse(store.contains(legacyName), "the orphan v1 file is removed")
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.luum.michi.app.mediaDetail.ui.media.state
 
 import com.luum.michi.app.core.favourite.domain.FavouriteTarget
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.mediaDetail.domain.media.MediaDetailRepository
@@ -275,7 +276,7 @@ internal class MediaEntryEditorState(
         // failed request reverts them with the previous value.
         onFavouriteChanged(favouriteTarget, target)
         scope.launch {
-            when (val result = entryRepository.toggleFavourite(mediaId, isManga)) {
+            when (val result = entryRepository.toggleFavourite(aniListRef(mediaId), isManga)) {
                 is NetworkResult.Success -> {}
                 is NetworkResult.Failure -> {
                     isFavourite = previous
@@ -293,7 +294,7 @@ internal class MediaEntryEditorState(
         error = null
         scope.launch {
             val result = entryRepository.saveEntry(
-                mediaId = mediaId,
+                mediaRef = aniListRef(mediaId),
                 status = status,
                 progress = progress,
                 progressVolumes = if (isManga) progressVolumes else null,

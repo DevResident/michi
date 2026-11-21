@@ -1,21 +1,23 @@
 package com.luum.michi.app.core.navigation.domain
 
+import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.media.domain.MediaType
 
 internal sealed interface DetailDestination {
     /**
      * A media detail. [typeHint] is what the opener already knows (a list tab, a
      * favourites category, a deep link); null when it does not know. It is only a
-     * hint for the holder, so it never takes part in equality: `Media(1, MANGA)`
-     * and `Media(1)` are the same destination (no duplicate on top of the stack).
+     * hint for the holder, so it never takes part in equality: `Media(ref, MANGA)`
+     * and `Media(ref)` are the same destination (no duplicate on top of the stack).
+     * The reference, not just the id, identifies the entity.
      */
-    data class Media(val id: Int, val typeHint: MediaType? = null) : DetailDestination {
-        override fun equals(other: Any?): Boolean = other is Media && other.id == id
-        override fun hashCode(): Int = id
+    data class Media(val ref: EntityRef, val typeHint: MediaType? = null) : DetailDestination {
+        override fun equals(other: Any?): Boolean = other is Media && other.ref == ref
+        override fun hashCode(): Int = ref.hashCode()
     }
-    data class Character(val id: Int) : DetailDestination
-    data class Staff(val id: Int) : DetailDestination
-    data class Studio(val id: Int) : DetailDestination
+    data class Character(val ref: EntityRef) : DetailDestination
+    data class Staff(val ref: EntityRef) : DetailDestination
+    data class Studio(val ref: EntityRef) : DetailDestination
 
     /**
      * Works of one genre. [type] is the catalog the page opens on; the screen
@@ -55,10 +57,10 @@ internal sealed interface DetailDestination {
 
     /**
      * "View all" list reached from a detail page: the rail shows the first
-     * items, this screen shows the whole (paginated) list. [parentId] keys
+     * items, this screen shows the whole (paginated) list. [parentRef] keys
      * the source so `Root` can read the right holder.
      */
-    data class DetailList(val kind: DetailListKind, val parentId: Int) : DetailDestination
+    data class DetailList(val kind: DetailListKind, val parentRef: EntityRef) : DetailDestination
 }
 
 /** Which section a [DetailDestination.DetailList] renders. */

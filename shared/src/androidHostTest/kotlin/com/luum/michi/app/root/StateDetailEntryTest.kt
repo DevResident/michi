@@ -1,5 +1,6 @@
 package com.luum.michi.app.root
 
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.TabSection
 import com.luum.michi.app.root.state.State
 import com.luum.michi.app.root.state.detailSurfaceKey
@@ -23,9 +24,9 @@ class StateDetailEntryTest {
         val state = state()
         assertEquals(0L, state.currentDetailEntryId)
 
-        state.openMedia(1)
+        state.openMedia(aniListRef(1))
         val first = state.currentDetailEntryId
-        state.openMedia(2)
+        state.openMedia(aniListRef(2))
         val second = state.currentDetailEntryId
 
         assertNotEquals(first, second)
@@ -35,9 +36,9 @@ class StateDetailEntryTest {
     @Test
     fun poppingDropsTheEntry() {
         val state = state()
-        state.openMedia(1)
+        state.openMedia(aniListRef(1))
         val first = state.currentDetailEntryId
-        state.openMedia(2)
+        state.openMedia(aniListRef(2))
 
         state.closeDetail()
 
@@ -53,11 +54,11 @@ class StateDetailEntryTest {
     @Test
     fun rePushingTheSameMediaIsADifferentEntry() {
         val state = state()
-        state.openMedia(5)
+        state.openMedia(aniListRef(5))
         val first = state.currentDetailEntryId
-        state.openCharacter(9)
+        state.openCharacter(aniListRef(9))
 
-        state.openMedia(5) // A -> B -> A: the stack holds A twice
+        state.openMedia(aniListRef(5)) // A -> B -> A: the stack holds A twice
 
         assertNotEquals(first, state.currentDetailEntryId)
         assertEquals(3, state.detailEntryIds.size)
@@ -67,10 +68,10 @@ class StateDetailEntryTest {
     @Test
     fun theSameDestinationOnTopIsNotANewEntry() {
         val state = state()
-        state.openMedia(5)
+        state.openMedia(aniListRef(5))
         val first = state.currentDetailEntryId
 
-        state.openMedia(5)
+        state.openMedia(aniListRef(5))
 
         assertEquals(first, state.currentDetailEntryId)
         assertEquals(1, state.detailEntryIds.size)
@@ -80,7 +81,7 @@ class StateDetailEntryTest {
     fun aPoppedEntryDropsEveryTabVariantOfItsKey() {
         val state = state()
         state.selectTab(TabSection.ANIME)
-        state.openMedia(5)
+        state.openMedia(aniListRef(5))
         val id = state.currentDetailEntryId
 
         // The saved surface is keyed by the composing slot's tab, which may not

@@ -1,6 +1,7 @@
 package com.luum.michi.app.mediaList.repository
 
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.repository.AniListJson
 import com.luum.michi.app.core.storage.domain.FileStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -11,21 +12,32 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 /**
- * Bump when the persisted [MediaListEntryDto] shape changes: the version travels
- * in the file name, so an old file is simply never read again (no migration).
+ * Bump when the persisted [MediaListEntryDto] shape or the file key changes: the
+ * version travels in the file name, so an old file is simply never read again
+ * (no migration).
  */
-private const val ListCacheFormatVersion = 1
+private const val ListCacheFormatVersion = 2
 
 /** The one place the on-disk list file name is built (tests seed/corrupt with it). */
-internal fun listCacheFileName(userId: Int, type: MediaType): String =
-    "media_list_v${ListCacheFormatVersion}_${type.name.lowercase()}_$userId.json"
+internal fun listCacheFileName(
+    userId: Int,
+    type: MediaType,
+    provider: ProviderId = ProviderId.AniList,
+): String =
+    "media_list_v${ListCacheFormatVersion}_${provider.value}_${type.name.lowercase()}_$userId.json"
+
+/** The v1 key had no provider segment; it is ignored and removed on the first v2 write. */
+private fun legacyListCacheFileName(userId: Int, type: MediaType): String =
+    "media_list_v1_${type.name.lowercase()}_$userId.json"
 
 /**
  * Disk cache for one user's anime/manga list: the flat [MediaListEntryDto] list
  * exactly as fetched. It is mapped to domain on read with the **current**
  * `splitCompleted`, so flipping that setting needs no separate file. A corrupt
  * file is deleted and read as absent, and a write failure is swallowed so it can
- * never turn an otherwise-successful network load into a failure.
+ * never turn an otherwise-successful network load into a failure. The file key
+ * includes the provider and format version; v1 files are ignored and removed on
+ * the first v2 write.
  *
  * JSON decode/encode is CPU-heavy for a ~1 MB list, so it runs on
  * [decodeDispatcher] ([Dispatchers.Default] in the app; tests inject a
@@ -38,8 +50,12 @@ internal class MediaListDiskCache(
 ) {
     private val serializer = ListSerializer(MediaListEntryDto.serializer())
 
-    suspend fun read(userId: Int, type: MediaType): List<MediaListEntryDto>? {
-        val name = listCacheFileName(userId, type)
+    suspend fun read(
+        userId: Int,
+        type: MediaType,
+        provider: ProviderId = ProviderId.AniList,
+    ): List<MediaListEntryDto>? {
+        val name = listCacheFileName(userId, type, provider)
         val raw = files.read(name) ?: return null
         val decoded = withContext(decodeDispatcher) {
             try {
@@ -63,15 +79,37 @@ internal class MediaListDiskCache(
         return decoded
     }
 
-    suspend fun write(userId: Int, type: MediaType, entries: List<MediaListEntryDto>) {
-        val name = listCacheFileName(userId, type)
+    suspend fun write(
+        userId: Int,
+        type: MediaType,
+        entries: List<MediaListEntryDto>,
+        provider: ProviderId = ProviderId.AniList,
+    ) {
+        val name = listCacheFileName(userId, type, provider)
         val raw = withContext(decodeDispatcher) { json.encodeToString(serializer, entries) }
         try {
             files.write(name, raw)
+            removeLegacyFile(userId, type, provider)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Throwable) {
             // Cache-only: a full disk / missing permission must not fail the load.
+        }
+    }
+
+    /**
+     * v1 files were AniList-only and had no provider in the key. The first v2
+     * write drops that user's/type's orphan; a non-AniList key must never delete
+     * an AniList file.
+     */
+    private suspend fun removeLegacyFile(userId: Int, type: MediaType, provider: ProviderId) {
+        if (provider != ProviderId.AniList) return
+        try {
+            files.delete(legacyListCacheFileName(userId, type))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            // A failed cleanup never breaks the caller.
         }
     }
 

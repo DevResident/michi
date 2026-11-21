@@ -155,6 +155,8 @@ core/
   platform/domain|repository/   system services: `Connectivity` (image quality), `UrlOpener`,
                                 `ShareLauncher`; platform impls (Android/iOS) in `repository/`
   media/domain|repository/      media vocabulary (format/season/type/status/dates/genres/grid item)
+                                + `ProviderId`/`EntityRef` (the `(provider, id)` reference used
+                                at navigation, cache-key and list-write boundaries)
                                 + `mediaFormatsForType` (the one per-type format rule
                                 Explore and the lists share)
                                 + AniList media DTOs/mappers (`dto/MediaDto`, `dto/FuzzyDateDto`,
@@ -216,7 +218,9 @@ com.luum.michi.app
                               rate limiter, HTTP client + `PageInfoDto`
     platform/domain|repository/ system services: connectivity, url opener, share launcher
                               (+ Android/iOS impls)
-    media/domain|repository/  media vocabulary + AniList media DTOs/mappers
+    media/domain|repository/  media vocabulary + `ProviderId`/`EntityRef` (provider-neutral
+                              references at navigation/cache/list-write boundaries)
+                              + AniList media DTOs/mappers
                               (`dto/MediaDto`, `dto/FuzzyDateDto`, titles, cover sizes,
                               grid-item/release-date mappers)
     person/repository/        person DTOs (character/staff/studio) + person cover sizes
@@ -267,6 +271,7 @@ appear only when real behavior justifies them.
 - `brandColor()` for app-wide brand primitives (raw hex in, `Color` out, converted at the UI boundary).
 - No layer prefixes on class names: shared UI lives in `ui/` (`Toolbar`, `Icons`, `TabBar`), root scope in `root/` (`Root`, `State`). The package is the disambiguator — `ui.Icons` vs feature icons, `root.State` vs any other state.
 - `AniList*` for API/client/DTO-specific classes.
+- `EntityRef` / `ProviderId` for the `(provider, id)` reference that crosses navigation, cache-key and list-write boundaries: `ProviderId` is a string-backed value class (`AniList = "anilist"`) and the same id under two providers is a different entity. The domain models keep their `Int` id until 11.1b.
 
 ## Current State
 

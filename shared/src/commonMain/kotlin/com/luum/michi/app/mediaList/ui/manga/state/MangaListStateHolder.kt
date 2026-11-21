@@ -1,5 +1,6 @@
 package com.luum.michi.app.mediaList.ui.manga.state
 
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.SortPersistence
 import com.luum.michi.app.core.medialist.domain.SortScope
@@ -47,7 +48,7 @@ internal class MangaListStateHolder(
 
     override suspend fun saveProgress(entry: MangaListEntry): NetworkResult<Unit> =
         entryRepository.saveProgress(
-            mediaId = entry.id,
+            mediaRef = aniListRef(entry.id),
             // Novels track volumes only: chapters stay omitted so the
             // server leaves them intact instead of resetting to stale 0.
             progress = if (entry.tracksByVolume) null else entry.chaptersProgress,

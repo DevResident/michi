@@ -3,6 +3,8 @@ package com.luum.michi.app.mediaDetail.ui.state
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.luum.michi.app.core.media.domain.EntityRef
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.DetailHolder
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
@@ -42,8 +44,8 @@ internal abstract class DetailStateHolderBase<D, S>(
     private var currentId: Int? = null
     private var currentJob: Job? = null
 
-    /** Cache of up to 5 recently-visited detail pages. */
-    private val detailCache = DetailCache<Int, S>(maxSize = 5)
+    /** Cache of up to 5 recently-visited detail pages, keyed by provider + id. */
+    private val detailCache = DetailCache<EntityRef, S>(maxSize = 5)
 
     // Per id: a toggle in flight for one entity must not disable (or reflect on)
     // another one's heart.
@@ -58,7 +60,7 @@ internal abstract class DetailStateHolderBase<D, S>(
         if (currentId == id && (detail != null || isLoading)) return
 
         // Restore from the LRU cache when a valid snapshot exists (no network).
-        val cached = detailCache.get(id)
+        val cached = detailCache.get(aniListRef(id))
         if (cached != null && isSnapshotValid(cached)) {
             currentId = id
             currentJob?.cancel()
@@ -79,7 +81,7 @@ internal abstract class DetailStateHolderBase<D, S>(
     open override fun refresh() {
         val id = currentId ?: return
         // Invalidate the cached entry so the next visit re-fetches from network.
-        detailCache.remove(id)
+        detailCache.remove(aniListRef(id))
         // Keep the detail and lists on screen while reloading (no flicker).
         launchFetch(id, clearDetail = false, clearLists = false)
     }
@@ -168,7 +170,7 @@ internal abstract class DetailStateHolderBase<D, S>(
 
     /** Drops one cached snapshot (an editor save/delete invalidates its entry). */
     protected fun dropCached(id: Int) {
-        detailCache.remove(id)
+        detailCache.remove(aniListRef(id))
     }
 
     /**
@@ -187,17 +189,17 @@ internal abstract class DetailStateHolderBase<D, S>(
      *  one, else a cached snapshot, else null when it knows nothing about it. */
     fun favouriteFor(id: Int): Boolean? {
         if (currentId == id) return detail?.let(::isFavouriteOf)
-        return detailCache.get(id)?.let(::isFavouriteOfSnapshot)
+        return detailCache.get(aniListRef(id))?.let(::isFavouriteOfSnapshot)
     }
 
     /** Flips one cached snapshot's favourite without touching the visible page. */
     protected fun updateCachedFavourite(id: Int, value: Boolean) {
-        detailCache.update(id) { snapshotWithFavourite(it, value) }
+        detailCache.update(aniListRef(id)) { snapshotWithFavourite(it, value) }
     }
 
     private fun cacheSnapshot(id: Int) {
         val value = detail ?: return
-        detailCache.put(id, snapshot(value))
+        detailCache.put(aniListRef(id), snapshot(value))
     }
 
     /** The snapshot for [detail] plus the pages the subclass has loaded. */

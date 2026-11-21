@@ -1,5 +1,6 @@
 package com.luum.michi.app.mediaList.ui.anime.state
 
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.SortPersistence
 import com.luum.michi.app.core.medialist.domain.SortScope
@@ -41,7 +42,7 @@ internal class AnimeListStateHolder(
 
     override suspend fun saveProgress(entry: AnimeListEntry): NetworkResult<Unit> =
         entryRepository.saveProgress(
-            mediaId = entry.id,
+            mediaRef = aniListRef(entry.id),
             progress = entry.progress,
             status = entry.status.toMediaListStatus(),
         )

@@ -3,6 +3,7 @@ package com.luum.michi.app.mediaList
 import com.luum.michi.app.DeferredDispatcher
 import com.luum.michi.app.FakeGraphQL
 import com.luum.michi.app.core.favourite.repository.FavouriteRepositoryImpl
+import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
@@ -139,7 +140,7 @@ private class GatedEntryRepository(
         private set
 
     override suspend fun saveEntry(
-        mediaId: Int,
+        mediaRef: EntityRef,
         status: MediaListStatus,
         progress: Int,
         progressVolumes: Int?,
@@ -155,7 +156,7 @@ private class GatedEntryRepository(
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(
-        mediaId: Int,
+        mediaRef: EntityRef,
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
@@ -169,7 +170,7 @@ private class GatedEntryRepository(
         }
     }
 
-    override suspend fun toggleFavourite(mediaId: Int, isManga: Boolean): NetworkResult<Unit> =
+    override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =
         NetworkResult.Success(Unit)
 
     override suspend fun deleteEntry(entryId: Int): NetworkResult<Unit> = NetworkResult.Success(Unit)

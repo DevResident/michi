@@ -1,10 +1,11 @@
 package com.luum.michi.app.core.medialist.domain
 
+import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.network.domain.NetworkResult
 
 internal interface MediaListEntryRepository {
     suspend fun saveEntry(
-        mediaId: Int,
+        mediaRef: EntityRef,
         status: MediaListStatus,
         progress: Int,
         progressVolumes: Int?,
@@ -25,13 +26,13 @@ internal interface MediaListEntryRepository {
      * send volumes only, with [progress] null.
      */
     suspend fun saveProgress(
-        mediaId: Int,
+        mediaRef: EntityRef,
         progress: Int?,
         status: MediaListStatus? = null,
         progressVolumes: Int? = null,
     ): NetworkResult<Unit>
 
-    suspend fun toggleFavourite(mediaId: Int, isManga: Boolean): NetworkResult<Unit>
+    suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit>
 
     suspend fun deleteEntry(entryId: Int): NetworkResult<Unit>
 }

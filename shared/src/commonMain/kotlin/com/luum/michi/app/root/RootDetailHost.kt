@@ -5,6 +5,8 @@ import androidx.compose.ui.unit.Dp
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.media.domain.aniListRef
+import com.luum.michi.app.core.media.domain.requireAniListId
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.DetailListKind
 import com.luum.michi.app.core.platform.domain.UrlOpener
@@ -53,18 +55,18 @@ internal fun RootDetailHost(
             bottomPadding = bottomPadding,
             onRetry = {
                 if (holders.mediaDetail.detail == null) {
-                    holders.mediaDetail.load(destination.id, destination.typeHint)
+                    holders.mediaDetail.load(destination.ref.requireAniListId(), destination.typeHint)
                 } else {
                     holders.mediaDetail.refresh()
                 }
             },
-            onOpenMedia = { state.openMedia(it) },
-            onOpenCharacter = { state.openCharacter(it) },
-            onOpenStaff = { state.openStaff(it) },
-            onOpenStudio = { state.openStudio(it) },
+            onOpenMedia = { state.openMedia(aniListRef(it)) },
+            onOpenCharacter = { state.openCharacter(aniListRef(it)) },
+            onOpenStaff = { state.openStaff(aniListRef(it)) },
+            onOpenStudio = { state.openStudio(aniListRef(it)) },
             onOpenGenre = { name, type -> state.openGenre(name, type) },
             onOpenUrl = { urlOpener.open(it) },
-            onViewAll = { state.openDetailList(it, destination.id) },
+            onViewAll = { state.openDetailList(it, destination.ref) },
         )
         is DetailDestination.Character -> CharacterDetailScreen(
             holder = holders.character,
@@ -72,15 +74,15 @@ internal fun RootDetailHost(
             bottomPadding = bottomPadding,
             onRetry = {
                 if (holders.character.detail == null) {
-                    holders.character.load(destination.id)
+                    holders.character.load(destination.ref.requireAniListId())
                 } else {
                     holders.character.refresh()
                 }
             },
             onOpenUrl = { urlOpener.open(it) },
-            onOpenMedia = { state.openMedia(it) },
-            onOpenStaff = { state.openStaff(it) },
-            onViewAll = { state.openDetailList(it, destination.id) },
+            onOpenMedia = { state.openMedia(aniListRef(it)) },
+            onOpenStaff = { state.openStaff(aniListRef(it)) },
+            onViewAll = { state.openDetailList(it, destination.ref) },
         )
         is DetailDestination.Staff -> StaffDetailScreen(
             holder = holders.staff,
@@ -88,15 +90,15 @@ internal fun RootDetailHost(
             bottomPadding = bottomPadding,
             onRetry = {
                 if (holders.staff.detail == null) {
-                    holders.staff.load(destination.id)
+                    holders.staff.load(destination.ref.requireAniListId())
                 } else {
                     holders.staff.refresh()
                 }
             },
             onOpenUrl = { urlOpener.open(it) },
-            onOpenMedia = { state.openMedia(it) },
-            onOpenCharacter = { state.openCharacter(it) },
-            onViewAll = { state.openDetailList(it, destination.id) },
+            onOpenMedia = { state.openMedia(aniListRef(it)) },
+            onOpenCharacter = { state.openCharacter(aniListRef(it)) },
+            onViewAll = { state.openDetailList(it, destination.ref) },
         )
         is DetailDestination.Studio -> StudioDetailScreen(
             holder = holders.studio,
@@ -104,12 +106,12 @@ internal fun RootDetailHost(
             bottomPadding = bottomPadding,
             onRetry = {
                 if (holders.studio.detail == null) {
-                    holders.studio.load(destination.id)
+                    holders.studio.load(destination.ref.requireAniListId())
                 } else {
                     holders.studio.refresh()
                 }
             },
-            onOpenMedia = { state.openMedia(it) },
+            onOpenMedia = { state.openMedia(aniListRef(it)) },
         )
         is DetailDestination.Genre -> {
             val filter = genreCatalogFilter(destination.name, destination.type)
@@ -124,7 +126,7 @@ internal fun RootDetailHost(
                         holders.catalog.load(filter)
                     }
                 },
-                onOpenMedia = { state.openMedia(it) },
+                onOpenMedia = { state.openMedia(aniListRef(it)) },
             )
         }
         is DetailDestination.Catalog -> {
@@ -143,7 +145,7 @@ internal fun RootDetailHost(
                             holders.catalog.load(filter)
                         }
                     },
-                    onOpenMedia = { state.openMedia(it) },
+                    onOpenMedia = { state.openMedia(aniListRef(it)) },
                 )
             }
         }
@@ -204,7 +206,7 @@ internal fun RootDetailHost(
                     strings = strings,
                     bottomPadding = bottomPadding,
                     onRetry = { holder.refresh() },
-                    onOpenMedia = { state.openMedia(it) },
+                    onOpenMedia = { state.openMedia(aniListRef(it)) },
                 )
             }
         }
@@ -216,11 +218,11 @@ internal fun RootDetailHost(
  *  profile rails and the "View all" grid: one category→detail mapping). */
 internal fun State.openProfileFavorite(category: ProfileFavoritesCategory, id: Int) {
     when (category) {
-        ProfileFavoritesCategory.ANIME -> openMedia(id, MediaType.ANIME)
-        ProfileFavoritesCategory.MANGA -> openMedia(id, MediaType.MANGA)
-        ProfileFavoritesCategory.CHARACTERS -> openCharacter(id)
-        ProfileFavoritesCategory.STAFF -> openStaff(id)
-        ProfileFavoritesCategory.STUDIOS -> openStudio(id)
+        ProfileFavoritesCategory.ANIME -> openMedia(aniListRef(id), MediaType.ANIME)
+        ProfileFavoritesCategory.MANGA -> openMedia(aniListRef(id), MediaType.MANGA)
+        ProfileFavoritesCategory.CHARACTERS -> openCharacter(aniListRef(id))
+        ProfileFavoritesCategory.STAFF -> openStaff(aniListRef(id))
+        ProfileFavoritesCategory.STUDIOS -> openStudio(aniListRef(id))
     }
 }
 
@@ -242,7 +244,7 @@ private fun DetailListHost(
         DetailListKind.MEDIA_CHARACTERS -> DetailListScreen(
             items = holders.mediaDetail.characters.items.map { it.toRailItem(strings) },
             layout = DetailListLayout.GRID,
-            onSelect = { state.openCharacter(it) },
+            onSelect = { state.openCharacter(aniListRef(it)) },
             bottomPadding = listBottom,
             hasMore = holders.mediaDetail.characters.hasNextPage,
             isLoadingMore = holders.mediaDetail.characters.isLoadingMore,
@@ -255,7 +257,7 @@ private fun DetailListHost(
         DetailListKind.MEDIA_STAFF -> DetailListScreen(
             items = holders.mediaDetail.staff.items.map { it.toRailItem() },
             layout = DetailListLayout.GRID,
-            onSelect = { state.openStaff(it) },
+            onSelect = { state.openStaff(aniListRef(it)) },
             bottomPadding = listBottom,
             hasMore = holders.mediaDetail.staff.hasNextPage,
             isLoadingMore = holders.mediaDetail.staff.isLoadingMore,
@@ -268,7 +270,7 @@ private fun DetailListHost(
         DetailListKind.MEDIA_RELATED -> DetailListScreen(
             items = holders.mediaDetail.detail?.relations.orEmpty().map { it.toCardRailItem(strings, isManga) },
             layout = DetailListLayout.ROWS,
-            onSelect = { state.openMedia(it) },
+            onSelect = { state.openMedia(aniListRef(it)) },
             bottomPadding = listBottom,
             // Relations are a single unpaged list.
             loadedPage = 0,
@@ -279,7 +281,7 @@ private fun DetailListHost(
         DetailListKind.MEDIA_RECOMMENDATIONS -> DetailListScreen(
             items = holders.mediaDetail.recommendations.items.map { it.toCardRailItem(strings, isManga) },
             layout = DetailListLayout.GRID,
-            onSelect = { state.openMedia(it) },
+            onSelect = { state.openMedia(aniListRef(it)) },
             bottomPadding = listBottom,
             hasMore = holders.mediaDetail.recommendations.hasNextPage,
             isLoadingMore = holders.mediaDetail.recommendations.isLoadingMore,
@@ -292,7 +294,7 @@ private fun DetailListHost(
         DetailListKind.CHARACTER_MEDIA -> DetailListScreen(
             items = holders.character.media.items.map { it.toAppearanceCardItem(strings) },
             layout = DetailListLayout.GRID,
-            onSelect = { state.openMedia(it) },
+            onSelect = { state.openMedia(aniListRef(it)) },
             bottomPadding = listBottom,
             hasMore = holders.character.media.hasNextPage,
             isLoadingMore = holders.character.media.isLoadingMore,
@@ -305,7 +307,7 @@ private fun DetailListHost(
         DetailListKind.STAFF_MEDIA -> DetailListScreen(
             items = holders.staff.media.items.map { it.toRailItem() },
             layout = DetailListLayout.GRID,
-            onSelect = { state.openMedia(it) },
+            onSelect = { state.openMedia(aniListRef(it)) },
             bottomPadding = listBottom,
             hasMore = holders.staff.media.hasNextPage,
             isLoadingMore = holders.staff.media.isLoadingMore,
@@ -318,7 +320,7 @@ private fun DetailListHost(
         DetailListKind.STAFF_CHARACTERS -> DetailListScreen(
             items = holders.staff.characters.items.map { it.toRailItem() },
             layout = DetailListLayout.GRID,
-            onSelect = { state.openCharacter(it) },
+            onSelect = { state.openCharacter(aniListRef(it)) },
             bottomPadding = listBottom,
             hasMore = holders.staff.characters.hasNextPage,
             isLoadingMore = holders.staff.characters.isLoadingMore,

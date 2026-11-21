@@ -1,5 +1,6 @@
 package com.luum.michi.app.root
 
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.root.state.State
 import kotlin.test.Test
@@ -25,9 +26,9 @@ class StateProfileFavoritesTest {
     fun openingAItemFromTheGridPushesOverIt() {
         val state = State()
         state.openProfileFavorites("CHARACTERS")
-        state.openCharacter(42)
+        state.openCharacter(aniListRef(42))
 
-        assertEquals(DetailDestination.Character(42), state.currentDetail)
+        assertEquals(DetailDestination.Character(aniListRef(42)), state.currentDetail)
 
         assertTrue(state.applyBackStep())
         assertEquals(DetailDestination.ProfileFavorites("CHARACTERS"), state.currentDetail)

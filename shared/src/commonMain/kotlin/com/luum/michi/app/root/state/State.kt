@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.DetailListKind
 import com.luum.michi.app.core.navigation.domain.TabSection
@@ -284,11 +285,11 @@ internal class State(
         push(destination)
     }
 
-    fun openMedia(id: Int, typeHint: MediaType? = null) =
-        openDeepLink(DetailDestination.Media(id, typeHint))
-    fun openCharacter(id: Int) = push(DetailDestination.Character(id))
-    fun openStaff(id: Int) = push(DetailDestination.Staff(id))
-    fun openStudio(id: Int) = push(DetailDestination.Studio(id))
+    fun openMedia(ref: EntityRef, typeHint: MediaType? = null) =
+        openDeepLink(DetailDestination.Media(ref, typeHint))
+    fun openCharacter(ref: EntityRef) = push(DetailDestination.Character(ref))
+    fun openStaff(ref: EntityRef) = push(DetailDestination.Staff(ref))
+    fun openStudio(ref: EntityRef) = push(DetailDestination.Studio(ref))
     fun openGenre(name: String, type: MediaType) = push(DetailDestination.Genre(name, type))
     fun openCatalog(kindId: String) = push(DetailDestination.Catalog(kindId))
     fun openProfileFavorites(categoryId: String) =
@@ -296,8 +297,8 @@ internal class State(
     fun openProfileStatistics(type: MediaType) = push(DetailDestination.ProfileStatistics(type))
     fun openProfileFollows(kindId: String) = push(DetailDestination.ProfileFollows(kindId))
     fun openProfileReviews() = push(DetailDestination.ProfileReviews)
-    fun openDetailList(kind: DetailListKind, parentId: Int) =
-        push(DetailDestination.DetailList(kind, parentId))
+    fun openDetailList(kind: DetailListKind, parentRef: EntityRef) =
+        push(DetailDestination.DetailList(kind, parentRef))
     fun closeDetail() {
         close(RootOverlay.DetailMenu)
         close(RootOverlay.DetailSort)

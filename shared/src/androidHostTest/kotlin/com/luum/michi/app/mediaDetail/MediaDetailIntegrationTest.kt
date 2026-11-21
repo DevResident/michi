@@ -6,6 +6,7 @@ import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
+import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.MediaWorkStatus
 import com.luum.michi.app.core.network.domain.NetworkError
@@ -280,7 +281,7 @@ private class RecordingThemesRepository(
 
 private object NoopEntryRepository : MediaListEntryRepository {
     override suspend fun saveEntry(
-        mediaId: Int,
+        mediaRef: EntityRef,
         status: MediaListStatus,
         progress: Int,
         progressVolumes: Int?,
@@ -296,13 +297,13 @@ private object NoopEntryRepository : MediaListEntryRepository {
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(
-        mediaId: Int,
+        mediaRef: EntityRef,
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
     ): NetworkResult<Unit> = NetworkResult.Failure(NetworkError.Unknown(null))
 
-    override suspend fun toggleFavourite(mediaId: Int, isManga: Boolean): NetworkResult<Unit> =
+    override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =
         NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun deleteEntry(entryId: Int): NetworkResult<Unit> =
@@ -329,7 +330,7 @@ private class GatedEntryRepository(
 ) : MediaListEntryRepository by NoopEntryRepository {
     val gate = CompletableDeferred<Unit>()
 
-    override suspend fun toggleFavourite(mediaId: Int, isManga: Boolean): NetworkResult<Unit> {
+    override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> {
         gate.await()
         return if (fail) {
             NetworkResult.Failure(NetworkError.Http(500, null))

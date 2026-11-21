@@ -21,6 +21,7 @@ import com.luum.michi.app.calendar.domain.CalendarRepository
 import com.luum.michi.app.calendar.ui.CalendarScreen
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.favourite.domain.FavouriteRepository
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.SortPersistence
 import com.luum.michi.app.core.navigation.domain.DetailDestination
@@ -278,7 +279,7 @@ internal fun Root(
                                 onRefresh = { holders.calendar.reloadSelected() },
                                 isFilterOpen = state.isOpen(RootOverlay.CalendarFilter),
                                 onDismissFilter = { state.close(RootOverlay.CalendarFilter) },
-                                onOpenDetail = { state.openMedia(it) },
+                                onOpenDetail = { state.openMedia(aniListRef(it)) },
                                 onOpenUrl = { urlOpener.open(it) },
                             )
                         } else if (state.isOpen(RootOverlay.Notifications) &&
@@ -292,9 +293,9 @@ internal fun Root(
                                 bottomPadding = padding.calculateBottomPadding(),
                                 onRetry = { holders.notifications.refresh() },
                                 onRefresh = { holders.notifications.refresh() },
-                                onOpenMedia = { state.openMedia(it) },
-                                onOpenCharacter = { state.openCharacter(it) },
-                                onOpenStaff = { state.openStaff(it) },
+                                onOpenMedia = { state.openMedia(aniListRef(it)) },
+                                onOpenCharacter = { state.openCharacter(aniListRef(it)) },
+                                onOpenStaff = { state.openStaff(aniListRef(it)) },
                                 onOpenUrl = { urlOpener.open(it) },
                             )
                         } else {

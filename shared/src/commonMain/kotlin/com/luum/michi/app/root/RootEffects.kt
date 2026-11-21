@@ -12,6 +12,7 @@ import com.luum.michi.app.core.medialist.domain.SortPersistence
 import com.luum.michi.app.core.medialist.domain.SortScope
 import com.luum.michi.app.core.medialist.domain.hydrateSort
 import com.luum.michi.app.core.medialist.domain.resolveInitialSort
+import com.luum.michi.app.core.media.domain.requireAniListId
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.DetailListKind
 import com.luum.michi.app.core.navigation.domain.TabSection
@@ -218,10 +219,12 @@ internal fun RootEffects(
     }
     LaunchedEffect(state.currentDetail) {
         when (val destination = state.currentDetail) {
-            is DetailDestination.Media -> holders.mediaDetail.load(destination.id, destination.typeHint)
-            is DetailDestination.Character -> holders.character.load(destination.id)
-            is DetailDestination.Staff -> holders.staff.load(destination.id)
-            is DetailDestination.Studio -> holders.studio.load(destination.id)
+            is DetailDestination.Media ->
+                holders.mediaDetail.load(destination.ref.requireAniListId(), destination.typeHint)
+            is DetailDestination.Character ->
+                holders.character.load(destination.ref.requireAniListId())
+            is DetailDestination.Staff -> holders.staff.load(destination.ref.requireAniListId())
+            is DetailDestination.Studio -> holders.studio.load(destination.ref.requireAniListId())
             is DetailDestination.Genre ->
                 holders.catalog.load(genreCatalogFilter(destination.name, destination.type))
             is DetailDestination.Catalog -> catalogKindOf(destination.kindId)?.let { kind ->
@@ -236,11 +239,13 @@ internal fun RootEffects(
                 DetailListKind.MEDIA_STAFF,
                 DetailListKind.MEDIA_RELATED,
                 DetailListKind.MEDIA_RECOMMENDATIONS -> {
-                    holders.mediaDetail.load(destination.parentId)
+                    holders.mediaDetail.load(destination.parentRef.requireAniListId())
                 }
-                DetailListKind.CHARACTER_MEDIA -> holders.character.load(destination.parentId)
+                DetailListKind.CHARACTER_MEDIA ->
+                    holders.character.load(destination.parentRef.requireAniListId())
                 DetailListKind.STAFF_MEDIA,
-                DetailListKind.STAFF_CHARACTERS -> holders.staff.load(destination.parentId)
+                DetailListKind.STAFF_CHARACTERS ->
+                    holders.staff.load(destination.parentRef.requireAniListId())
             }
             is DetailDestination.ProfileFavorites -> {
                 val category = favoritesCategoryOfOrNull(destination.categoryId)

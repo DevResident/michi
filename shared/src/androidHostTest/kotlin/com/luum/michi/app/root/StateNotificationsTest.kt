@@ -1,5 +1,6 @@
 package com.luum.michi.app.root
 
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.root.state.RootOverlay
 import com.luum.michi.app.root.state.State
@@ -18,8 +19,8 @@ class StateNotificationsTest {
         state.open(RootOverlay.Notifications)
         assertTrue(state.isOpen(RootOverlay.Notifications))
 
-        state.openMedia(5)
-        assertEquals(DetailDestination.Media(5), state.currentDetail)
+        state.openMedia(aniListRef(5))
+        assertEquals(DetailDestination.Media(aniListRef(5)), state.currentDetail)
 
         assertTrue(state.applyBackStep(), "back closes the detail first")
         assertNull(state.currentDetail)

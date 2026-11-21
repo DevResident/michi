@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.TabSection
 import com.luum.michi.app.core.navigation.domain.label
 import com.luum.michi.app.core.session.domain.Viewer
@@ -181,7 +182,7 @@ internal fun RootTabContent(
             onDismissFilter = { state.close(RootOverlay.SectionFilter) },
             isSortOpen = state.isOpen(RootOverlay.ListSort),
             onDismissSort = { state.close(RootOverlay.ListSort) },
-            onOpenDetail = { state.openMedia(it, MediaType.ANIME) },
+            onOpenDetail = { state.openMedia(aniListRef(it), MediaType.ANIME) },
             onEditEntry = { state.openEditor(it) },
             onCompleteEntry = { id, progress -> state.openEditorForCompletion(id, progress) },
         )
@@ -204,7 +205,7 @@ internal fun RootTabContent(
             onDismissFilter = { state.close(RootOverlay.SectionFilter) },
             isSortOpen = state.isOpen(RootOverlay.ListSort),
             onDismissSort = { state.close(RootOverlay.ListSort) },
-            onOpenDetail = { state.openMedia(it, MediaType.MANGA) },
+            onOpenDetail = { state.openMedia(aniListRef(it), MediaType.MANGA) },
             onEditEntry = { state.openEditor(it) },
             onCompleteEntry = { id, progress -> state.openEditorForCompletion(id, progress) },
         )
@@ -223,10 +224,10 @@ internal fun RootTabContent(
             onRetry = { holders.explore.load() },
             onOpenResult = { id ->
                 when (holders.explore.category.resultTarget()) {
-                    ExploreResultTarget.MEDIA -> state.openMedia(id)
-                    ExploreResultTarget.CHARACTER -> state.openCharacter(id)
-                    ExploreResultTarget.STAFF -> state.openStaff(id)
-                    ExploreResultTarget.STUDIO -> state.openStudio(id)
+                    ExploreResultTarget.MEDIA -> state.openMedia(aniListRef(id))
+                    ExploreResultTarget.CHARACTER -> state.openCharacter(aniListRef(id))
+                    ExploreResultTarget.STAFF -> state.openStaff(aniListRef(id))
+                    ExploreResultTarget.STUDIO -> state.openStudio(aniListRef(id))
                 }
             },
         )
@@ -236,7 +237,7 @@ internal fun RootTabContent(
         // while the user is still typing.
         DashboardScreen(
             holder = holders.dashboard,
-            onOpenMedia = { state.openMedia(it) },
+            onOpenMedia = { state.openMedia(aniListRef(it)) },
             onOpenCatalog = { state.openCatalog(it) },
             hideAdult = !settingsState.displayAdultContent,
             bottomPadding = bottomPadding,

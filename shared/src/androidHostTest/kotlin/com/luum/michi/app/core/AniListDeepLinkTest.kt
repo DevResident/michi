@@ -1,6 +1,7 @@
 package com.luum.michi.app.core
 
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.parseAniListDestination
 import kotlin.test.Test
@@ -11,13 +12,13 @@ class AniListDeepLinkTest {
 
     @Test
     fun animeLink() {
-        assertEquals(DetailDestination.Media(123), parseAniListDestination("https://anilist.co/anime/123"))
+        assertEquals(DetailDestination.Media(aniListRef(123)), parseAniListDestination("https://anilist.co/anime/123"))
     }
 
     @Test
     fun mangaLinkWithSlugAndTrailingSlash() {
         assertEquals(
-            DetailDestination.Media(456),
+            DetailDestination.Media(aniListRef(456)),
             parseAniListDestination("https://anilist.co/manga/456/Some-Title/"),
         )
     }
@@ -25,29 +26,29 @@ class AniListDeepLinkTest {
     @Test
     fun characterLinkWithSlugAndQuery() {
         assertEquals(
-            DetailDestination.Character(321),
+            DetailDestination.Character(aniListRef(321)),
             parseAniListDestination("https://anilist.co/character/321/Some-Name?foo=bar#x"),
         )
     }
 
     @Test
     fun staffLink() {
-        assertEquals(DetailDestination.Staff(12), parseAniListDestination("https://anilist.co/staff/12"))
+        assertEquals(DetailDestination.Staff(aniListRef(12)), parseAniListDestination("https://anilist.co/staff/12"))
     }
 
     @Test
     fun studioLink() {
-        assertEquals(DetailDestination.Studio(34), parseAniListDestination("https://anilist.co/studio/34"))
+        assertEquals(DetailDestination.Studio(aniListRef(34)), parseAniListDestination("https://anilist.co/studio/34"))
     }
 
     @Test
     fun wwwHostAndQuery() {
         assertEquals(
-            DetailDestination.Media(7),
+            DetailDestination.Media(aniListRef(7)),
             parseAniListDestination("https://www.anilist.co/anime/7?foo=bar#x"),
         )
         assertEquals(
-            DetailDestination.Character(8),
+            DetailDestination.Character(aniListRef(8)),
             parseAniListDestination("www.anilist.co/character/8/Name"),
         )
     }
@@ -79,15 +80,15 @@ class AniListDeepLinkTest {
     @Test
     fun extractsTheFirstValidLinkFromSharedText() {
         assertEquals(
-            DetailDestination.Media(123),
+            DetailDestination.Media(aniListRef(123)),
             parseAniListDestination("Mira esto https://anilist.co/anime/123 está bueno"),
         )
         assertEquals(
-            DetailDestination.Media(9),
+            DetailDestination.Media(aniListRef(9)),
             parseAniListDestination("anilist.co/manga/9"),
         )
         assertEquals(
-            DetailDestination.Studio(3),
+            DetailDestination.Studio(aniListRef(3)),
             parseAniListDestination("anilist.co/studio/3 y luego anilist.co/anime/9"),
         )
     }
