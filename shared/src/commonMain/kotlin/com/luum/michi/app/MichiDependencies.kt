@@ -12,10 +12,14 @@ import com.luum.michi.app.calendar.domain.CalendarRepository
 import com.luum.michi.app.mediaDetail.repository.character.CharacterDetailRepositoryImpl
 import com.luum.michi.app.mediaDetail.domain.character.CharacterDetailRepository
 import com.luum.michi.app.core.auth.domain.AuthProvider
-import com.luum.michi.app.core.auth.domain.AniListOAuthLauncher
+import com.luum.michi.app.core.auth.domain.OAuthBrowser
 import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.TokenStorage
 import com.luum.michi.app.core.auth.repository.AniListAuthProvider
+import com.luum.michi.app.core.mal.domain.MalOAuthConfig
+import com.luum.michi.app.core.mal.repository.MalAuthProvider
+import com.luum.michi.app.core.mal.repository.MalHttp
+import com.luum.michi.app.core.mal.repository.SettingsStorePendingMalAuthStore
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.domain.UrlOpener
 import com.luum.michi.app.core.platform.domain.ShareLauncher
@@ -72,7 +76,7 @@ import com.luum.michi.app.mediaDetail.repository.ExternalLinkCatalogRepositoryIm
  * App-level composition root. Lives exactly once per process: owned by
  * `MichiApplication` on Android and by the `IosMichiDependencies` holder on
  * iOS, which provide the platform-specific token storages (one per provider)
- * and the AniList launcher. Never construct it from a recreated UI entry
+ * and the OAuth browser. Never construct it from a recreated UI entry
  * (Activity / view controller), or each recreation would leak a CoroutineScope
  * + HttpClient.
  *
@@ -81,7 +85,7 @@ import com.luum.michi.app.mediaDetail.repository.ExternalLinkCatalogRepositoryIm
  */
 class MichiDependencies internal constructor(
     private val tokenStorages: Map<ProviderId, TokenStorage>,
-    private val aniListOAuthLauncher: AniListOAuthLauncher,
+    private val oAuthBrowser: OAuthBrowser,
     internal val urlOpener: UrlOpener,
     internal val shareLauncher: ShareLauncher,
     internal val settingsStore: SettingsStore,
@@ -89,7 +93,10 @@ class MichiDependencies internal constructor(
     internal val fileStore: FileStore,
     /** Network metering for AUTO image quality; platform impls override it. */
     internal val connectivity: Connectivity = AlwaysUnmeteredConnectivity(),
-    /** Debug builds log GraphQL timing; platform entries pass the real flag. */
+    /**
+     * Debug builds log GraphQL timing and (until 11.4b) register the MAL
+     * login; platform entries pass the real flag.
+     */
     internal val isDebug: Boolean = false,
 ) {
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -109,8 +116,9 @@ class MichiDependencies internal constructor(
     internal val graphQLClient: AniListGraphQLClient = KtorAniListGraphQLClient(
         httpClient = httpClient,
         // Never send an expired token; `validToken` refreshes when possible and
-        // closes the session when a token is dead beyond recovery.
-        tokenProvider = { sessionManager.validToken() },
+        // closes the session when a token is dead beyond recovery. Scoped to
+        // AniList so a MAL session never leaks its token to the GraphQL API.
+        tokenProvider = { sessionManager.validToken(ProviderId.AniList) },
         debugLogging = isDebug,
         rateLimiter = rateLimiter,
         // A mid-session 401 closes the session only if that token is still the
@@ -120,9 +128,21 @@ class MichiDependencies internal constructor(
     internal val viewerRepository: AniListViewerRepository =
         AniListViewerRepositoryImpl(graphQLClient)
 
-    /** Login services exposed to the sign-in modal (AniList today). */
-    internal val authProviders: List<AuthProvider> = listOf(
-        AniListAuthProvider(aniListOAuthLauncher, viewerRepository),
+    /**
+     * Login services exposed to the sign-in modal. AniList is always present;
+     * MAL is debug-only until its lists land in 11.4b, and needs `malClientId`.
+     */
+    internal val authProviders: List<AuthProvider> = buildAuthProviders(
+        isDebug = isDebug,
+        isMalConfigured = MalOAuthConfig.isConfigured,
+        aniList = { AniListAuthProvider(oAuthBrowser, viewerRepository) },
+        mal = {
+            MalAuthProvider(
+                browser = oAuthBrowser,
+                http = MalHttp(httpClient),
+                pendingStore = SettingsStorePendingMalAuthStore(settingsStore),
+            )
+        },
     )
 
     /** The active account's capabilities; AniList when the provider is unknown. */
@@ -236,4 +256,19 @@ class MichiDependencies internal constructor(
     fun logout() {
         scope.launch { sessionManager.logout() }
     }
+}
+
+/**
+ * AniList is always registered; MAL is appended only in debug builds that have
+ * a `malClientId`. In release the list is exactly `[AniList]` (11.4b removes
+ * the debug gate).
+ */
+internal fun buildAuthProviders(
+    isDebug: Boolean,
+    isMalConfigured: Boolean,
+    aniList: () -> AuthProvider,
+    mal: () -> AuthProvider,
+): List<AuthProvider> = buildList {
+    add(aniList())
+    if (isDebug && isMalConfigured) add(mal())
 }

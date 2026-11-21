@@ -3,7 +3,7 @@ package com.luum.michi.app.live
 import com.luum.michi.app.InMemoryActiveProviderStore
 import com.luum.michi.app.profile.repository.ProfileRepositoryImpl
 import com.luum.michi.app.core.auth.domain.AuthToken
-import com.luum.michi.app.core.auth.domain.AniListOAuthLauncher
+import com.luum.michi.app.core.auth.domain.OAuthBrowser
 import com.luum.michi.app.core.auth.domain.InMemoryTokenStorage
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.auth.repository.AniListAuthProvider
@@ -47,8 +47,8 @@ private class LiveStack(private val token: String) {
     )
     private val viewerRepository = AniListViewerRepositoryImpl(graphQLClient)
     private val authProvider = AniListAuthProvider(
-        launcher = object : AniListOAuthLauncher {
-            override fun open() = Unit
+        browser = object : OAuthBrowser {
+            override fun open(url: String) = Unit
         },
         viewerRepository = viewerRepository,
     )

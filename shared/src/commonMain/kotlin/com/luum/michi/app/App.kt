@@ -94,17 +94,26 @@ fun App(
     // next cold start's splash/window background then uses the same mode.
     PlatformThemeModeEffect(settingsState.themeType)
 
-    // Login services (AniList today; MAL appends here tomorrow): shared by
-    // the sign-in modal everywhere it opens. The visible AniList label stays
-    // the translated action; a future provider falls back to its brand name.
+    // Login services: shared by the sign-in modal everywhere it opens. The
+    // visible AniList/MAL labels are translated actions; any future provider
+    // falls back to its brand name.
     val authServices = dependencies.authProviders.map { provider ->
         val isAniList = provider.id == ProviderId.AniList
+        val isMal = provider.id == ProviderId.Mal
         AuthService(
             id = provider.id.value,
-            label = if (isAniList) strings.authLoginAction else provider.label,
+            label = when {
+                isAniList -> strings.authLoginAction
+                isMal -> strings.authLoginMalAction
+                else -> provider.label
+            },
             onLogin = provider::open,
             icon = if (isAniList) AppIcons.AniList else null,
-            brandHex = if (isAniList) ANILIST_BRAND_HEX else null,
+            brandHex = when {
+                isAniList -> ANILIST_BRAND_HEX
+                isMal -> MAL_BRAND_HEX
+                else -> null
+            },
         )
     }
     val isAuthConfigured = dependencies.authProviders.any { it.isConfigured }
@@ -279,3 +288,6 @@ private enum class AppRoute {
 
 /** AniList brand blue, raw hex (converted at the UI boundary). */
 private const val ANILIST_BRAND_HEX = "#02A9FF"
+
+/** MyAnimeList brand blue, raw hex (converted at the UI boundary). */
+private const val MAL_BRAND_HEX = "#2E51A2"

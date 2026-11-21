@@ -330,6 +330,7 @@ object SpanishStrings : LanguageStrings {
     override val authModalSubtitle = "Tu cliente para anime, manga, listas y favoritos."
     override val authGuestPrompt = "Inicia sesión para seguir tu progreso"
     override val authLoginAction = "Iniciar sesion con AniList"
+    override val authLoginMalAction = "Iniciar sesion con MyAnimeList"
     override val authContinueAsGuestAction = "Continuar sin cuenta"
     override val authConfigurationMissing = "Falta configurar anilistClientId en local.properties."
     override val authLoadingLabel = "Cargando..."

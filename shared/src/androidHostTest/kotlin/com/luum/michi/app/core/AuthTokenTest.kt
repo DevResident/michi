@@ -39,6 +39,11 @@ class AuthTokenTest {
     }
 
     @Test
+    fun aMalAuthorizationCodeCallbackIsNotAnAniListToken() {
+        assertNull(parseAniListOAuthCallback("$PREFIX?code=abc&state=xyz"))
+    }
+
+    @Test
     fun missingTokenTypeDefaultsToBearer() {
         val token = parseAniListOAuthCallback("$PREFIX#access_token=abc")
         assertEquals("Bearer", token?.tokenType)

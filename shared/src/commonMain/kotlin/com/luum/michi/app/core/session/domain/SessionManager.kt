@@ -23,8 +23,9 @@ import kotlinx.coroutines.sync.withLock
  *  - `onOAuthCallback(uri)` is called after a provider redirects back; the
  *    provider that recognizes the URI owns the new session.
  *  - `logout()` clears every token + cache and returns to `Anonymous`.
- *  - `validToken()` is the GraphQL client's token provider: it refreshes the
- *    active token with a 60 s margin, single-flight.
+ *  - `validToken(provider)` is a client's token provider: it returns the active
+ *    token only for the requested provider (a MAL session never leaks its token
+ *    to AniList), refreshes it with a 60 s margin, single-flight.
  *  - `onUnauthorized(token)` closes the session only if that token is still
  *    the active one.
  *
@@ -104,12 +105,15 @@ internal class SessionManager(
     }
 
     /**
-     * The active token, refreshed when it is within the margin. Every
-     * concurrent caller shares one refresh request.
+     * The active token for [provider], refreshed when it is within the margin.
+     * Returns null when another provider owns the session, so a client can never
+     * send one account's token to a different service. Every concurrent caller
+     * for the same provider shares one refresh request.
      */
-    suspend fun validToken(): AuthToken? {
+    suspend fun validToken(provider: ProviderId): AuthToken? {
         val providerId = activeProviderId()
-        val provider = providerFor(providerId) ?: return null
+        if (provider != providerId) return null
+        val authProvider = providerFor(providerId) ?: return null
         val storage = tokenStorages[providerId] ?: return null
         val token = storage.load() ?: return null
         if (!token.expiresWithin(REFRESH_MARGIN_SECONDS)) return token
@@ -120,7 +124,7 @@ internal class SessionManager(
             return null
         }
 
-        return when (val outcome = refreshSingleFlight(providerId, provider, token)) {
+        return when (val outcome = refreshSingleFlight(providerId, authProvider, token)) {
             is RefreshOutcome.Token -> outcome.value
             RefreshOutcome.Unsupported -> if (token.isExpired) {
                 onUnauthorized(token)

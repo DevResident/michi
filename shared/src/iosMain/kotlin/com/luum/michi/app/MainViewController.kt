@@ -42,8 +42,9 @@ private object IosMichiDependencies {
         current ?: MichiDependencies(
             tokenStorages = mapOf(
                 ProviderId.AniList to NSUserDefaultsTokenStorage(ProviderId.AniList),
+                ProviderId.Mal to NSUserDefaultsTokenStorage(ProviderId.Mal),
             ),
-            aniListOAuthLauncher = SafariOAuthLauncher(),
+            oAuthBrowser = SafariOAuthLauncher(),
             urlOpener = IosUrlOpener(),
             shareLauncher = IosShareLauncher(),
             settingsStore = NSUserDefaultsSettingsStore(),

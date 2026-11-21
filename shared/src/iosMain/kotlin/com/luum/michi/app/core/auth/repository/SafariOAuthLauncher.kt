@@ -2,21 +2,20 @@ package com.luum.michi.app.core.auth.repository
 
 import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
-import com.luum.michi.app.core.auth.domain.AniListOAuthConfig
-import com.luum.michi.app.core.auth.domain.AniListOAuthLauncher
+import com.luum.michi.app.core.auth.domain.OAuthBrowser
 
 /**
- * Opens the AniList OAuth authorize page in the system browser. After the user
- * authorizes, AniList redirects to `michi://oauth/callback#access_token=...`,
- * which the iOS app's URL scheme handler (configured in Iteration 3) catches.
+ * Opens a provider's OAuth authorize page in the system browser. After the user
+ * authorizes, the provider redirects to `michi://oauth/callback`, which the iOS
+ * app's URL scheme handler catches.
  *
  * `SFSafariViewController` would give a slightly better UX (in-app browser),
  * but it requires a `UIViewController` reference to present on. Plain
  * `openURL` works without that coupling.
  */
-internal class SafariOAuthLauncher : AniListOAuthLauncher {
-    override fun open() {
-        val url = NSURL.URLWithString(AniListOAuthConfig.buildAuthorizeUrl()) ?: return
-        UIApplication.sharedApplication.openURL(url)
+internal class SafariOAuthLauncher : OAuthBrowser {
+    override fun open(url: String) {
+        val nsUrl = NSURL.URLWithString(url) ?: return
+        UIApplication.sharedApplication.openURL(nsUrl)
     }
 }

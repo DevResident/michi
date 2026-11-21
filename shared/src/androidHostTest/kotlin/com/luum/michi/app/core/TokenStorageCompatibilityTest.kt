@@ -116,6 +116,7 @@ class TokenStorageCompatibilityTest {
     @Test
     fun aniListKeepsItsExactPrefsFileName() {
         assertEquals("michi_anilist_auth", tokenPrefsName(ProviderId.AniList))
+        assertEquals("michi_auth_mal", tokenPrefsName(ProviderId.Mal))
         assertEquals("michi_auth_other", tokenPrefsName(ProviderId("other")))
     }
 

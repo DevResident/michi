@@ -9,6 +9,7 @@ import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.parseScoreFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -31,6 +32,39 @@ class ProviderCapabilitiesTest {
         assertTrue(caps.social)
         assertTrue(caps.profileStatistics)
         assertTrue(caps.remoteSettings)
+    }
+
+    @Test
+    fun malFixesTheScoreAndHasNoAccountExtras() {
+        val caps = ProviderCapabilities.Mal
+
+        assertEquals(ScoreFormat.POINT_10, caps.fixedScoreFormat)
+        assertTrue(caps.repeatCount)
+        assertTrue(caps.priority)
+        assertTrue(caps.notes)
+        assertFalse(caps.advancedScores)
+        assertFalse(caps.privateEntries)
+        assertFalse(caps.hiddenFromStatusLists)
+        assertFalse(caps.repeatingStatus)
+        assertFalse(caps.favourites)
+        assertFalse(caps.notifications)
+        assertFalse(caps.social)
+        assertFalse(caps.profileStatistics)
+        assertFalse(caps.remoteSettings)
+    }
+
+    @Test
+    fun malEditorDropsOnlyRepeating() {
+        assertEquals(
+            listOf(
+                MediaListStatus.CURRENT,
+                MediaListStatus.PLANNING,
+                MediaListStatus.COMPLETED,
+                MediaListStatus.DROPPED,
+                MediaListStatus.PAUSED,
+            ),
+            ProviderCapabilities.Mal.editableStatuses(),
+        )
     }
 
     @Test

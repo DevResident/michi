@@ -4,6 +4,8 @@ import com.luum.michi.app.core.auth.domain.AuthProvider
 import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.TokenStorage
+import com.luum.michi.app.core.mal.domain.PendingMalAuth
+import com.luum.michi.app.core.mal.domain.PendingMalAuthStore
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.domain.map
@@ -65,6 +67,20 @@ internal class TestAuthProvider(
         viewerCalls++
         viewerGate?.await()
         return viewerResult.map { it.copy(provider = id) }
+    }
+}
+
+internal class InMemoryPendingMalAuthStore(
+    var pending: PendingMalAuth? = null,
+) : PendingMalAuthStore {
+    override fun load(): PendingMalAuth? = pending
+
+    override fun save(pending: PendingMalAuth) {
+        this.pending = pending
+    }
+
+    override fun clear() {
+        pending = null
     }
 }
 

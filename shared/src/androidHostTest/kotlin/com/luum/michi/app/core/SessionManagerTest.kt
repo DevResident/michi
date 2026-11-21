@@ -261,6 +261,34 @@ class SessionManagerTest {
     }
 
     @Test
+    fun tokenLookupIsScopedToTheRequestedProvider() = runBlocking {
+        val aniListStorage = InMemoryTokenStorage()
+        aniListStorage.save(freshToken())
+        val malStorage = InMemoryTokenStorage()
+        malStorage.save(freshToken().copy(accessToken = "mal-token"))
+        val aniList = TestAuthProvider()
+        val mal = TestAuthProvider(
+            id = ProviderId.Mal,
+            viewerResult = NetworkResult.Success(viewer(provider = ProviderId.Mal)),
+        )
+        val manager = testSessionManager(
+            providers = listOf(aniList, mal),
+            tokenStorages = mapOf(
+                ProviderId.AniList to aniListStorage,
+                ProviderId.Mal to malStorage,
+            ),
+            activeProviderStore = InMemoryActiveProviderStore(ProviderId.Mal),
+        )
+
+        assertNull(
+            manager.validToken(ProviderId.AniList),
+            "a MAL session never leaks its token to AniList",
+        )
+        assertEquals("mal-token", manager.validToken(ProviderId.Mal)?.accessToken)
+        assertEquals(0, aniList.refreshCalls, "the other provider is never refreshed")
+    }
+
+    @Test
     fun aBootstrapLandingAfterLogoutCannotResurrectTheSession() = runBlocking {
         val storage = InMemoryTokenStorage()
         storage.save(freshToken())
@@ -291,7 +319,7 @@ class SessionManagerTest {
         ).apply { refreshGate = gate }
         val manager = testSessionManager(storage = storage, provider = provider)
 
-        val callers = List(6) { async { manager.validToken() } }
+        val callers = List(6) { async { manager.validToken(ProviderId.AniList) } }
         yield()
         assertEquals(1, provider.refreshCalls, "all callers share the same refresh")
         gate.complete(Unit)
@@ -311,7 +339,7 @@ class SessionManagerTest {
         )
         val manager = testSessionManager(storage = storage, provider = provider)
 
-        val token = manager.validToken()
+        val token = manager.validToken(ProviderId.AniList)
 
         assertEquals("new", token?.accessToken)
         assertEquals("refresh-1", storage.load()?.refreshToken)
@@ -335,7 +363,7 @@ class SessionManagerTest {
         manager.bootstrap()
         assertTrue(manager.state.value is SessionState.Authenticated)
 
-        val token = manager.validToken()
+        val token = manager.validToken(ProviderId.AniList)
 
         assertNull(token)
         assertTrue(manager.state.value is SessionState.Anonymous)
@@ -360,7 +388,7 @@ class SessionManagerTest {
         manager.bootstrap()
         assertTrue(manager.state.value is SessionState.Authenticated)
 
-        val token = manager.validToken()
+        val token = manager.validToken(ProviderId.AniList)
 
         assertEquals("old", token?.accessToken, "the still-valid token is returned")
         assertTrue(manager.state.value is SessionState.Authenticated)

@@ -319,6 +319,7 @@ interface LanguageStrings {
     val authModalSubtitle: String
     val authGuestPrompt: String
     val authLoginAction: String
+    val authLoginMalAction: String
     val authContinueAsGuestAction: String
     val authConfigurationMissing: String
     val authLoadingLabel: String

@@ -20,8 +20,10 @@ fun createMichiDependencies(context: Context): MichiDependencies = MichiDependen
     tokenStorages = mapOf(
         ProviderId.AniList to
             SharedPreferencesTokenStorage(context.applicationContext, ProviderId.AniList),
+        ProviderId.Mal to
+            SharedPreferencesTokenStorage(context.applicationContext, ProviderId.Mal),
     ),
-    aniListOAuthLauncher = ChromeCustomTabsOAuthLauncher(context.applicationContext),
+    oAuthBrowser = ChromeCustomTabsOAuthLauncher(context.applicationContext),
     urlOpener = AndroidUrlOpener(context.applicationContext),
     shareLauncher = AndroidShareLauncher(context.applicationContext),
     settingsStore = SharedPreferencesSettingsStore(context.applicationContext),

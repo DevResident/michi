@@ -24,26 +24,36 @@ compose.resources {
     packageOfResClass = "com.luum.michi.app.resources"
 }
 
-abstract class GenerateAniListBuildConfigTask : DefaultTask() {
+abstract class GenerateClientIdBuildConfigTask : DefaultTask() {
     @get:Input
     abstract val clientId: Property<String>
+
+    @get:Input
+    abstract val packageName: Property<String>
+
+    @get:Input
+    abstract val objectName: Property<String>
+
+    @get:Input
+    abstract val configKey: Property<String>
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
     @TaskAction
     fun generate() {
-        val packageDir = outputDir.get().asFile.resolve("com/luum/michi/app/core/auth/domain")
+        val packagePath = packageName.get()
+        val packageDir = outputDir.get().asFile.resolve(packagePath.replace('.', '/'))
         packageDir.mkdirs()
-        packageDir.resolve("AniListBuildConfig.kt").writeText(
+        packageDir.resolve("${objectName.get()}.kt").writeText(
             """
-            package com.luum.michi.app.core.auth.domain
+            package $packagePath
 
             /**
              * Generated at build time from `local.properties`.
-             * Do not edit by hand. Configure `anilistClientId` in your local.properties.
+             * Do not edit by hand. Configure `${configKey.get()}` in your local.properties.
              */
-            internal object AniListBuildConfig {
+            internal object ${objectName.get()} {
                 const val ClientId: String = "${clientId.get()}"
             }
             """.trimIndent() + "\n"
@@ -59,6 +69,13 @@ val anilistClientIdValue: String =
     (localProperties["anilistClientId"] as? String)
         ?.takeIf { it.isNotBlank() }
         ?: System.getenv("ANILIST_CLIENT_ID").orEmpty()
+
+// Optional on purpose: MAL is a secondary login, so an absent client id never
+// fails a build; its provider simply stays unregistered (the button is hidden).
+val malClientIdValue: String =
+    (localProperties["malClientId"] as? String)
+        ?.takeIf { it.isNotBlank() }
+        ?: System.getenv("MAL_CLIENT_ID").orEmpty()
 
 // Test-only AniList token for the opt-in live suite (see `live` test package).
 // local.properties is gitignored; never commit or log this value.
@@ -83,9 +100,20 @@ if (isReleaseBuild && anilistClientIdValue.isBlank()) {
     )
 }
 
-val generateAniListBuildConfig = tasks.register<GenerateAniListBuildConfigTask>("generateAniListBuildConfig") {
+val generateAniListBuildConfig = tasks.register<GenerateClientIdBuildConfigTask>("generateAniListBuildConfig") {
     clientId.set(anilistClientIdValue)
-    outputDir.set(layout.buildDirectory.dir("generated/source/authConfig/commonMain/kotlin"))
+    packageName.set("com.luum.michi.app.core.auth.domain")
+    objectName.set("AniListBuildConfig")
+    configKey.set("anilistClientId")
+    outputDir.set(layout.buildDirectory.dir("generated/source/anilistConfig/commonMain/kotlin"))
+}
+
+val generateMalBuildConfig = tasks.register<GenerateClientIdBuildConfigTask>("generateMalBuildConfig") {
+    clientId.set(malClientIdValue)
+    packageName.set("com.luum.michi.app.core.mal.domain")
+    objectName.set("MalBuildConfig")
+    configKey.set("malClientId")
+    outputDir.set(layout.buildDirectory.dir("generated/source/malConfig/commonMain/kotlin"))
 }
 
 abstract class GenerateMichiBuildConfigTask : DefaultTask() {
@@ -170,6 +198,7 @@ kotlin {
         }
         commonMain {
             kotlin.srcDir(generateAniListBuildConfig)
+            kotlin.srcDir(generateMalBuildConfig)
             kotlin.srcDir(generateMichiBuildConfig)
             dependencies {
                 implementation(libs.compose.runtime)

@@ -165,6 +165,6 @@ class KtorClientTest {
  * by simple name (common-safe, no `java.net` imports), so these exercise
  * the same path the real engine errors take.
  */
-private class UnknownHostException : Exception("offline")
+internal class UnknownHostException : Exception("offline")
 
 private class ConnectException : Exception("refused")
