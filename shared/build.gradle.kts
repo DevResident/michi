@@ -197,6 +197,9 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.browser)
             implementation(libs.androidx.activity.compose)
+            // Android: 1.5.0 stable at compile and runtime. commonMain/iOS keep
+            // the JetBrains artifact (1.12.0-alpha03 via material-kolor).
+            implementation(libs.androidx.material3)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.coil.network.okhttp)
         }
