@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
  * version travels in the file name, so an old file is simply never read again
  * (no migration).
  */
-private const val ListCacheFormatVersion = 2
+private const val ListCacheFormatVersion = 3
 
 /** The one place the on-disk list file name is built (tests seed/corrupt with it). */
 internal fun listCacheFileName(
@@ -26,9 +26,13 @@ internal fun listCacheFileName(
 ): String =
     "media_list_v${ListCacheFormatVersion}_${provider.value}_${type.name.lowercase()}_$userId.json"
 
-/** The v1 key had no provider segment; it is ignored and removed on the first v2 write. */
+/** The v1 key had no provider segment; it is AniList-only and removed on the first v3 write. */
 private fun legacyListCacheFileName(userId: Int, type: MediaType): String =
     "media_list_v1_${type.name.lowercase()}_$userId.json"
+
+/** The v2 key already had the provider segment; the v3 write drops it for the same provider. */
+private fun v2ListCacheFileName(userId: Int, type: MediaType, provider: ProviderId): String =
+    "media_list_v2_${provider.value}_${type.name.lowercase()}_$userId.json"
 
 /**
  * Disk cache for one user's anime/manga list: the flat [MediaListEntryDto] list
@@ -36,8 +40,8 @@ private fun legacyListCacheFileName(userId: Int, type: MediaType): String =
  * `splitCompleted`, so flipping that setting needs no separate file. A corrupt
  * file is deleted and read as absent, and a write failure is swallowed so it can
  * never turn an otherwise-successful network load into a failure. The file key
- * includes the provider and format version; v1 files are ignored and removed on
- * the first v2 write.
+ * includes the provider and format version; v1/v2 files are ignored and removed
+ * on the first v3 write.
  *
  * JSON decode/encode is CPU-heavy for a ~1 MB list, so it runs on
  * [decodeDispatcher] ([Dispatchers.Default] in the app; tests inject a
@@ -98,18 +102,23 @@ internal class MediaListDiskCache(
     }
 
     /**
-     * v1 files were AniList-only and had no provider in the key. The first v2
-     * write drops that user's/type's orphan; a non-AniList key must never delete
-     * an AniList file.
+     * The first v3 write drops that user's/type's v1/v2 files: v1 was
+     * AniList-only with no provider segment, v2 is the same provider's previous
+     * shape. A non-AniList provider must never delete an AniList v1 file.
      */
     private suspend fun removeLegacyFile(userId: Int, type: MediaType, provider: ProviderId) {
-        if (provider != ProviderId.AniList) return
-        try {
-            files.delete(legacyListCacheFileName(userId, type))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            // A failed cleanup never breaks the caller.
+        val names = buildList {
+            if (provider == ProviderId.AniList) add(legacyListCacheFileName(userId, type))
+            add(v2ListCacheFileName(userId, type, provider))
+        }
+        names.forEach { name ->
+            try {
+                files.delete(name)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // A failed cleanup never breaks the caller.
+            }
         }
     }
 

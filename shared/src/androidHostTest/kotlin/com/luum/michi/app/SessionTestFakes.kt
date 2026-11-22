@@ -27,6 +27,7 @@ internal val MinimalProviderCapabilities = ProviderCapabilities(
     favourites = false,
     notifications = false,
     social = false,
+    profileDetails = false,
     profileStatistics = false,
     remoteSettings = false,
 )

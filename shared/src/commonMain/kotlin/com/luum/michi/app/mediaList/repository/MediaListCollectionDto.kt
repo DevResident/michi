@@ -1,7 +1,7 @@
 package com.luum.michi.app.mediaList.repository
 
 import com.luum.michi.app.core.media.repository.dto.FuzzyDateDto
-import com.luum.michi.app.core.media.repository.dto.MediaDto
+import com.luum.michi.app.core.media.repository.dto.MediaListMediaDto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -37,7 +37,33 @@ internal data class MediaListEntryDto(
     val startedAt: FuzzyDateDto? = null,
     val completedAt: FuzzyDateDto? = null,
     val priority: Int? = null,
-    val media: MediaDto,
+    val media: MediaListMediaDto,
+)
+
+/**
+ * The entry state a mapper needs, separated from the media it points at. The
+ * AniList DTO and the MAL composition both feed the same mapper.
+ */
+internal data class MediaListEntryState(
+    val status: String? = null,
+    val score: Double = 0.0,
+    val progress: Int = 0,
+    val progressVolumes: Int? = null,
+    val updatedAt: Long? = null,
+    val startedAt: FuzzyDateDto? = null,
+    val completedAt: FuzzyDateDto? = null,
+    val priority: Int? = null,
+)
+
+internal fun MediaListEntryDto.state(): MediaListEntryState = MediaListEntryState(
+    status = status,
+    score = score,
+    progress = progress,
+    progressVolumes = progressVolumes,
+    updatedAt = updatedAt,
+    startedAt = startedAt,
+    completedAt = completedAt,
+    priority = priority,
 )
 
 internal fun FuzzyDateDto?.toComparableInt(): Int {

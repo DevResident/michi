@@ -16,11 +16,12 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
- * Proactive client-side throttle for AniList's 30 req/min limit.
+ * Proactive client-side throttle for a provider's request budget.
  *
  * Three layers of protection:
- *  1. Sliding-window token bucket: no more than [WINDOW_LIMIT] requests in any
+ *  1. Sliding-window token bucket: no more than [windowLimit] requests in any
  *     rolling [WINDOW_MILLIS] window. Callers suspend (not fail) until a slot opens.
+ *     The default is AniList's 28/min; MAL uses its own instance with 60/min.
  *  2. Concurrency cap: at most [MAX_IN_FLIGHT] requests in flight at once.
  *  3. Proactive backoff: when the server signals remaining budget is critically low
  *     (remaining <= [LOW_REMAINING_THRESHOLD]), or on a 429, all callers pause
@@ -43,11 +44,12 @@ import kotlin.time.TimeSource
  */
 internal class AniListRateLimiter(
     private val timeSource: TimeSource = TimeSource.Monotonic,
+    /** Slots per rolling window; AniList defaults to 28, MAL uses 60. */
+    private val windowLimit: Int = 28,
     private val pause: suspend (Long) -> Unit = { delay(it.milliseconds) },
 ) : NetworkThrottle {
 
     private companion object {
-        const val WINDOW_LIMIT = 28          // slots per rolling window (30 - 2 safety margin)
         const val WINDOW_MILLIS = 60_000L    // rolling window size in ms
         const val MAX_IN_FLIGHT = 5         // max concurrent HTTP calls
         const val LOW_REMAINING_THRESHOLD = 2
@@ -60,8 +62,8 @@ internal class AniListRateLimiter(
     private val startMark = timeSource.markNow()
 
     private val mutex = Mutex()
-    // Monotonic timestamps (ms) of the last WINDOW_LIMIT send events.
-    private val sendTimes = ArrayDeque<Long>(WINDOW_LIMIT)
+    // Monotonic timestamps (ms) of the last [windowLimit] send events.
+    private val sendTimes = ArrayDeque<Long>(windowLimit)
     // Monotonic mark (ms since [startMark]): suspend new acquire() calls until this
     // instant. 0L means "no active pause" (it is always in the past since nowMs() grows
     // from 0). Never use a negative sentinel here: computeWaitMs() subtracts it from now,
@@ -172,7 +174,7 @@ internal class AniListRateLimiter(
         }
 
         // 3. If there's still room in the window, no wait needed.
-        if (sendTimes.size < WINDOW_LIMIT) return 0L
+        if (sendTimes.size < windowLimit) return 0L
 
         // 4. Oldest slot in the window: wait until it ages out.
         val oldestTs = sendTimes.first()

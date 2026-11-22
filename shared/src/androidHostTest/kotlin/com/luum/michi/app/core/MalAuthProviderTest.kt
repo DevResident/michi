@@ -18,6 +18,7 @@ import io.ktor.client.request.forms.FormDataContent
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import io.ktor.http.parseQueryString
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -312,6 +313,32 @@ class MalAuthProviderTest {
             ),
             result.value,
         )
+    }
+
+    @Test
+    fun a429RetriesTheMalRequest() = runBlocking {
+        var calls = 0
+        val engine = MockEngine {
+            calls++
+            if (calls == 1) {
+                respond(
+                    "slow",
+                    HttpStatusCode.TooManyRequests,
+                    headersOf("Retry-After", "0"),
+                )
+            } else {
+                respond("""{"id":42,"name":"fer"}""", HttpStatusCode.OK)
+            }
+        }
+        val provider = provider(engine)
+
+        val result = provider.fetchViewer(
+            AuthToken(accessToken = "access", savedAtEpochSeconds = currentEpochSeconds()),
+        )
+
+        assertTrue(result is NetworkResult.Success)
+        assertEquals(42, result.value.id)
+        assertEquals(2, calls)
     }
 
     @Test

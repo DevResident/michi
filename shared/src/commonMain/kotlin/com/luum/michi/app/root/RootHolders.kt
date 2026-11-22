@@ -131,6 +131,7 @@ internal class RootHolders(
 internal fun rememberRootHolders(
     viewerId: Int?,
     notificationsEnabled: Boolean,
+    profileDetailsEnabled: Boolean,
     settingsState: SettingsState,
     strings: LanguageStrings,
     animeListRepository: AnimeListRepository,
@@ -289,50 +290,42 @@ internal fun rememberRootHolders(
             null
         }
     }
+    // Profile data is AniList-only. A provider without profileDetails (MAL)
+    // gets null holders, so RootEffects' `?.load` and the screen never ask
+    // AniList for a MAL user id.
     val profileScope = rememberHolderScope(listScope, viewerId)
-    val profileHolder = remember(
-        viewerId,
-        profileRepository,
-        favouriteRepository,
-        profileScope,
-    ) {
-        viewerId?.let {
-            createProfileStateHolder(
-                repository = profileRepository,
-                favouriteRepository = favouriteRepository,
-                scope = profileScope,
-                onUnreadNotificationCount = { count -> notificationsHolder?.updateUnreadCount(count) },
-            )
-        }
-    }
     val profileFavoritesScope = rememberHolderScope(listScope, viewerId)
-    val profileFavoritesHolder = remember(
+    val profileFollowsScope = rememberHolderScope(listScope, viewerId)
+    val profileReviewsScope = rememberHolderScope(listScope, viewerId)
+    val profileHolders = remember(
         viewerId,
+        profileDetailsEnabled,
         profileRepository,
         favouriteRepository,
-        profileFavoritesScope,
+        notificationsHolder,
         favouriteRouter,
+        profileScope,
+        profileFavoritesScope,
+        profileFollowsScope,
+        profileReviewsScope,
     ) {
-        viewerId?.let {
-            createProfileFavoritesGridStateHolder(
-                repository = profileRepository,
-                favouriteRepository = favouriteRepository,
-                scope = profileFavoritesScope,
-                onFavouriteChanged = favouriteRouter,
-                onFavoriteRemoved = { category, id -> profileHolder?.removeFavoriteLocally(category, id) },
-            )
-        }
+        createProfileHolders(
+            viewerId = viewerId,
+            profileDetailsEnabled = profileDetailsEnabled,
+            profileRepository = profileRepository,
+            favouriteRepository = favouriteRepository,
+            notificationsHolder = notificationsHolder,
+            favouriteRouter = favouriteRouter,
+            profileScope = profileScope,
+            profileFavoritesScope = profileFavoritesScope,
+            profileFollowsScope = profileFollowsScope,
+            profileReviewsScope = profileReviewsScope,
+        )
     }
-    // The follows and reviews lists: public AniList data, memory-only, re-keyed
-    // per viewer like the rest of the profile.
-    val profileFollowsScope = rememberHolderScope(listScope, viewerId)
-    val profileFollowsHolder = remember(viewerId, profileRepository, profileFollowsScope) {
-        viewerId?.let { createProfileFollowsStateHolder(profileRepository, profileFollowsScope) }
-    }
-    val profileReviewsScope = rememberHolderScope(listScope, viewerId)
-    val profileReviewsHolder = remember(viewerId, profileRepository, profileReviewsScope) {
-        viewerId?.let { createProfileReviewsStateHolder(profileRepository, profileReviewsScope) }
-    }
+    val profileHolder = profileHolders.profile
+    val profileFavoritesHolder = profileHolders.favorites
+    val profileFollowsHolder = profileHolders.follows
+    val profileReviewsHolder = profileHolders.reviews
 
     return remember(
         listScope,
@@ -373,6 +366,55 @@ internal fun rememberRootHolders(
             onFavouriteChanged = favouriteRouter,
         )
     }
+}
+
+/** The profile group; all four are null when the provider has no profile details. */
+internal data class ProfileHolders(
+    val profile: ProfileStateHolder?,
+    val favorites: ProfileFavoritesGridStateHolder?,
+    val follows: ProfileFollowsStateHolder?,
+    val reviews: ProfileReviewsStateHolder?,
+)
+
+/**
+ * Builds the profile holders only when the provider actually has profile data.
+ * This is the single gate: with `profileDetails = false` no holder exists, so
+ * no caller can accidentally request an AniList profile with a MAL user id.
+ */
+internal fun createProfileHolders(
+    viewerId: Int?,
+    profileDetailsEnabled: Boolean,
+    profileRepository: ProfileRepository,
+    favouriteRepository: FavouriteRepository,
+    notificationsHolder: NotificationsStateHolder?,
+    favouriteRouter: (FavouriteTarget, Boolean) -> Unit,
+    profileScope: CoroutineScope,
+    profileFavoritesScope: CoroutineScope,
+    profileFollowsScope: CoroutineScope,
+    profileReviewsScope: CoroutineScope,
+): ProfileHolders {
+    if (viewerId == null || !profileDetailsEnabled) {
+        return ProfileHolders(profile = null, favorites = null, follows = null, reviews = null)
+    }
+
+    val profile = createProfileStateHolder(
+        repository = profileRepository,
+        favouriteRepository = favouriteRepository,
+        scope = profileScope,
+        onUnreadNotificationCount = { count -> notificationsHolder?.updateUnreadCount(count) },
+    )
+    return ProfileHolders(
+        profile = profile,
+        favorites = createProfileFavoritesGridStateHolder(
+            repository = profileRepository,
+            favouriteRepository = favouriteRepository,
+            scope = profileFavoritesScope,
+            onFavouriteChanged = favouriteRouter,
+            onFavoriteRemoved = { category, id -> profile.removeFavoriteLocally(category, id) },
+        ),
+        follows = createProfileFollowsStateHolder(profileRepository, profileFollowsScope),
+        reviews = createProfileReviewsStateHolder(profileRepository, profileReviewsScope),
+    )
 }
 
 /**

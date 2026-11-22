@@ -7,6 +7,11 @@ import com.luum.michi.app.profile.repository.ProfileDiskCache
 import com.luum.michi.app.profile.domain.ProfileRepository
 import com.luum.michi.app.mediaList.repository.anime.AnimeListRepositoryImpl
 import com.luum.michi.app.mediaList.domain.anime.AnimeListRepository
+import com.luum.michi.app.mediaList.repository.ProviderRoutingAnimeListRepository
+import com.luum.michi.app.mediaList.repository.ProviderRoutingMangaListRepository
+import com.luum.michi.app.mediaList.repository.mal.MalAnimeListRepository
+import com.luum.michi.app.mediaList.repository.mal.MalListLoader
+import com.luum.michi.app.mediaList.repository.mal.MalMangaListRepository
 import com.luum.michi.app.calendar.repository.CalendarRepositoryImpl
 import com.luum.michi.app.calendar.domain.CalendarRepository
 import com.luum.michi.app.mediaDetail.repository.character.CharacterDetailRepositoryImpl
@@ -21,6 +26,7 @@ import com.luum.michi.app.core.mal.repository.MalAuthProvider
 import com.luum.michi.app.core.mal.repository.MalHttp
 import com.luum.michi.app.core.mal.repository.SettingsStorePendingMalAuthStore
 import com.luum.michi.app.core.media.domain.ProviderId
+import com.luum.michi.app.core.media.repository.MediaIdBridgeImpl
 import com.luum.michi.app.core.platform.domain.UrlOpener
 import com.luum.michi.app.core.platform.domain.ShareLauncher
 import com.luum.michi.app.core.navigation.domain.DetailDestination
@@ -128,9 +134,12 @@ class MichiDependencies internal constructor(
     internal val viewerRepository: AniListViewerRepository =
         AniListViewerRepositoryImpl(graphQLClient)
 
+    /** One MAL client for login and lists: a single conservative 60/min limiter. */
+    private val malHttp: MalHttp = MalHttp(httpClient)
+
     /**
      * Login services exposed to the sign-in modal. AniList is always present;
-     * MAL is debug-only until its lists land in 11.4b, and needs `malClientId`.
+     * MAL is debug-only until 11.4c, and needs `malClientId`.
      */
     internal val authProviders: List<AuthProvider> = buildAuthProviders(
         isDebug = isDebug,
@@ -139,7 +148,7 @@ class MichiDependencies internal constructor(
         mal = {
             MalAuthProvider(
                 browser = oAuthBrowser,
-                http = MalHttp(httpClient),
+                http = malHttp,
                 pendingStore = SettingsStorePendingMalAuthStore(settingsStore),
             )
         },
@@ -156,11 +165,46 @@ class MichiDependencies internal constructor(
     /** The viewer profile's disk cache, wiped with the lists on logout/401. */
     private val profileCache: ProfileDiskCache = ProfileDiskCache(fileStore)
 
-    internal val animeListRepository: AnimeListRepository =
+    /** MAL ids -> AniList ids, persisted for 11.4c's writes. */
+    private val mediaIdBridge: MediaIdBridgeImpl =
+        MediaIdBridgeImpl(graphQLClient, fileStore)
+
+    private val malListLoader: MalListLoader = MalListLoader(
+        http = malHttp,
+        tokenProvider = { sessionManager.validToken(ProviderId.Mal) },
+        bridge = mediaIdBridge,
+        cache = mediaListCache,
+        onUnauthorized = { token -> sessionManager.onUnauthorized(token) },
+        onUnmatched = { type, count ->
+            if (isDebug) println("[Michi] MAL ${type.name} list: $count unmatched")
+        },
+    )
+
+    private val aniListAnimeListRepository: AnimeListRepository =
         AnimeListRepositoryImpl(graphQLClient, mediaListCache)
 
-    internal val mangaListRepository: MangaListRepository =
+    private val aniListMangaListRepository: MangaListRepository =
         MangaListRepositoryImpl(graphQLClient, mediaListCache)
+
+    private val malAnimeListRepository: AnimeListRepository =
+        MalAnimeListRepository(malListLoader)
+
+    private val malMangaListRepository: MangaListRepository =
+        MalMangaListRepository(malListLoader)
+
+    internal val animeListRepository: AnimeListRepository =
+        ProviderRoutingAnimeListRepository(
+            activeProvider = { sessionManager.activeProvider() },
+            aniList = aniListAnimeListRepository,
+            mal = malAnimeListRepository,
+        )
+
+    internal val mangaListRepository: MangaListRepository =
+        ProviderRoutingMangaListRepository(
+            activeProvider = { sessionManager.activeProvider() },
+            aniList = aniListMangaListRepository,
+            mal = malMangaListRepository,
+        )
 
     internal val profileRepository: ProfileRepository =
         ProfileRepositoryImpl(graphQLClient, profileCache)
@@ -260,7 +304,7 @@ class MichiDependencies internal constructor(
 
 /**
  * AniList is always registered; MAL is appended only in debug builds that have
- * a `malClientId`. In release the list is exactly `[AniList]` (11.4b removes
+ * a `malClientId`. In release the list is exactly `[AniList]` (11.4c removes
  * the debug gate).
  */
 internal fun buildAuthProviders(

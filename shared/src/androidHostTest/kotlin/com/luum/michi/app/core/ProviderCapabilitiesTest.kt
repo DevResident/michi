@@ -30,6 +30,7 @@ class ProviderCapabilitiesTest {
         assertTrue(caps.favourites)
         assertTrue(caps.notifications)
         assertTrue(caps.social)
+        assertTrue(caps.profileDetails)
         assertTrue(caps.profileStatistics)
         assertTrue(caps.remoteSettings)
     }
@@ -49,6 +50,7 @@ class ProviderCapabilitiesTest {
         assertFalse(caps.favourites)
         assertFalse(caps.notifications)
         assertFalse(caps.social)
+        assertFalse(caps.profileDetails)
         assertFalse(caps.profileStatistics)
         assertFalse(caps.remoteSettings)
     }

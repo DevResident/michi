@@ -9,7 +9,7 @@ import com.luum.michi.app.core.favourite.repository.FavouriteRepositoryImpl
 import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
-import com.luum.michi.app.core.media.repository.dto.MediaDto
+import com.luum.michi.app.core.media.repository.dto.MediaListMediaDto
 import com.luum.michi.app.core.media.repository.dto.MediaTitleDto
 import com.luum.michi.app.core.medialist.repository.MediaListEntryRepositoryImpl
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
@@ -72,7 +72,7 @@ private fun cachedAnimeDto(mediaId: Int, title: String): MediaListEntryDto = Med
     id = mediaId,
     status = "CURRENT",
     progress = 5,
-    media = MediaDto(
+    media = MediaListMediaDto(
         id = mediaId,
         format = "TV",
         status = "RELEASING",
@@ -86,7 +86,7 @@ private fun cachedMangaDto(mediaId: Int, chapters: Int, volumes: Int): MediaList
     status = "CURRENT",
     progress = chapters,
     progressVolumes = volumes,
-    media = MediaDto(
+    media = MediaListMediaDto(
         id = mediaId,
         format = "MANGA",
         status = "RELEASING",
@@ -100,7 +100,7 @@ private fun completedMovieDto(mediaId: Int): MediaListEntryDto = MediaListEntryD
     id = mediaId,
     status = "COMPLETED",
     progress = 1,
-    media = MediaDto(
+    media = MediaListMediaDto(
         id = mediaId,
         format = "MOVIE",
         status = "FINISHED",
@@ -286,19 +286,43 @@ class MediaListCacheTest {
     }
 
     @Test
-    fun aV1FileIsIgnoredAndDeletedOnTheFirstV2Write() {
+    fun v1AndV2FilesAreIgnoredAndDeletedOnTheFirstV3Write() {
         val store = InMemoryFileStore()
         val cache = diskCache(store)
         val legacyName = "media_list_v1_anime_7.json"
+        val v2Name = "media_list_v2_${ProviderId.AniList.value}_anime_7.json"
         store.put(legacyName, "[]")
+        store.put(v2Name, "[]")
 
-        assertNull(runBlocking { cache.read(7, MediaType.ANIME) }, "v1 is never read")
+        assertNull(runBlocking { cache.read(7, MediaType.ANIME) }, "old shapes are never read")
         assertTrue(store.contains(legacyName), "a read does not delete it")
+        assertTrue(store.contains(v2Name), "a read does not delete it")
 
         runBlocking { cache.write(7, MediaType.ANIME, listOf(cachedAnimeDto(101, "A"))) }
 
-        assertTrue(store.contains(listCacheFileName(7, MediaType.ANIME)), "v2 was written")
+        assertTrue(store.contains(listCacheFileName(7, MediaType.ANIME)), "v3 was written")
         assertFalse(store.contains(legacyName), "the orphan v1 file is removed")
+        assertFalse(store.contains(v2Name), "the same provider's v2 file is removed")
+    }
+
+    @Test
+    fun aMalV3WriteNeverDeletesAniListLegacyFiles() {
+        val store = InMemoryFileStore()
+        val cache = diskCache(store)
+        val aniListV1 = "media_list_v1_anime_7.json"
+        val aniListV2 = "media_list_v2_${ProviderId.AniList.value}_anime_7.json"
+        val malV2 = "media_list_v2_${ProviderId.Mal.value}_anime_7.json"
+        store.put(aniListV1, "[]")
+        store.put(aniListV2, "[]")
+        store.put(malV2, "[]")
+
+        runBlocking {
+            cache.write(7, MediaType.ANIME, listOf(cachedAnimeDto(101, "A")), ProviderId.Mal)
+        }
+
+        assertTrue(store.contains(aniListV1), "MAL never touches AniList's v1 file")
+        assertTrue(store.contains(aniListV2), "MAL never touches AniList's v2 file")
+        assertFalse(store.contains(malV2), "MAL removes its own v2 file")
     }
 
     @Test

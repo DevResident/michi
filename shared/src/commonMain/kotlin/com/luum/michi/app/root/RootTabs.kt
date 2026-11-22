@@ -245,12 +245,11 @@ internal fun RootTabContent(
             hideAdult = !settingsState.displayAdultContent,
             bottomPadding = bottomPadding,
         )
-    } else if (
-        activeTab == TabSection.PROFILE && viewerId != null &&
-        holders.profile != null && viewer != null
-    ) {
+    } else if (activeTab == TabSection.PROFILE && viewerId != null && viewer != null) {
         // The viewer's own profile: header + favourites rails. The name/avatar
-        // come from the already-loaded Viewer (no extra request).
+        // come from the already-loaded Viewer (no extra request). With a
+        // provider that has no profile details (MAL) the holder is null and the
+        // screen paints only the hero.
         ProfileScreen(
             holder = holders.profile,
             viewer = viewer,

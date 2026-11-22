@@ -461,5 +461,6 @@ class SessionManagerTest {
         val state = manager.state.value
         assertTrue(state is SessionState.Authenticated)
         assertEquals(other, state.provider)
+        assertEquals(other, manager.activeProvider(), "the list router follows the active provider")
     }
 }

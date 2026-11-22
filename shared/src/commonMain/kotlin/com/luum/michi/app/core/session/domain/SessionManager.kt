@@ -324,6 +324,9 @@ internal class SessionManager(
     private fun providerFor(id: ProviderId): AuthProvider? =
         providers.firstOrNull { it.id == id }
 
+    /** The provider that owns the current session; guests/unknowns are AniList. */
+    internal fun activeProvider(): ProviderId = activeProviderId()
+
     /**
      * The stored provider when it is actually wired (provider + storage);
      * otherwise the first provider (AniList today).

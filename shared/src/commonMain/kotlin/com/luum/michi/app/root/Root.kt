@@ -162,6 +162,7 @@ internal fun Root(
     val holders = rememberRootHolders(
         viewerId = viewerId,
         notificationsEnabled = capabilities.notifications,
+        profileDetailsEnabled = capabilities.profileDetails,
         settingsState = settingsState,
         strings = strings,
         animeListRepository = animeListRepository,

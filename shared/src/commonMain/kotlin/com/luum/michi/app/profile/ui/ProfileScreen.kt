@@ -55,15 +55,17 @@ import com.luum.michi.app.ui.language.Strings
  * PROFILE tab: the viewer's hero (banner, avatar over its bottom edge, name and
  * frameless counters) over their favourites, one rail per category with a
  * "View all" page. Anime/manga use the shared [MediaCardRail], characters/staff
- * the simple [PersonCardRail], and every card carries a second line. Only the
- * viewer's own profile is loaded ([ProfileStateHolder.load] with the viewer id);
- * the name/avatar/banner come from the already-loaded [Viewer] — no extra
- * request.
+ * the simple [PersonCardRail], and every card carries a second line. With an
+ * AniList session the viewer's own profile is loaded ([ProfileStateHolder.load]
+ * with the viewer id); with a provider that has no profile details (MAL) the
+ * holder is null and only the avatar/name hero is painted — no AniList request
+ * and no AniList user id. The name/avatar/banner come from the already-loaded
+ * [Viewer] — no extra request.
  * Read-only: favourites are removed from each category's "View all" page.
  */
 @Composable
 internal fun ProfileScreen(
-    holder: ProfileStateHolder,
+    holder: ProfileStateHolder?,
     viewer: Viewer,
     strings: LanguageStrings = Strings.current,
     bottomPadding: Dp = 0.dp,
@@ -78,6 +80,18 @@ internal fun ProfileScreen(
     showsStatistics: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
+    if (holder == null) {
+        // Provider without profile details (MAL): avatar + name only. No
+        // AniList request is made and no AniList user id is used.
+        ProfileHeroOnly(
+            viewer = viewer,
+            strings = strings,
+            bottomPadding = bottomPadding,
+            modifier = modifier,
+        )
+        return
+    }
+
     // Explicit load on entry: the TTL dedups re-entries (0 requests while fresh).
     LaunchedEffect(holder, viewer.id) {
         holder.load(viewer.id)
@@ -98,6 +112,35 @@ internal fun ProfileScreen(
         showsStatistics = showsStatistics,
         modifier = modifier,
     )
+}
+
+/** Hero-only profile for providers whose account has no AniList profile data. */
+@Composable
+private fun ProfileHeroOnly(
+    viewer: Viewer,
+    strings: LanguageStrings,
+    bottomPadding: Dp,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 16.dp + bottomPadding),
+    ) {
+        item(key = "profile-header") {
+            ProfileHeader(
+                viewer = viewer,
+                stats = null,
+                strings = strings,
+                onOpenStatistics = {},
+                onOpenFollowing = {},
+                onOpenFollowers = {},
+                showsSocial = false,
+                showsStatistics = false,
+                showBanner = false,
+                showCounters = false,
+            )
+        }
+    }
 }
 
 @Composable
@@ -217,33 +260,62 @@ private fun ProfileContent(
 @Composable
 private fun ProfileHeader(
     viewer: Viewer,
-    stats: ProfileStats,
+    stats: ProfileStats?,
     strings: LanguageStrings,
     onOpenStatistics: (MediaType) -> Unit,
     onOpenFollowing: () -> Unit,
     onOpenFollowers: () -> Unit,
     showsSocial: Boolean,
     showsStatistics: Boolean,
+    showBanner: Boolean = true,
+    showCounters: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            HeroBanner(
-                bannerUrl = viewer.bannerUrl,
-                paletteHex = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(HeroBannerHeight),
-            )
+        if (showBanner) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                HeroBanner(
+                    bannerUrl = viewer.bannerUrl,
+                    paletteHex = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(HeroBannerHeight),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = HeroBannerHeight - AvatarSize.Header / 2,
+                        ),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    Avatar(
+                        imageUrl = viewer.avatarUrl,
+                        initials = viewer.initials(),
+                        size = AvatarSize.Header,
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = viewer.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(bottom = 8.dp),
+                    )
+                }
+            }
+        } else {
+            // MAL has no banner: keep the same avatar/name row without the
+            // 180dp placeholder and without the counters row.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = HeroBannerHeight - AvatarSize.Header / 2,
-                    ),
-                verticalAlignment = Alignment.Bottom,
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Avatar(
                     imageUrl = viewer.avatarUrl,
@@ -256,50 +328,51 @@ private fun ProfileHeader(
                     style = MaterialTheme.typography.titleLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(bottom = 8.dp),
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-        ) {
-            ProfileStatColumn(
-                value = stats.animeCount.compactCount(),
-                label = strings.animeLabel,
-                onClick = if (showsStatistics) {
-                    ({ onOpenStatistics(MediaType.ANIME) })
-                } else {
-                    null
-                },
-                modifier = Modifier.weight(1f),
-            )
-            ProfileStatColumn(
-                value = stats.mangaCount.compactCount(),
-                label = strings.mangaLabel,
-                onClick = if (showsStatistics) {
-                    ({ onOpenStatistics(MediaType.MANGA) })
-                } else {
-                    null
-                },
-                modifier = Modifier.weight(1f),
-            )
-            ProfileStatColumn(
-                value = stats.followingCount.compactCount(),
-                label = strings.profileFollowingLabel,
-                onClick = if (showsSocial) onOpenFollowing else null,
-                modifier = Modifier.weight(1f),
-            )
-            ProfileStatColumn(
-                value = stats.followersCount.compactCount(),
-                label = strings.profileFollowersLabel,
-                onClick = if (showsSocial) onOpenFollowers else null,
-                modifier = Modifier.weight(1f),
-            )
+
+        if (showCounters && stats != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
+                ProfileStatColumn(
+                    value = stats.animeCount.compactCount(),
+                    label = strings.animeLabel,
+                    onClick = if (showsStatistics) {
+                        ({ onOpenStatistics(MediaType.ANIME) })
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                ProfileStatColumn(
+                    value = stats.mangaCount.compactCount(),
+                    label = strings.mangaLabel,
+                    onClick = if (showsStatistics) {
+                        ({ onOpenStatistics(MediaType.MANGA) })
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                ProfileStatColumn(
+                    value = stats.followingCount.compactCount(),
+                    label = strings.profileFollowingLabel,
+                    onClick = if (showsSocial) onOpenFollowing else null,
+                    modifier = Modifier.weight(1f),
+                )
+                ProfileStatColumn(
+                    value = stats.followersCount.compactCount(),
+                    label = strings.profileFollowersLabel,
+                    onClick = if (showsSocial) onOpenFollowers else null,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

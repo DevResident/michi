@@ -24,6 +24,8 @@ internal data class ProviderCapabilities(
     val notifications: Boolean,
     /** Following / followers / reviews. */
     val social: Boolean,
+    /** Profile stats/favourites/follows/reviews are fetched from AniList. */
+    val profileDetails: Boolean,
     val profileStatistics: Boolean,
     /** Settings synced with the account (AniList `UpdateUser`). */
     val remoteSettings: Boolean,
@@ -40,6 +42,7 @@ internal data class ProviderCapabilities(
             favourites = true,
             notifications = true,
             social = true,
+            profileDetails = true,
             profileStatistics = true,
             remoteSettings = true,
         )
@@ -61,6 +64,7 @@ internal data class ProviderCapabilities(
             favourites = false,
             notifications = false,
             social = false,
+            profileDetails = false,
             profileStatistics = false,
             remoteSettings = false,
         )

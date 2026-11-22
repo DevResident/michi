@@ -5,6 +5,7 @@ import com.luum.michi.app.core.network.domain.AniListGraphQLClient
 import com.luum.michi.app.core.network.domain.AniListGraphQLRequest
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.domain.map
+import com.luum.michi.app.core.media.repository.dto.MediaListMediaFields
 import com.luum.michi.app.core.network.repository.AniListJson
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -32,24 +33,7 @@ query MediaListCollection(${'$'}userId: Int!, ${'$'}type: MediaType!) {
         startedAt { year month day }
         completedAt { year month day }
         media {
-          id
-          format
-          status
-          episodes
-          chapters
-          volumes
-          averageScore
-          popularity
-          favourites
-          trending
-          genres
-          season
-          seasonYear
-          startDate { year month day }
-          title { romaji english native userPreferred }
-          isAdult
-          coverImage { extraLarge large medium color }
-          nextAiringEpisode { episode airingAt }
+          $MediaListMediaFields
         }
       }
     }

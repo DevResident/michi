@@ -25,17 +25,18 @@ class AniListRateLimiterTest {
     private fun virtualLimiter(
         clock: TestTimeSource,
         observed: MutableList<Int>,
+        limit: Int = windowLimit,
     ): AniListRateLimiter {
         lateinit var limiter: AniListRateLimiter
-        limiter = AniListRateLimiter(clock) { ms ->
+        limiter = AniListRateLimiter(timeSource = clock, windowLimit = limit) { ms ->
             observed += limiter.waitingRequests.value
             clock += ms.milliseconds
         }
         return limiter
     }
 
-    private suspend fun fillWindow(limiter: AniListRateLimiter) {
-        repeat(windowLimit) { limiter.withPermit { } }
+    private suspend fun fillWindow(limiter: AniListRateLimiter, limit: Int = windowLimit) {
+        repeat(limit) { limiter.withPermit { } }
     }
 
     @Test
@@ -65,6 +66,20 @@ class AniListRateLimiterTest {
         limiter.withPermit { }
 
         assertEquals(listOf(0), observed, "a sub-second wait must not flicker the notice")
+        assertEquals(0, limiter.waitingRequests.value)
+    }
+
+    @Test
+    fun aCustomLimitCapsAtItsOwnWindow() = runBlocking {
+        val clock = TestTimeSource()
+        val observed = mutableListOf<Int>()
+        val limiter = virtualLimiter(clock, observed, limit = 60)
+        fillWindow(limiter, limit = 60)
+
+        // The 61st request parks; the default 28 would have parked long ago.
+        limiter.withPermit { }
+
+        assertEquals(listOf(1), observed)
         assertEquals(0, limiter.waitingRequests.value)
     }
 

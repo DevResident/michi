@@ -1,8 +1,11 @@
 package com.luum.michi.app.mediaList.repository.manga
 
 import com.luum.michi.app.mediaList.repository.MediaListEntryDto
+import com.luum.michi.app.mediaList.repository.MediaListEntryState
+import com.luum.michi.app.mediaList.repository.state
 import com.luum.michi.app.core.media.repository.allTitles
 import com.luum.michi.app.core.media.repository.bestTitle
+import com.luum.michi.app.core.media.repository.dto.MediaListMediaDto
 import com.luum.michi.app.mediaList.repository.toComparableInt
 import com.luum.michi.app.mediaList.domain.manga.model.MangaListEntry
 import com.luum.michi.app.mediaList.domain.manga.model.MangaListSection
@@ -17,6 +20,12 @@ import com.luum.michi.app.core.media.domain.parseMediaWorkStatus
 import com.luum.michi.app.core.media.repository.toCoverSizes
 
 internal fun MediaListEntryDto.toMangaListEntry(
+    index: Int = 0,
+    splitCompleted: Boolean = true,
+): MangaListEntry = state().toMangaListEntry(media, index, splitCompleted)
+
+internal fun MediaListEntryState.toMangaListEntry(
+    media: MediaListMediaDto,
     index: Int = 0,
     splitCompleted: Boolean = true,
 ): MangaListEntry {
@@ -61,4 +70,3 @@ private fun mapMangaStatus(
     // Unknown/missing status keeps the old fallback (CURRENT).
     (parseMediaListStatus(status?.uppercase()) ?: MediaListStatus.CURRENT)
         .toMangaSection(format, splitCompleted)
-
