@@ -7,6 +7,7 @@ import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.media.domain.MediaFormat
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.MediaSeason
@@ -155,6 +156,7 @@ private class GatedEntryRepository(
         startedAtMillis: Long?,
         completedAtMillis: Long?,
         mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(

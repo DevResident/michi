@@ -99,6 +99,26 @@ class MirrorOutboxTest {
     }
 
     @Test
+    fun statusThenNoteSavesCoalesceIntoOneOperationWithBothFields() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        outbox.enqueue(
+            outboxEntry(status = MediaListStatus.CURRENT, notes = "old note"),
+            setOf(MirrorField.STATUS),
+        )
+        outbox.enqueue(
+            outboxEntry(status = MediaListStatus.CURRENT, notes = "new note"),
+            setOf(MirrorField.NOTES),
+        )
+
+        val due = assertNotNull(outbox.nextDue(now = 0L))
+        assertEquals(setOf(MirrorField.STATUS, MirrorField.NOTES), due.fields)
+        assertEquals(MediaListStatus.CURRENT, due.entry.status)
+        assertEquals("new note", due.entry.notes)
+        assertEquals(1, outbox.state.value.pending)
+    }
+
+    @Test
     fun aStaleSuccessNeverRemovesTheNewerOperation() = runBlocking {
         val outbox = MirrorOutbox(InMemoryFileStore())
         outbox.load()

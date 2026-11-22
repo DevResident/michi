@@ -15,6 +15,7 @@ import com.luum.michi.app.core.medialist.repository.MediaListEntryRepositoryImpl
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.session.domain.CachedViewerStore
@@ -148,6 +149,7 @@ private class CountingEntryRepository : MediaListEntryRepository {
         startedAtMillis: Long?,
         completedAtMillis: Long?,
         mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(

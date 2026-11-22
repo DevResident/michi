@@ -61,6 +61,7 @@ private class RecordingPrimary(
         startedAtMillis: Long?,
         completedAtMillis: Long?,
         mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> {
         saveCalls++
         return fail?.let { NetworkResult.Failure(it) } ?: NetworkResult.Success(entry)
@@ -110,7 +111,7 @@ private class RecordingSink(
 class MirroringMediaListEntryRepositoryTest {
 
     @Test
-    fun saveEntryEnqueuesEveryFieldAndReturnsThePrimaryResult() = runBlocking {
+    fun saveEntryWithoutChangedFieldsEnqueuesEveryNonEmptyField() = runBlocking {
         val primary = RecordingPrimary()
         val sink = RecordingSink()
         val repository = MirroringMediaListEntryRepository(primary, sink)
@@ -130,12 +131,111 @@ class MirroringMediaListEntryRepositoryTest {
             startedAtMillis = null,
             completedAtMillis = null,
             mediaType = MediaType.ANIME,
+            changedFields = null,
         )
 
         assertEquals(primary.entry, (result as NetworkResult.Success).value)
         assertEquals(1, sink.calls.size)
-        assertEquals(AllMirrorFields, sink.calls.single().fields)
+        assertEquals(
+            AllMirrorFields - setOf(MirrorField.STARTED_AT, MirrorField.COMPLETED_AT),
+            sink.calls.single().fields,
+            "an old caller never copies the empty dates",
+        )
         assertEquals(MediaType.ANIME, sink.calls.single().type)
+    }
+
+    @Test
+    fun aStatusOnlyEditorSaveEnqueuesOnlyStatus() = runBlocking {
+        val primary = RecordingPrimary()
+        val sink = RecordingSink()
+        val repository = MirroringMediaListEntryRepository(primary, sink)
+
+        repository.saveEntry(
+            mediaRef = aniListRef(7),
+            status = MediaListStatus.PAUSED,
+            progress = 3,
+            progressVolumes = null,
+            score = 8.5f,
+            advancedScores = null,
+            notes = "keep me",
+            repeat = 1,
+            priority = 2,
+            isPrivate = false,
+            hiddenFromStatusLists = false,
+            startedAtMillis = 1_000L,
+            completedAtMillis = 2_000L,
+            mediaType = MediaType.ANIME,
+            changedFields = setOf(MirrorField.STATUS),
+        )
+
+        assertEquals(setOf(MirrorField.STATUS), sink.calls.single().fields)
+    }
+
+    @Test
+    fun anExplicitNoteClearEnqueuesNotesEvenWhenEmpty() = runBlocking {
+        val entry = savedEntry().copy(notes = "")
+        val primary = RecordingPrimary(entry = entry)
+        val sink = RecordingSink()
+        val repository = MirroringMediaListEntryRepository(primary, sink)
+
+        repository.saveEntry(
+            mediaRef = aniListRef(7),
+            status = MediaListStatus.CURRENT,
+            progress = 3,
+            progressVolumes = null,
+            score = 8.5f,
+            advancedScores = null,
+            notes = "",
+            repeat = 1,
+            priority = 2,
+            isPrivate = false,
+            hiddenFromStatusLists = false,
+            startedAtMillis = null,
+            completedAtMillis = null,
+            mediaType = MediaType.ANIME,
+            changedFields = setOf(MirrorField.NOTES),
+        )
+
+        assertEquals(setOf(MirrorField.NOTES), sink.calls.single().fields)
+    }
+
+    @Test
+    fun aNewEntryWithEmptyValuesNeverEnqueuesProtectedFields() = runBlocking {
+        val entry = savedEntry().copy(
+            progress = 0,
+            score = 0f,
+            notes = "",
+            repeat = 0,
+            priority = 0,
+            startedAtMillis = null,
+            completedAtMillis = null,
+        )
+        val primary = RecordingPrimary(entry = entry)
+        val sink = RecordingSink()
+        val repository = MirroringMediaListEntryRepository(primary, sink)
+
+        repository.saveEntry(
+            mediaRef = aniListRef(7),
+            status = MediaListStatus.PLANNING,
+            progress = 0,
+            progressVolumes = null,
+            score = 0f,
+            advancedScores = null,
+            notes = "",
+            repeat = 0,
+            priority = 0,
+            isPrivate = false,
+            hiddenFromStatusLists = false,
+            startedAtMillis = null,
+            completedAtMillis = null,
+            mediaType = MediaType.ANIME,
+            changedFields = null,
+        )
+
+        assertEquals(
+            setOf(MirrorField.STATUS, MirrorField.PROGRESS, MirrorField.PROGRESS_VOLUMES),
+            sink.calls.single().fields,
+        )
     }
 
     @Test
@@ -199,6 +299,7 @@ class MirroringMediaListEntryRepositoryTest {
             startedAtMillis = null,
             completedAtMillis = null,
             mediaType = MediaType.ANIME,
+            changedFields = null,
         )
 
         assertTrue(sink.calls.isEmpty())
@@ -233,6 +334,7 @@ class MirroringMediaListEntryRepositoryTest {
             startedAtMillis = null,
             completedAtMillis = null,
             mediaType = MediaType.ANIME,
+            changedFields = null,
         )
 
         assertTrue(result is NetworkResult.Success)

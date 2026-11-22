@@ -194,6 +194,7 @@ internal class MediaListEntryRepositoryImpl(
         startedAtMillis: Long?,
         completedAtMillis: Long?,
         mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> {
         val mediaId = mediaRef.requireAniListId()
         val variables = buildMap<String, JsonElement> {

@@ -51,6 +51,7 @@ internal class MalMediaListEntryRepository(
         startedAtMillis: Long?,
         completedAtMillis: Long?,
         mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> {
         val aniListId = mediaRef.requireAniListId()
         val ref = when (val resolved = malRefFor(aniListId)) {

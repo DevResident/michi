@@ -81,6 +81,50 @@ private fun malEntry(
     completedAt = null,
 )
 
+private fun aniListEntry(notes: String = "note") = MirrorEntry(
+    sourceProvider = ProviderId.Mal,
+    aniListId = 10,
+    malId = 20,
+    type = MediaType.ANIME,
+    status = MediaListStatus.CURRENT,
+    progress = 4,
+    progressVolumes = null,
+    score = 8f,
+    scoreFormat = ScoreFormat.POINT_10,
+    repeat = 2,
+    priority = 2,
+    notes = notes,
+    isPrivate = false,
+    isRewatching = false,
+    startedAt = MirrorDate(2024, 5),
+    completedAt = null,
+)
+
+private fun malMirrorRepository(onBody: (Parameters) -> Unit): MalMediaListEntryRepository =
+    MalMediaListEntryRepository(
+        bridge = EmptyBridge(),
+        client = MalEntryClient(
+            http = MalHttp(
+                httpClient = HttpClientForTest {
+                    onBody(formOf(it))
+                    respond(
+                        """{"status":"watching","score":0,"num_episodes_watched":4}""",
+                        HttpStatusCode.OK,
+                    )
+                },
+                clientId = "test",
+                redirectUri = "michi://oauth/callback",
+            ),
+            bridge = EmptyBridge(),
+            tokenProvider = {
+                com.luum.michi.app.core.auth.domain.AuthToken(
+                    accessToken = "token",
+                    savedAtEpochSeconds = currentEpochSeconds(),
+                )
+            },
+        ),
+    )
+
 class MirrorWriterTest {
 
     @Test
@@ -217,6 +261,59 @@ class MirrorWriterTest {
         assertFalse("hiddenFromStatusLists" in variables)
         assertFalse("advancedScores" in variables)
         assertEquals(1, graphQL.requests.size)
+    }
+
+    @Test
+    fun malMirrorWithStatusOnlyWritesOnlyStatus() = runBlocking {
+        var body: Parameters? = null
+        val repository = malMirrorRepository { body = it }
+        val entry = malEntry(MediaType.ANIME)
+        val values = assertNotNull(MirrorTranslator.toMal(entry))
+
+        val result = repository.saveMirror(entry, values, setOf(MirrorField.STATUS))
+
+        assertTrue(result is NetworkResult.Success)
+        val sent = assertNotNull(body)
+        assertEquals("watching", sent["status"])
+        assertNull(sent["comments"], "an untouched note is never copied")
+        assertNull(sent["score"], "an untouched score is never copied")
+        assertNull(sent["num_watched_episodes"], "an untouched progress is never copied")
+        assertNull(sent["priority"])
+        assertNull(sent["num_times_rewatched"])
+        assertNull(sent["start_date"])
+        assertNull(sent["finish_date"])
+    }
+
+    @Test
+    fun aniListMirrorWithStatusOnlyWritesOnlyStatus() = runBlocking {
+        val graphQL = FakeGraphQL(
+            listOf(AniListJson.parseToJsonElement("""{"SaveMediaListEntry":{"id":1}}""")),
+        )
+        val repository = MediaListEntryRepositoryImpl(graphQL, UnsupportedFavouriteRepository())
+        val entry = aniListEntry()
+        val values = assertNotNull(MirrorTranslator.toAniList(entry, ScoreFormat.POINT_100))
+
+        val result = repository.saveMirror(entry, values, setOf(MirrorField.STATUS))
+
+        assertTrue(result is NetworkResult.Success)
+        val variables = assertNotNull(graphQL.requests.single().variables)
+        assertEquals(setOf("mediaId", "status"), variables.keys)
+        assertEquals("CURRENT", variables["status"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun aniListMirrorClearsASelectedEmptyNote() = runBlocking {
+        val graphQL = FakeGraphQL(
+            listOf(AniListJson.parseToJsonElement("""{"SaveMediaListEntry":{"id":1}}""")),
+        )
+        val repository = MediaListEntryRepositoryImpl(graphQL, UnsupportedFavouriteRepository())
+        val entry = aniListEntry(notes = "")
+        val values = assertNotNull(MirrorTranslator.toAniList(entry, ScoreFormat.POINT_100))
+
+        repository.saveMirror(entry, values, setOf(MirrorField.NOTES))
+
+        val variables = assertNotNull(graphQL.requests.single().variables)
+        assertEquals("", variables["notes"]?.jsonPrimitive?.content)
     }
 }
 

@@ -9,6 +9,7 @@ import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.medialist.domain.MirrorSink
+import com.luum.michi.app.core.medialist.domain.emptySensitiveFields
 import com.luum.michi.app.core.network.domain.NetworkResult
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -38,6 +39,7 @@ internal class MirroringMediaListEntryRepository(
         startedAtMillis: Long?,
         completedAtMillis: Long?,
         mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> {
         val result = primary.saveEntry(
             mediaRef = mediaRef,
@@ -54,10 +56,12 @@ internal class MirroringMediaListEntryRepository(
             startedAtMillis = startedAtMillis,
             completedAtMillis = completedAtMillis,
             mediaType = mediaType,
+            changedFields = changedFields,
         )
         if (result is NetworkResult.Success) {
             if (!result.value.isPrivate || mediaRef.provider == ProviderId.Mal) {
-                enqueueBestEffort(mediaRef, mediaType, result.value, AllMirrorFields)
+                val fields = changedFields ?: nonEmptyFields(result.value)
+                enqueueBestEffort(mediaRef, mediaType, result.value, fields)
             }
         }
         return result
@@ -99,6 +103,23 @@ internal class MirroringMediaListEntryRepository(
         entryId: Int,
         mediaRef: EntityRef,
     ): NetworkResult<Unit> = primary.deleteEntry(entryId, mediaRef)
+
+    /**
+     * A new entry or an older caller has no changed-field set: copy every field
+     * except the empty/zero ones the other account must keep (same rule as the
+     * compare preview). An explicit editor clear is never filtered here.
+     */
+    private fun nonEmptyFields(entry: MediaListViewerEntry): Set<MirrorField> {
+        val empty = emptySensitiveFields(
+            notes = entry.notes,
+            priority = entry.priority,
+            repeat = entry.repeat,
+            score = entry.score,
+            hasStartedAt = entry.startedAtDate != null || entry.startedAtMillis != null,
+            hasCompletedAt = entry.completedAtDate != null || entry.completedAtMillis != null,
+        )
+        return AllMirrorFields - empty
+    }
 
     private suspend fun enqueueBestEffort(
         mediaRef: EntityRef,

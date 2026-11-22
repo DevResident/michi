@@ -6,6 +6,7 @@ import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.network.domain.NetworkResult
 
 /** Writes to the provider that owns the current session. */
@@ -33,6 +34,7 @@ internal class ProviderRoutingMediaListEntryRepository(
         startedAtMillis: Long?,
         completedAtMillis: Long?,
         mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> = target().saveEntry(
         mediaRef = mediaRef,
         status = status,
@@ -48,6 +50,7 @@ internal class ProviderRoutingMediaListEntryRepository(
         startedAtMillis = startedAtMillis,
         completedAtMillis = completedAtMillis,
         mediaType = mediaType,
+        changedFields = changedFields,
     )
 
     override suspend fun saveProgress(

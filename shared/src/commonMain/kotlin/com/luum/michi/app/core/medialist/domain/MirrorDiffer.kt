@@ -283,38 +283,32 @@ internal object MirrorDiffer {
     private fun protectEmptyFields(
         after: MirrorPreviewValues,
         before: MirrorPreviewValues,
-    ): MirrorPreviewValues = after.copy(
-        notes = if (after.notes.isBlank() && before.notes.isNotBlank()) {
-            before.notes
-        } else {
-            after.notes
-        },
-        startedAt = if (after.startedAt == null && before.startedAt != null) {
-            before.startedAt
-        } else {
-            after.startedAt
-        },
-        completedAt = if (after.completedAt == null && before.completedAt != null) {
-            before.completedAt
-        } else {
-            after.completedAt
-        },
-        priority = if (after.priority == 0 && before.priority != 0) {
-            before.priority
-        } else {
-            after.priority
-        },
-        score = if (after.score <= 0f && before.score > 0f) {
-            before.score
-        } else {
-            after.score
-        },
-        repeat = if (after.repeat == 0 && before.repeat != 0) {
-            before.repeat
-        } else {
-            after.repeat
-        },
-    )
+    ): MirrorPreviewValues {
+        val empty = emptySensitiveFields(
+            notes = after.notes,
+            priority = after.priority,
+            repeat = after.repeat,
+            score = after.score,
+            hasStartedAt = after.startedAt != null,
+            hasCompletedAt = after.completedAt != null,
+        )
+        return after.copy(
+            notes = if (MirrorField.NOTES in empty) before.notes else after.notes,
+            startedAt = if (MirrorField.STARTED_AT in empty) {
+                before.startedAt
+            } else {
+                after.startedAt
+            },
+            completedAt = if (MirrorField.COMPLETED_AT in empty) {
+                before.completedAt
+            } else {
+                after.completedAt
+            },
+            priority = if (MirrorField.PRIORITY in empty) before.priority else after.priority,
+            score = if (MirrorField.SCORE in empty) before.score else after.score,
+            repeat = if (MirrorField.REPEAT in empty) before.repeat else after.repeat,
+        )
+    }
 
     private fun changedFields(
         after: MirrorPreviewValues,

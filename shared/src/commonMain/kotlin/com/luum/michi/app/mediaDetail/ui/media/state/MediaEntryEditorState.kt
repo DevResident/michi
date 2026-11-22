@@ -12,12 +12,14 @@ import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.mediaDetail.domain.media.model.MediaEntryEditorData
 import com.luum.michi.app.mediaDetail.domain.media.model.MediaDetailType
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.model.todayCalendarMillis
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 internal class MediaEntryEditorState(
     private val entryRepository: MediaListEntryRepository,
@@ -274,6 +276,33 @@ internal class MediaEntryEditorState(
         completedAtMillis = completedAtMillis,
     )
 
+    /**
+     * What the automatic mirror may copy: only fields whose value differs from
+     * the loaded entry. A deliberate clear is included (the field is changed),
+     * while a new entry returns null so the repository applies the shared
+     * empty-value rule. Score uses the differ's tolerance.
+     */
+    private fun changedMirrorFields(): Set<MirrorField>? {
+        if (!isExisting) return null
+        val before = saveBaseline ?: return null
+        val after = snapshot()
+        return buildSet {
+            if (after.status != before.status) add(MirrorField.STATUS)
+            if (after.progress != before.progress) add(MirrorField.PROGRESS)
+            if (after.progressVolumes != before.progressVolumes) {
+                add(MirrorField.PROGRESS_VOLUMES)
+            }
+            if (abs(after.score - before.score) > 0.01f) add(MirrorField.SCORE)
+            if (after.notes != before.notes) add(MirrorField.NOTES)
+            if (after.priority != before.priority) add(MirrorField.PRIORITY)
+            if (after.repeat != before.repeat) add(MirrorField.REPEAT)
+            if (after.startedAtMillis != before.startedAtMillis) add(MirrorField.STARTED_AT)
+            if (after.completedAtMillis != before.completedAtMillis) {
+                add(MirrorField.COMPLETED_AT)
+            }
+        }
+    }
+
     fun toggleFavourite() {
         if (isTogglingFavourite || isLoadingDetail || data == null) return
         val previous = isFavourite
@@ -305,6 +334,7 @@ internal class MediaEntryEditorState(
         if (isBusy || data == null) return
         isSaving = true
         error = null
+        val changedFields = changedMirrorFields()
         scope.launch {
             val result = entryRepository.saveEntry(
                 mediaRef = aniListRef(mediaId),
@@ -325,6 +355,7 @@ internal class MediaEntryEditorState(
                 startedAtMillis = startedAtMillis,
                 completedAtMillis = completedAtMillis,
                 mediaType = if (isManga) MediaType.MANGA else MediaType.ANIME,
+                changedFields = changedFields,
             )
             when (result) {
                 is NetworkResult.Success -> onSaved()

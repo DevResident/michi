@@ -172,6 +172,7 @@ private suspend fun MalMediaListEntryRepository.save(
     startedAtMillis = startedAtMillis,
     completedAtMillis = completedAtMillis,
     mediaType = mediaType,
+    changedFields = null,
 )
 
 class MalMediaListEntryRepositoryTest {

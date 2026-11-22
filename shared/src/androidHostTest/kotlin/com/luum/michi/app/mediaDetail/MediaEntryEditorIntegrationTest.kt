@@ -10,8 +10,12 @@ import com.luum.michi.app.core.favourite.repository.FavouriteRepositoryImpl
 import com.luum.michi.app.core.favourite.domain.FavouriteTarget
 import com.luum.michi.app.core.language.domain.EnglishStrings
 import com.luum.michi.app.core.language.domain.LanguageStrings
+import com.luum.michi.app.core.media.domain.EntityRef
+import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.mediaDetail.domain.media.MediaDetailRepository
@@ -91,6 +95,52 @@ private fun existingEntry() = MediaListViewerEntry(
     completedAtMillis = null,
 )
 
+private class RecordingEntryRepository(
+    private val savedEntry: MediaListViewerEntry,
+) : MediaListEntryRepository {
+    var changedFields: Set<MirrorField>? = null
+        private set
+
+    override suspend fun saveEntry(
+        mediaRef: EntityRef,
+        status: MediaListStatus,
+        progress: Int,
+        progressVolumes: Int?,
+        score: Float,
+        advancedScores: List<Float>?,
+        notes: String,
+        repeat: Int,
+        priority: Int,
+        isPrivate: Boolean,
+        hiddenFromStatusLists: Boolean,
+        startedAtMillis: Long?,
+        completedAtMillis: Long?,
+        mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
+    ): NetworkResult<MediaListViewerEntry> {
+        this.changedFields = changedFields
+        return NetworkResult.Success(savedEntry)
+    }
+
+    override suspend fun saveProgress(
+        mediaRef: EntityRef,
+        progress: Int?,
+        status: MediaListStatus?,
+        progressVolumes: Int?,
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
+
+    override suspend fun toggleFavourite(
+        mediaRef: EntityRef,
+        isManga: Boolean,
+    ): NetworkResult<Unit> = NetworkResult.Failure(NetworkError.Unknown(null))
+
+    override suspend fun deleteEntry(
+        entryId: Int,
+        mediaRef: EntityRef,
+    ): NetworkResult<Unit> = NetworkResult.Failure(NetworkError.Unknown(null))
+}
+
 private fun editorWired(
     graphQL: FakeGraphQL,
     viewerEntry: MediaListViewerEntry?,
@@ -104,8 +154,10 @@ private fun editorWired(
     onFavouriteChanged: (FavouriteTarget, Boolean) -> Unit = { _, _ -> },
     favouriteFromDetail: () -> Boolean? = { null },
     todayMillis: () -> Long = { TODAY },
+    entryRepository: MediaListEntryRepository? = null,
 ): MediaEntryEditorState = MediaEntryEditorState(
-    entryRepository = MediaListEntryRepositoryImpl(graphQL, FavouriteRepositoryImpl(graphQL)),
+    entryRepository = entryRepository
+        ?: MediaListEntryRepositoryImpl(graphQL, FavouriteRepositoryImpl(graphQL)),
     detailRepository = StubDetailRepository(editorData(viewerEntry)),
     scope = CoroutineScope(Dispatchers.Unconfined),
     mediaId = mediaId,
@@ -203,6 +255,86 @@ class MediaEntryEditorIntegrationTest {
         val variables = graphQL.requests.single().variables
         assertEquals("COMPLETED", variables?.get("status")?.toString()?.trim('"'))
         assertEquals(101, variables?.get("mediaId")?.toString()?.toInt())
+    }
+
+    @Test
+    fun statusOnlyEditPassesOnlyStatusToTheMirror() {
+        val repository = RecordingEntryRepository(existingEntry())
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = existingEntry(),
+            entryRepository = repository,
+        )
+
+        editor.load()
+        editor.updateStatus(MediaListStatus.PAUSED)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(setOf(MirrorField.STATUS), repository.changedFields)
+    }
+
+    @Test
+    fun clearingTheNotePassesOnlyNotesToTheMirror() {
+        val repository = RecordingEntryRepository(existingEntry())
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = existingEntry(),
+            entryRepository = repository,
+        )
+
+        editor.load()
+        editor.updateNotes("")
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(setOf(MirrorField.NOTES), repository.changedFields)
+    }
+
+    @Test
+    fun completionAutomationPassesStatusProgressAndEndDateOnly() {
+        val repository = RecordingEntryRepository(existingEntry())
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = existingEntry(),
+            entryRepository = repository,
+        )
+
+        editor.load()
+        editor.updateStatus(MediaListStatus.COMPLETED)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(
+            setOf(
+                MirrorField.STATUS,
+                MirrorField.PROGRESS,
+                MirrorField.COMPLETED_AT,
+            ),
+            repository.changedFields,
+            "the editor's own prefill is a change, but never notes, score or priority",
+        )
+    }
+
+    @Test
+    fun scoreWithinTheDifferToleranceIsNotAChangedField() {
+        val repository = RecordingEntryRepository(existingEntry())
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = existingEntry(),
+            entryRepository = repository,
+        )
+
+        editor.load()
+        editor.updateScore(8.005f)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(emptySet(), repository.changedFields)
     }
 
     @Test

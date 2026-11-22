@@ -20,6 +20,12 @@ internal interface MediaListEntryRepository {
         startedAtMillis: Long?,
         completedAtMillis: Long?,
         mediaType: MediaType,
+        /**
+         * Fields the user actually changed. The automatic mirror copies only
+         * these; null (a new entry or an older caller) means all non-empty
+         * fields.
+         */
+        changedFields: Set<MirrorField>? = null,
     ): NetworkResult<MediaListViewerEntry>
 
     /**
