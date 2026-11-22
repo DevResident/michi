@@ -286,6 +286,7 @@ class MichiDependencies internal constructor(
                 // an explicit, best-effort privacy wipe on logout/401/expired token.
                 mediaListCache.clear()
                 profileCache.clear()
+                malEntryClient.clear()
             },
         )
 

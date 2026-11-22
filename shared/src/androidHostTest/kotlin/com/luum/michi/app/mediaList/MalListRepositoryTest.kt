@@ -180,11 +180,16 @@ class MalListRepositoryTest {
         val engine = MockEngine { request ->
             requests++
             assertEquals("Bearer token", request.headers["Authorization"])
-            assertEquals("list_status", request.url.parameters["fields"])
+            val fields = request.url.parameters["fields"].orEmpty()
+            assertTrue(fields.startsWith("list_status"), "fields=$fields")
             assertEquals("true", request.url.parameters["nsfw"])
             when (request.url.parameters["offset"]) {
                 null -> {
                     assertEquals("1000", request.url.parameters["limit"])
+                    // MAL omits these subfields unless they are named.
+                    for (sub in listOf("priority", "num_times_rewatched", "comments")) {
+                        assertTrue(sub in fields, "the list must ask for $sub")
+                    }
                     respond(
                         malPage(
                             entries = listOf(

@@ -44,6 +44,19 @@ private val MalJson = Json {
 private const val MalListPageLimit = 1000
 private const val MalMaxListPages = 100
 
+/*
+ * MAL only returns some list-status subfields when they are named explicitly
+ * (the API says "by default, the API doesn't return all fields"). Without
+ * priority, comments and the rewatch count, the editor would open with empty
+ * values. Always name every subfield Michi reads.
+ */
+private const val MalAnimeStatusFields =
+    "status,score,num_episodes_watched,is_rewatching,updated_at,start_date,finish_date," +
+        "priority,num_times_rewatched,comments"
+private const val MalMangaStatusFields =
+    "status,score,num_chapters_read,num_volumes_read,is_rereading,updated_at,start_date,finish_date," +
+        "priority,num_times_reread,comments"
+
 /**
  * MyAnimeList's REST calls: code exchange, refresh, viewer and user lists.
  * Uses the shared Ktor client and its own conservative 60/min limiter (MAL does
@@ -181,9 +194,9 @@ internal class MalHttp(
         val path = if (ref.type == MediaType.MANGA) "manga" else "anime"
         if (!includeStatus) return "${MalOAuthConfig.ApiBaseUrl}/$path/${ref.malId}/my_list_status"
         val fields = if (ref.type == MediaType.MANGA) {
-            "my_list_status,num_chapters,num_volumes"
+            "my_list_status{$MalMangaStatusFields},num_chapters,num_volumes"
         } else {
-            "my_list_status,num_episodes"
+            "my_list_status{$MalAnimeStatusFields},num_episodes"
         }
         return URLBuilder("${MalOAuthConfig.ApiBaseUrl}/$path/${ref.malId}").apply {
             parameters.append("fields", fields)
@@ -237,7 +250,8 @@ internal class MalHttp(
     ): NetworkResult<List<MalListEntry>> {
         val entries = mutableListOf<MalListEntry>()
         val visited = mutableSetOf<String>()
-        var url = buildListUrl(path)
+        val listFields = listFields(isManga)
+        var url = buildListUrl(path, listFields)
         var pages = 0
 
         while (true) {
@@ -269,16 +283,19 @@ internal class MalHttp(
                             ),
                         )
                     }
-                    url = ensureListQuery(next)
+                    url = ensureListQuery(next, listFields)
                 }
             }
         }
         return NetworkResult.Success(entries)
     }
 
-    private fun buildListUrl(path: String): String =
+    private fun listFields(isManga: Boolean): String =
+        "list_status{${if (isManga) MalMangaStatusFields else MalAnimeStatusFields}}"
+
+    private fun buildListUrl(path: String, fields: String): String =
         URLBuilder("${MalOAuthConfig.ApiBaseUrl}/users/@me/$path").apply {
-            parameters.append("fields", "list_status")
+            parameters.append("fields", fields)
             parameters.append("limit", MalListPageLimit.toString())
             parameters.append("nsfw", "true")
         }.buildString()
@@ -292,8 +309,8 @@ internal class MalHttp(
         false
     }
 
-    private fun ensureListQuery(url: String): String = URLBuilder(url).apply {
-        if (parameters["fields"] == null) parameters.append("fields", "list_status")
+    private fun ensureListQuery(url: String, fields: String): String = URLBuilder(url).apply {
+        if (parameters["fields"] == null) parameters.append("fields", fields)
         if (parameters["nsfw"] == null) parameters.append("nsfw", "true")
     }.buildString()
 

@@ -8,13 +8,23 @@ import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.repository.MediaIdBridge
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The shared read/write gateway for one account's MAL entries. It also keeps
- * the raw date strings of the last read **in memory**: MAL allows partial dates
- * (`YYYY`, `YYYY-MM`) while the editor only holds full millis, so a save must
- * not rewrite a date the user did not touch. When the incoming date equals the
- * normalized raw date, the field is omitted from the partial PATCH.
+ * the last read of each entry **in memory**, so a save only rewrites what the
+ * user actually changed:
+ * - MAL allows partial dates (`YYYY`, `YYYY-MM`) while the editor only holds
+ *   full millis. When the incoming date equals the normalized raw date, the
+ *   field is omitted from the partial PATCH.
+ * - Comments, priority and the rewatch/reread count are omitted when they equal
+ *   the last read. If MAL ever leaves them out of a read, the editor shows the
+ *   empty default and an untouched save cannot wipe the real value.
+ * Without a previous read, an empty date, empty comments, priority 0 and
+ * repeat 0 are never sent: nothing is cleared that the user was not shown.
+ *
+ * [clear] drops the memory; the session calls it with the other user data.
  */
 internal class MalEntryClient(
     private val http: MalHttp,
@@ -22,9 +32,21 @@ internal class MalEntryClient(
     private val tokenProvider: suspend () -> AuthToken?,
     private val onUnauthorized: suspend (AuthToken) -> Unit = {},
 ) {
-    private data class RawDates(val start: String?, val finish: String?)
+    private data class LastRead(
+        val start: String?,
+        val finish: String?,
+        val comments: String,
+        val priority: Int,
+        val repeat: Int,
+    )
 
-    private val rawDates = mutableMapOf<Int, RawDates>()
+    private val lastReads = mutableMapOf<Int, LastRead>()
+    private val lastReadsMutex = Mutex()
+
+    /** Forgets every remembered read (logout, 401, account switch). */
+    suspend fun clear() {
+        lastReadsMutex.withLock { lastReads.clear() }
+    }
 
     suspend fun read(
         aniListId: Int,
@@ -44,7 +66,7 @@ internal class MalEntryClient(
         val token = tokenProvider() ?: return NetworkResult.Failure(NetworkError.Unauthorized(null))
         return when (val result = http.fetchEntry(token, ref)) {
             is NetworkResult.Success -> {
-                rememberRawDates(aniListId, result.value)
+                remember(aniListId, ref.type, result.value)
                 result
             }
             is NetworkResult.Failure -> {
@@ -64,10 +86,10 @@ internal class MalEntryClient(
         update: MalEntryUpdate,
     ): NetworkResult<MalEntryStatus> {
         val token = tokenProvider() ?: return NetworkResult.Failure(NetworkError.Unauthorized(null))
-        val adjusted = adjustUntouchedDates(aniListId, update)
+        val adjusted = omitUntouched(aniListId, update)
         return when (val result = http.patchEntry(token, ref, adjusted)) {
             is NetworkResult.Success -> {
-                rememberRawDates(aniListId, result.value)
+                remember(aniListId, ref.type, result.value)
                 result
             }
             is NetworkResult.Failure -> {
@@ -85,7 +107,7 @@ internal class MalEntryClient(
         val token = tokenProvider() ?: return NetworkResult.Failure(NetworkError.Unauthorized(null))
         return when (val result = http.deleteEntry(token, ref)) {
             is NetworkResult.Success -> {
-                rawDates.remove(aniListId)
+                lastReadsMutex.withLock { lastReads.remove(aniListId) }
                 result
             }
             is NetworkResult.Failure -> {
@@ -95,24 +117,37 @@ internal class MalEntryClient(
         }
     }
 
-    private fun rememberRawDates(aniListId: Int, status: MalEntryStatus?) {
-        rawDates[aniListId] = if (status == null) {
-            RawDates(start = null, finish = null)
+    private suspend fun remember(aniListId: Int, type: MediaType, status: MalEntryStatus?) {
+        val read = if (status == null) {
+            LastRead(start = null, finish = null, comments = "", priority = 0, repeat = 0)
         } else {
-            RawDates(start = status.startDate, finish = status.finishDate)
+            LastRead(
+                start = status.startDate,
+                finish = status.finishDate,
+                comments = status.comments.orEmpty(),
+                priority = status.priority ?: 0,
+                repeat = if (type == MediaType.MANGA) status.numTimesReread else status.numTimesRewatched,
+            )
         }
+        lastReadsMutex.withLock { lastReads[aniListId] = read }
     }
 
-    private fun adjustUntouchedDates(aniListId: Int, update: MalEntryUpdate): MalEntryUpdate {
-        val raw = rawDates[aniListId]
-            // Unknown raw state: never clear a date the user was not shown.
+    private suspend fun omitUntouched(aniListId: Int, update: MalEntryUpdate): MalEntryUpdate {
+        val read = lastReadsMutex.withLock { lastReads[aniListId] }
+            // Unknown state: never clear anything the user was not shown.
             ?: return update.copy(
                 startDate = update.startDate?.takeIf { it.isNotEmpty() },
                 finishDate = update.finishDate?.takeIf { it.isNotEmpty() },
+                comments = update.comments?.takeIf { it.isNotEmpty() },
+                priority = update.priority?.takeIf { it != 0 },
+                repeat = update.repeat?.takeIf { it != 0 },
             )
         return update.copy(
-            startDate = adjustDate(update.startDate, raw.start),
-            finishDate = adjustDate(update.finishDate, raw.finish),
+            startDate = adjustDate(update.startDate, read.start),
+            finishDate = adjustDate(update.finishDate, read.finish),
+            comments = update.comments?.takeIf { it != read.comments },
+            priority = update.priority?.takeIf { it != read.priority },
+            repeat = update.repeat?.takeIf { it != read.repeat },
         )
     }
 

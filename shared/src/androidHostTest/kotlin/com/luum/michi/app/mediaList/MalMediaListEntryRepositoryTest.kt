@@ -393,6 +393,168 @@ class MalMediaListEntryRepositoryTest {
     }
 
     @Test
+    fun theEntryReadNamesEveryListStatusSubfield() = runBlocking {
+        var fields: String? = null
+        val harness = Harness(
+            engine {
+                fields = it.url.parameters["fields"]
+                respond(statusBody(), HttpStatusCode.OK)
+            },
+        )
+
+        harness.client.read(100, MediaType.ANIME, 123)
+
+        val asked = assertNotNull(fields)
+        assertTrue(asked.startsWith("my_list_status{"), "fields=$asked")
+        for (sub in listOf("comments", "priority", "num_times_rewatched", "start_date", "finish_date")) {
+            assertTrue(sub in asked, "the read must ask for $sub")
+        }
+    }
+
+    @Test
+    fun untouchedCommentsPriorityAndRepeatAreNotSent() = runBlocking {
+        var patchBody: Parameters? = null
+        val harness = Harness(
+            engine { request ->
+                when (request.method) {
+                    HttpMethod.Get -> respond(
+                        statusBody(comments = "keep me", priority = 2, timesRewatched = 3),
+                        HttpStatusCode.OK,
+                    )
+                    HttpMethod.Patch -> {
+                        patchBody = formOf(request)
+                        respond(statusJson(status = "completed").toString(), HttpStatusCode.OK)
+                    }
+                    else -> error("unexpected method")
+                }
+            },
+        )
+        harness.client.read(100, MediaType.ANIME, 123)
+
+        val result = harness.repository.save(
+            status = MediaListStatus.COMPLETED,
+            notes = "keep me",
+            priority = 2,
+            repeat = 3,
+        )
+
+        assertTrue(result is NetworkResult.Success)
+        val body = assertNotNull(patchBody)
+        assertEquals("completed", body["status"])
+        assertNull(body["comments"])
+        assertNull(body["priority"])
+        assertNull(body["num_times_rewatched"])
+    }
+
+    @Test
+    fun aReadWithoutTheSubfieldsCannotWipeThem() = runBlocking {
+        var patchBody: Parameters? = null
+        val harness = Harness(
+            engine { request ->
+                when (request.method) {
+                    // A read that leaves the subfields out: the editor shows defaults.
+                    HttpMethod.Get -> respond(
+                        buildJsonObject {
+                            put(
+                                "my_list_status",
+                                buildJsonObject {
+                                    put("status", "watching")
+                                    put("score", 8)
+                                    put("num_episodes_watched", 5)
+                                },
+                            )
+                        }.toString(),
+                        HttpStatusCode.OK,
+                    )
+                    HttpMethod.Patch -> {
+                        patchBody = formOf(request)
+                        respond(statusJson().toString(), HttpStatusCode.OK)
+                    }
+                    else -> error("unexpected method")
+                }
+            },
+        )
+        harness.client.read(100, MediaType.ANIME, 123)
+
+        harness.repository.save(score = 9f, notes = "", priority = 0, repeat = 0)
+
+        val body = assertNotNull(patchBody)
+        assertEquals("9", body["score"])
+        assertNull(body["comments"], "empty comments must not overwrite MAL")
+        assertNull(body["priority"])
+        assertNull(body["num_times_rewatched"])
+    }
+
+    @Test
+    fun changedCommentsPriorityAndRepeatAreSent() = runBlocking {
+        var patchBody: Parameters? = null
+        val harness = Harness(
+            engine { request ->
+                when (request.method) {
+                    HttpMethod.Get -> respond(
+                        statusBody(comments = "old", priority = 2, timesRewatched = 3),
+                        HttpStatusCode.OK,
+                    )
+                    HttpMethod.Patch -> {
+                        patchBody = formOf(request)
+                        respond(statusJson().toString(), HttpStatusCode.OK)
+                    }
+                    else -> error("unexpected method")
+                }
+            },
+        )
+        harness.client.read(100, MediaType.ANIME, 123)
+
+        harness.repository.save(notes = "", priority = 0, repeat = 0)
+
+        val body = assertNotNull(patchBody)
+        assertEquals("", body["comments"], "a deliberate clear is sent")
+        assertEquals("0", body["priority"])
+        assertEquals("0", body["num_times_rewatched"])
+    }
+
+    @Test
+    fun withoutAReadEmptyDefaultsAreNotSent() = runBlocking {
+        var patchBody: Parameters? = null
+        val harness = Harness(
+            engine {
+                patchBody = formOf(it)
+                respond(statusJson().toString(), HttpStatusCode.OK)
+            },
+        )
+
+        harness.repository.save(notes = "", priority = 0, repeat = 0)
+
+        val body = assertNotNull(patchBody)
+        assertNull(body["comments"])
+        assertNull(body["priority"])
+        assertNull(body["num_times_rewatched"])
+    }
+
+    @Test
+    fun clearForgetsTheLastRead() = runBlocking {
+        var patchBody: Parameters? = null
+        val harness = Harness(
+            engine { request ->
+                when (request.method) {
+                    HttpMethod.Get -> respond(statusBody(comments = "old"), HttpStatusCode.OK)
+                    HttpMethod.Patch -> {
+                        patchBody = formOf(request)
+                        respond(statusJson().toString(), HttpStatusCode.OK)
+                    }
+                    else -> error("unexpected method")
+                }
+            },
+        )
+        harness.client.read(100, MediaType.ANIME, 123)
+        harness.client.clear()
+
+        harness.repository.save(notes = "")
+
+        assertNull(assertNotNull(patchBody)["comments"], "no read left, so nothing is cleared")
+    }
+
+    @Test
     fun toggleFavouriteIsUnsupported() = runBlocking {
         val harness = Harness(engine { error("must not call the network") })
 
