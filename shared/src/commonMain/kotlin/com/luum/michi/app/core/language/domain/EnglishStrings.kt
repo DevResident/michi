@@ -302,7 +302,7 @@ object EnglishStrings : LanguageStrings {
     override val settingsAboutTitle = "About Michi"
     override val settingsAboutVersionLabel = "Version"
     override val aboutTagline =
-        "Your anime and manga in one clean, fast place, always in sync with AniList."
+        "Your anime and manga in one clean, fast place, always in sync with AniList and MyAnimeList."
     override val aboutChipFree = "Free"
     override val aboutChipNoAds = "No ads"
     override val aboutChipOpenSource = "Open source"

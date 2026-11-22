@@ -304,7 +304,7 @@ object SpanishStrings : LanguageStrings {
     override val settingsAboutTitle = "Acerca de Michi"
     override val settingsAboutVersionLabel = "Versión"
     override val aboutTagline =
-        "Tu anime y manga en un solo lugar limpio y rápido, siempre sincronizado con AniList."
+        "Tu anime y manga en un solo lugar limpio y rápido, siempre sincronizado con AniList y MyAnimeList."
     override val aboutChipFree = "Gratis"
     override val aboutChipNoAds = "Sin anuncios"
     override val aboutChipOpenSource = "Código abierto"
