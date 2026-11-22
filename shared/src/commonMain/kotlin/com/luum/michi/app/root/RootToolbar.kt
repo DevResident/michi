@@ -402,6 +402,7 @@ private fun toolbarTitle(
 ): String = if (state.isOpen(RootOverlay.Settings)) {
     when {
         state.settingsMirrorOpen -> strings.mirrorSyncTitle
+        state.settingsAccountsOpen -> strings.accountsTitle
         state.settingsAboutOpen -> strings.settingsAboutTitle
         else -> strings.settingsTitle
     }

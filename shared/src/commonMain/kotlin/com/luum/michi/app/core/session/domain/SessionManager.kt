@@ -5,6 +5,8 @@ import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.TokenStorage
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.media.domain.ProviderId
+import com.luum.michi.app.core.medialist.domain.ScoreFormat
+import com.luum.michi.app.core.medialist.domain.parseScoreFormat
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,26 +16,22 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Coordinates the active provider's token with the current `Viewer`.
+ * Owns every connected account: the followed provider's token/viewer, the other
+ * provider's token, and the transitions between them.
  *
- * Lifecycle:
- *  - `bootstrap()` is called at app start: load the active provider's token,
- *    refresh it when needed, then emit the cached viewer (and refresh in the
- *    background) or fetch it.
- *  - `onOAuthCallback(uri)` is called after a provider redirects back; the
- *    provider that recognizes the URI owns the new session.
- *  - `logout()` clears every token + cache and returns to `Anonymous`.
- *  - `validToken(provider)` is a client's token provider: it returns the active
- *    token only for the requested provider (a MAL session never leaks its token
- *    to AniList), refreshes it with a 60 s margin, single-flight.
- *  - `onUnauthorized(token)` closes the session only if that token is still
- *    the active one.
+ * - `validToken(provider)` is the session-client seam: it only returns the
+ *   followed provider's token, so a MAL session never leaks to AniList.
+ * - [mirrorTokens] is the mirror-only seam: it resolves the token of any
+ *   connected provider, but the mirror clients are constructed bound to one
+ *   provider and never ask for the other.
+ * - `setFollowed` swaps the viewers without login, without touching tokens,
+ *   list caches or the outbox.
+ * - A followed 401 promotes the other account; a last-account 401 closes the
+ *   session. A dead other account is dropped with a notice.
  *
- * Lifecycle ops are serialized by a [Mutex] and tagged with a generation. The
- * lock is held only for state changes — network calls run outside it — so
- * logout/OAuth/401 never wait on the network. A write is dropped when a newer
- * op bumped the generation (a slow bootstrap can never resurrect a stale
- * session).
+ * Lifecycle ops are serialized by [Mutex] and tagged with a generation; network
+ * calls run outside the lock (except token refresh, which is single-flight per
+ * provider in [TokenRefreshCoordinator]).
  */
 internal class SessionManager(
     private val providers: List<AuthProvider>,
@@ -46,16 +44,34 @@ internal class SessionManager(
     private val onSessionClosed: suspend () -> Unit = {},
     private val onSessionAuthenticated: suspend (ProviderId) -> Unit = {},
     private val refresher: TokenRefreshCoordinator = TokenRefreshCoordinator(),
+    private val otherViewerFetchers: Map<ProviderId, suspend (AuthToken) -> NetworkResult<Viewer>> =
+        emptyMap(),
+    private val onClearAccountData: suspend (ProviderId, Int?) -> Unit = { _, _ -> },
+    private val onFollowedChanged: suspend (ProviderId) -> Unit = {},
+    private val onAccountDisconnected: suspend (ProviderId) -> Unit = {},
+    private val events: AccountEvents = AccountEvents(),
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
+
+    private val _connected = MutableStateFlow<List<ConnectedAccount>>(emptyList())
+    val connected: StateFlow<List<ConnectedAccount>> = _connected.asStateFlow()
+
+    private val _followed = MutableStateFlow<ProviderId?>(null)
+    val followed: StateFlow<ProviderId?> = _followed.asStateFlow()
 
     /** The provider whose last login callback failed; cleared on a new login or success. */
     private val _lastLoginError = MutableStateFlow<ProviderId?>(null)
     val lastLoginError: StateFlow<ProviderId?> = _lastLoginError.asStateFlow()
 
+    /** The mirror-only token seam. It is not exposed to any other client. */
+    val mirrorTokens: MirrorTokenSource = MirrorTokenSource { provider ->
+        resolveMirrorToken(provider)
+    }
+
     private val mutex = Mutex()
     private var generation = 0
+    private var followedProvider: ProviderId? = null
 
     private data class BootstrapEntry(
         val generation: Int,
@@ -63,78 +79,123 @@ internal class SessionManager(
         val provider: AuthProvider,
         val token: AuthToken,
         val cached: Viewer?,
+        val orphanOther: LinkedAccount? = null,
+        val lostFollowed: ProviderId? = null,
+        val lostFollowedViewerId: Int? = null,
     )
 
     suspend fun bootstrap() {
         val entry = mutex.withLock {
             val gen = ++generation
-            val providerId = activeProviderId()
-            val provider = providerFor(providerId)
-            val stored = tokenStorages[providerId]?.load()
-            if (provider == null || stored == null) {
-                clearUserData()
-                _state.value = SessionState.Anonymous
+            val stored = activeProviderStore.load()
+            val storedToken = tokenStorages[stored]?.load()
+            val storedUsable = storedToken != null && providerFor(stored) != null
+            val storedCached = cachedViewerStore.load()
+            val other = linkedAccounts?.linked?.value
+            val otherToken = other?.let { tokenStorages[it.provider]?.load() }
+            val otherUsable = other != null && otherToken != null &&
+                providerFor(other.provider) != null
+            val wired = providers.map { it.id }.firstOrNull { tokenStorages[it]?.load() != null }
+            val followed = when {
+                storedUsable -> stored
+                otherUsable -> other.provider
+                wired != null -> wired
+                else -> null
+            }
+            if (followed == null) {
+                clearAllLocked()
                 return@withLock null
             }
-            BootstrapEntry(gen, providerId, provider, stored, cachedViewerStore.load())
+            val lostFollowed = stored.takeIf {
+                !storedUsable && otherUsable && storedCached?.provider == it
+            }
+            if (lostFollowed != null) {
+                linkedAccounts?.setLostAccess(lostFollowed)
+            }
+
+            // A linked record for the followed provider is stale: the token is
+            // the followed account's, not a second account.
+            if (linkedAccounts?.linked?.value?.provider == followed) {
+                linkedAccounts.setOther(null)
+                linkedAccounts.setAutoCopy(false)
+            }
+            // A linked record for an unconfigured provider cannot be used.
+            val otherNow = linkedAccounts?.linked?.value
+            if (otherNow != null && providerFor(otherNow.provider) == null) {
+                tokenStorages[otherNow.provider]?.clear()
+                linkedAccounts.setOther(null)
+                linkedAccounts.setAutoCopy(false)
+                linkedAccounts.setLostAccess(otherNow.provider)
+            }
+            // A linked record without its token is an orphan: privacy wipe.
+            val linkedNow = linkedAccounts?.linked?.value
+            val orphanOther = linkedNow?.takeIf { tokenStorages[it.provider]?.load() == null }
+            if (orphanOther != null) {
+                linkedAccounts.setOther(null)
+                linkedAccounts.setAutoCopy(false)
+                linkedAccounts.setLostAccess(orphanOther.provider)
+            }
+
+            val token = tokenStorages[followed]?.load()
+            if (token == null) {
+                clearAllLocked()
+                return@withLock null
+            }
+            val provider = providerFor(followed)
+            if (provider == null) {
+                clearAllLocked()
+                return@withLock null
+            }
+            activeProviderStore.save(followed)
+            followedProvider = followed
+            _followed.value = followed
+            // Any token that is neither the followed nor the other account is an
+            // orphan (e.g. a legacy token without a viewer): privacy wipe.
+            val otherProvider = linkedAccounts?.linked?.value?.provider
+            tokenStorages.forEach { (id, storage) ->
+                if (id != followed && id != otherProvider && storage.load() != null) {
+                    storage.clear()
+                }
+            }
+            val cached = cachedViewerStore.load()?.takeIf { it.provider == followed }
+            if (cached == null) cachedViewerStore.clear()
+            if (cached != null) _state.value = SessionState.Authenticated(cached)
+            publishConnectedLocked()
+            BootstrapEntry(
+                generation = gen,
+                providerId = followed,
+                provider = provider,
+                token = token,
+                cached = cached,
+                orphanOther = orphanOther,
+                lostFollowed = lostFollowed,
+                lostFollowedViewerId = storedCached?.takeIf { lostFollowed != null }?.id,
+            )
         } ?: run {
-            // A link without a principal is orphaned: privacy wipe.
+            onClearUserData()
             onSessionClosed()
             return
         }
 
+        entry.orphanOther?.let { orphan ->
+            onClearAccountData(orphan.provider, orphan.viewer.id)
+            onAccountDisconnected(orphan.provider)
+            events.emit(AccountEvent.LostAccess(orphan.provider))
+        }
+        entry.lostFollowed?.let { lost ->
+            onClearAccountData(lost, entry.lostFollowedViewerId)
+            onAccountDisconnected(lost)
+            events.emit(AccountEvent.LostAccess(lost))
+            events.emit(AccountEvent.FollowedChanged(entry.providerId))
+        }
         val token = resolveBootstrapToken(entry) ?: return
-
-        mutex.withLock {
-            if (entry.generation != generation) return
-            entry.cached?.let {
-                _state.value = SessionState.Authenticated(it.copy(provider = entry.providerId))
-            }
-        }
-        refreshViewer(entry.generation, entry.provider, token, keepCachedOnNetworkError = entry.cached != null)
-    }
-
-    /**
-     * The active token for [provider], refreshed when it is within the margin.
-     * Returns null when another provider owns the session, so a client can never
-     * send one account's token to a different service. Every concurrent caller
-     * for the same provider shares one refresh request.
-     */
-    suspend fun validToken(provider: ProviderId): AuthToken? {
-        val providerId = activeProviderId()
-        if (provider != providerId) return null
-        val authProvider = providerFor(providerId) ?: return null
-        val storage = tokenStorages[providerId] ?: return null
-        val token = storage.load() ?: return null
-        if (!token.expiresWithin(REFRESH_MARGIN_SECONDS)) return token
-
-        if (token.refreshToken == null) {
-            if (!token.isExpired) return token
-            onUnauthorized(token)
-            return null
-        }
-
-        return when (
-            val outcome = refresher.refresh(
-                key = providerId,
-                token = token,
-                loadStored = { storage.load() },
-                refresh = { authProvider.refresh(token) },
-                save = { new -> saveRefreshed(providerId, token, new) },
-                onInvalidGrant = { onUnauthorized(it) },
-            )
-        ) {
-            is RefreshOutcome.Token -> outcome.value
-            RefreshOutcome.Unsupported -> if (token.isExpired) {
-                onUnauthorized(token)
-                storage.load()?.takeIf { !it.isExpired }
-            } else {
-                token
-            }
-            is RefreshOutcome.NetworkFailure -> if (token.isExpired) null else token
-            RefreshOutcome.Closed -> null
-            RefreshOutcome.Superseded -> storage.load()?.takeIf { !it.isExpired }
-        }
+        validateOther(entry.generation)
+        refreshViewer(
+            gen = entry.generation,
+            provider = entry.provider,
+            token = token,
+            keepCachedOnNetworkError = entry.cached != null,
+        )
     }
 
     /** Clears a previous login failure (called when the user starts a login). */
@@ -142,24 +203,36 @@ internal class SessionManager(
         _lastLoginError.value = null
     }
 
+    /**
+     * Starts OAuth for a provider that is not connected yet. Guests use the
+     * same pending-link path; the callback decides whether it is a normal
+     * login or a second account.
+     */
+    fun beginLink(providerId: ProviderId) {
+        val provider = providers.firstOrNull { it.id == providerId && it.isConfigured } ?: return
+        if (followedProvider == providerId) return
+        if (linkedAccounts?.linked?.value?.provider == providerId) return
+        linkedAccounts?.clearLinkError()
+        pendingLinkStore?.save(
+            PendingLink(provider = providerId, createdAtEpochSeconds = currentEpochSeconds()),
+        )
+        provider.open()
+    }
+
     suspend fun onOAuthCallback(uri: String) {
         val pending = pendingLinkStore?.load()
         val handled = providers.firstNotNullOfOrNull { provider ->
             provider.handleCallback(uri)?.let { provider to it }
         } ?: run {
-            // A cancelled/unknown callback while a link was in progress: the
-            // attempt is over, but the current session must stay untouched.
             pendingLinkStore?.clear()
             return
         }
 
         val (provider, result) = handled
         when (result) {
-            // A failed callback leaves the current state alone: a guest stays
-            // a guest (a cancelled MAL login must not trap them on Error).
             is NetworkResult.Failure -> {
                 if (pending != null && pending.provider == provider.id) {
-                    pendingLinkStore.clear()
+                    pendingLinkStore?.clear()
                     linkedAccounts?.onLinkFailed(result.error)
                 } else {
                     _lastLoginError.value = provider.id
@@ -169,85 +242,320 @@ internal class SessionManager(
             is NetworkResult.Success -> {
                 _lastLoginError.value = null
                 val token = result.value
-                if (pending != null &&
+                val isPending = pending != null &&
                     pending.isValid(currentEpochSeconds()) &&
-                    pending.provider == provider.id &&
-                    _state.value is SessionState.Authenticated &&
-                    activeProviderId() != provider.id
-                ) {
-                    pendingLinkStore.clear()
-                    linkedAccounts?.link(provider, token)
+                    pending.provider == provider.id
+                if (isPending) pendingLinkStore?.clear()
+
+                val authenticated = _state.value is SessionState.Authenticated
+                if (isPending && authenticated && provider.id != followedProvider) {
+                    if (linkedAccounts?.linked?.value?.provider == provider.id) return
+                    connectOther(provider, token)
                     return
                 }
-                pendingLinkStore?.clear()
-
-                var switchedProvider = false
-                val gen = mutex.withLock {
-                    val g = ++generation
-                    val previousProvider = activeProviderId()
-                    val hadSession = _state.value is SessionState.Authenticated ||
-                        tokenStorages.any { it.value.load() != null }
-                    var clearedAnotherSession = false
-                    tokenStorages.forEach { (id, storage) ->
-                        if (id != provider.id && storage.load() != null) {
-                            storage.clear()
-                            clearedAnotherSession = true
-                        }
-                    }
-                    if (clearedAnotherSession) clearUserData()
-                    tokenStorages[provider.id]?.save(token)
-                    activeProviderStore.save(provider.id)
-                    // The routers follow the new provider right away; never let
-                    // the UI keep the previous account's viewer meanwhile.
-                    if (_state.value is SessionState.Authenticated) _state.value = SessionState.Loading
-                    switchedProvider = hadSession && previousProvider != provider.id
-                    g
-                }
-                // A new principal invalidates every copy of the old one.
-                if (switchedProvider) onSessionClosed()
-                onSessionAuthenticated(provider.id)
-                refreshViewer(gen, provider, token, keepCachedOnNetworkError = false)
+                linkedAccounts?.clearLinkError()
+                loginWith(provider, token)
             }
         }
     }
 
-    suspend fun logout() {
-        mutex.withLock {
-            generation++
-            // Only one session should ever exist; clearing every provider is the
-            // safest privacy wipe.
-            tokenStorages.values.forEach { it.clear() }
-            activeProviderStore.clear()
-            clearUserData()
-            _state.value = SessionState.Anonymous
-        }
-        onSessionClosed()
+    /**
+     * The active token for [provider], but only when it is the followed account.
+     * Every concurrent caller for the same provider shares one refresh.
+     */
+    suspend fun validToken(provider: ProviderId): AuthToken? {
+        if (provider != currentFollowedProvider()) return null
+        return resolveToken(provider)
     }
 
     /**
-     * A mid-session 401: drop the token + cache and go anonymous — but only if
-     * [token] is still the active one, so a stale 401 can never close a newer
-     * session.
+     * Follows another already-connected account: swaps viewers, keeps both
+     * tokens, every list cache and the outbox.
+     */
+    suspend fun setFollowed(provider: ProviderId) {
+        var newGeneration = 0
+        var changed = false
+        mutex.withLock {
+            val current = followedProvider ?: return@withLock
+            if (provider == current) return@withLock
+            val other = linkedAccounts?.linked?.value?.takeIf { it.provider == provider }
+                ?: return@withLock
+            if (tokenStorages[provider]?.load() == null) return@withLock
+            val oldViewer = (state.value as? SessionState.Authenticated)?.viewer
+                ?: cachedViewerStore.load()
+                ?: return@withLock
+            val newViewer = other.toViewer()
+            newGeneration = ++generation
+            activeProviderStore.save(provider)
+            followedProvider = provider
+            cachedViewerStore.save(newViewer)
+            linkedAccounts.setOther(LinkedAccount(current, oldViewer.toLinkedViewer()))
+            if (linkedAccounts.lostAccess.value == provider) linkedAccounts.clearLostAccess()
+            _state.value = SessionState.Authenticated(newViewer)
+            publishConnectedLocked()
+            changed = true
+        }
+        if (!changed) return
+        events.emit(AccountEvent.FollowedChanged(provider))
+        onFollowedChanged(provider)
+        val token = tokenStorages[provider]?.load() ?: return
+        refreshViewer(
+            gen = newGeneration,
+            provider = providerFor(provider) ?: return,
+            token = token,
+            keepCachedOnNetworkError = true,
+        )
+    }
+
+    /** User-initiated disconnect: no lost-access notice. */
+    suspend fun disconnect(provider: ProviderId) {
+        disconnect(provider, lostAccess = false)
+    }
+
+    suspend fun logout() {
+        publishCleared()
+    }
+
+    /**
+     * A mid-session 401: disconnect only the account that owns [token]. A stale
+     * token that matches neither account is ignored.
      */
     suspend fun onUnauthorized(token: AuthToken) {
-        val closed = mutex.withLock {
-            val providerId = activeProviderId()
-            val storage = tokenStorages[providerId] ?: return@withLock false
-            if (storage.load()?.accessToken != token.accessToken) return@withLock false
-            closeSessionLocked(providerId)
+        val provider = mutex.withLock {
+            tokenStorages.entries.firstOrNull {
+                it.value.load()?.accessToken == token.accessToken
+            }?.key
+        } ?: return
+        if (provider == currentFollowedProvider() ||
+            linkedAccounts?.linked?.value?.provider == provider
+        ) {
+            disconnect(provider, lostAccess = true)
+        }
+    }
+
+    internal fun activeProvider(): ProviderId = followedProvider ?: ProviderId.AniList
+
+    // ---------------------------------------------------------------------
+    // Login / connect
+    // ---------------------------------------------------------------------
+
+    private suspend fun loginWith(provider: AuthProvider, token: AuthToken) {
+        var hadSession = false
+        val gen = mutex.withLock {
+            val g = ++generation
+            hadSession = _state.value is SessionState.Authenticated ||
+                tokenStorages.any { it.value.load() != null }
+            tokenStorages.forEach { (id, storage) ->
+                if (id != provider.id) storage.clear()
+            }
+            linkedAccounts?.setOther(null)
+            linkedAccounts?.setAutoCopy(false)
+            linkedAccounts?.clearLostAccess()
+            linkedAccounts?.clearLinkError()
+            tokenStorages[provider.id]?.save(token)
+            activeProviderStore.save(provider.id)
+            followedProvider = provider.id
+            cachedViewerStore.clear()
+            if (hadSession) _state.value = SessionState.Loading
+            publishConnectedLocked()
+            g
+        }
+        if (hadSession) {
+            onClearUserData()
+            onSessionClosed()
+        }
+        onSessionAuthenticated(provider.id)
+        events.emit(AccountEvent.Connected(provider.id))
+        refreshViewer(gen, provider, token, keepCachedOnNetworkError = false)
+    }
+
+    /** Second account: its token and viewer are added, the followed account stays. */
+    private suspend fun connectOther(provider: AuthProvider, token: AuthToken) {
+        val fetcher = otherViewerFetchers[provider.id] ?: return
+        val viewer = when (val result = fetcher(token)) {
+            is NetworkResult.Failure -> {
+                linkedAccounts?.onLinkFailed(result.error)
+                return
+            }
+            is NetworkResult.Success -> result.value
+        }
+        val scoreFormat = if (provider.id == ProviderId.Mal) {
+            ScoreFormat.POINT_10
+        } else {
+            parseScoreFormat(viewer.scoreFormat)
+        }
+        val account = LinkedAccount(
+            provider = provider.id,
+            viewer = LinkedViewer(
+                id = viewer.id,
+                name = viewer.name,
+                avatarUrl = viewer.avatarUrl,
+                bannerUrl = viewer.bannerUrl,
+                scoreFormat = scoreFormat,
+            ),
+        )
+        val connected = mutex.withLock {
+            if (_state.value !is SessionState.Authenticated) return@withLock false
+            if (followedProvider == provider.id) return@withLock false
+            if (linkedAccounts?.linked?.value != null) return@withLock false
+            tokenStorages[provider.id]?.save(token)
+            linkedAccounts?.setOther(account)
+            linkedAccounts?.setAutoCopy(false)
+            linkedAccounts?.clearLostAccess()
+            linkedAccounts?.clearLinkError()
+            publishConnectedLocked()
             true
         }
-        if (closed) onSessionClosed()
+        if (connected) events.emit(AccountEvent.Connected(provider.id))
+    }
+
+    // ---------------------------------------------------------------------
+    // Disconnect / clear
+    // ---------------------------------------------------------------------
+
+    private suspend fun disconnect(provider: ProviderId, lostAccess: Boolean) {
+        var viewerId: Int? = null
+        var promoted: ProviderId? = null
+        var last = false
+        mutex.withLock {
+            linkedAccounts?.clearLinkError()
+            val wasFollowed = provider == (followedProvider ?: activeProviderStore.load())
+            val linked = linkedAccounts?.linked?.value
+            viewerId = if (wasFollowed) {
+                (state.value as? SessionState.Authenticated)?.viewer?.id
+                    ?: cachedViewerStore.load()?.id
+            } else {
+                linked?.takeIf { it.provider == provider }?.viewer?.id
+            }
+            tokenStorages[provider]?.clear()
+            promoted = if (wasFollowed) {
+                linked?.takeIf { it.provider != provider }
+                    ?.takeIf { tokenStorages[it.provider]?.load() != null }
+                    ?.provider
+            } else {
+                null
+            }
+            when {
+                wasFollowed && promoted != null -> {
+                    val newViewer = checkNotNull(linked).toViewer()
+                    val nextProvider = checkNotNull(promoted)
+                    generation++
+                    followedProvider = nextProvider
+                    activeProviderStore.save(nextProvider)
+                    cachedViewerStore.save(newViewer)
+                    linkedAccounts?.setOther(null)
+                    linkedAccounts?.setAutoCopy(false)
+                    if (lostAccess) {
+                        linkedAccounts?.setLostAccess(provider)
+                    } else if (linkedAccounts?.lostAccess?.value == provider) {
+                        linkedAccounts?.clearLostAccess()
+                    }
+                    _state.value = SessionState.Authenticated(newViewer)
+                    publishConnectedLocked()
+                }
+                wasFollowed -> {
+                    last = true
+                    clearAllLocked()
+                }
+                else -> {
+                    linkedAccounts?.setOther(null)
+                    linkedAccounts?.setAutoCopy(false)
+                    if (lostAccess) {
+                        linkedAccounts?.setLostAccess(provider)
+                    } else if (linkedAccounts?.lostAccess?.value == provider) {
+                        linkedAccounts?.clearLostAccess()
+                    }
+                    publishConnectedLocked()
+                }
+            }
+        }
+        events.emit(AccountEvent.Disconnected(provider))
+        if (!last) {
+            onClearAccountData(provider, viewerId)
+            if (lostAccess) events.emit(AccountEvent.LostAccess(provider))
+            onAccountDisconnected(provider)
+            promoted?.let {
+                events.emit(AccountEvent.FollowedChanged(it))
+                onFollowedChanged(it)
+            }
+        } else {
+            onClearUserData()
+            onSessionClosed()
+        }
+    }
+
+    private suspend fun publishCleared() {
+        val connected = mutex.withLock {
+            val current = connectedProvidersLocked()
+            clearAllLocked()
+            current
+        }
+        connected.forEach { events.emit(AccountEvent.Disconnected(it)) }
+        onClearUserData()
+        onSessionClosed()
+    }
+
+    /** Mutex held: clear every token, viewer, link and preference. */
+    private suspend fun clearAllLocked() {
+        generation++
+        tokenStorages.values.forEach { it.clear() }
+        activeProviderStore.clear()
+        cachedViewerStore.clear()
+        followedProvider = null
+        linkedAccounts?.setOther(null)
+        linkedAccounts?.setAutoCopy(false)
+        linkedAccounts?.clearLostAccess()
+        linkedAccounts?.clearLinkError()
+        _state.value = SessionState.Anonymous
+        publishConnectedLocked()
+    }
+
+    // ---------------------------------------------------------------------
+    // Bootstrap / viewer
+    // ---------------------------------------------------------------------
+
+    private suspend fun validateOther(gen: Int) {
+        val other = linkedAccounts?.linked?.value ?: return
+        if (other.provider == followedProvider) {
+            mutex.withLock { linkedAccounts?.setOther(null) }
+            return
+        }
+        if (tokenStorages[other.provider]?.load() == null) {
+            mutex.withLock {
+                if (gen == generation && linkedAccounts?.linked?.value?.provider == other.provider) {
+                    linkedAccounts?.setOther(null)
+                    linkedAccounts?.setAutoCopy(false)
+                }
+            }
+            return
+        }
+        val token = mirrorTokens.mirrorToken(other.provider)
+        if (token == null) {
+            val cleared = mutex.withLock {
+                if (gen == generation && linkedAccounts?.linked?.value?.provider == other.provider) {
+                    linkedAccounts?.setOther(null)
+                    linkedAccounts?.setAutoCopy(false)
+                    linkedAccounts?.setLostAccess(other.provider)
+                    publishConnectedLocked()
+                    true
+                } else {
+                    false
+                }
+            }
+            if (cleared) {
+                onClearAccountData(other.provider, other.viewer.id)
+                onAccountDisconnected(other.provider)
+                events.emit(AccountEvent.LostAccess(other.provider))
+            }
+        }
     }
 
     private suspend fun resolveBootstrapToken(entry: BootstrapEntry): AuthToken? {
         if (!entry.token.isExpired) return entry.token
-
         if (entry.token.refreshToken == null) {
             onUnauthorized(entry.token)
             return null
         }
-
         return when (
             val outcome = refresher.refresh(
                 key = entry.providerId,
@@ -275,21 +583,10 @@ internal class SessionManager(
                 }
                 null
             }
-            RefreshOutcome.Superseded -> null
+            RefreshOutcome.Superseded -> tokenStorages[entry.providerId]
+                ?.load()
+                ?.takeIf { !it.isExpired }
         }
-    }
-
-    private suspend fun saveRefreshed(
-        providerId: ProviderId,
-        old: AuthToken,
-        new: AuthToken,
-    ): RefreshSaveResult = mutex.withLock {
-        if (providerId != activeProviderId()) return@withLock RefreshSaveResult.Closed
-        val storage = tokenStorages[providerId] ?: return@withLock RefreshSaveResult.Closed
-        val current = storage.load() ?: return@withLock RefreshSaveResult.Closed
-        if (current.accessToken != old.accessToken) return@withLock RefreshSaveResult.Superseded
-        storage.save(new)
-        RefreshSaveResult.Saved(new)
     }
 
     private suspend fun refreshViewer(
@@ -299,20 +596,19 @@ internal class SessionManager(
         keepCachedOnNetworkError: Boolean,
     ) {
         val result = provider.fetchViewer(token)
-        val closed = mutex.withLock {
-            if (gen != generation) return@withLock false
+        val unauthorized = mutex.withLock {
+            if (gen != generation) return
             when (result) {
                 is NetworkResult.Success -> {
+                    if (followedProvider != provider.id) return
                     val viewer = result.value.copy(provider = provider.id)
                     cachedViewerStore.save(viewer)
                     _state.value = SessionState.Authenticated(viewer)
+                    publishConnectedLocked()
                     false
                 }
                 is NetworkResult.Failure -> when (result.error) {
-                    is NetworkError.Unauthorized -> {
-                        closeSessionLocked(provider.id)
-                        true
-                    }
+                    is NetworkError.Unauthorized -> true
                     else -> {
                         if (!keepCachedOnNetworkError) {
                             _state.value = SessionState.Error(result.error)
@@ -322,42 +618,124 @@ internal class SessionManager(
                 }
             }
         }
-        if (closed) onSessionClosed()
+        if (unauthorized) onUnauthorized(token)
     }
 
-    /** Mutex held: drop one provider's session and every user-scoped cache. */
-    private suspend fun closeSessionLocked(providerId: ProviderId) {
-        generation++
-        tokenStorages[providerId]?.clear()
-        activeProviderStore.clear()
-        clearUserData()
-        _state.value = SessionState.Anonymous
+    // ---------------------------------------------------------------------
+    // Tokens
+    // ---------------------------------------------------------------------
+
+    private suspend fun resolveMirrorToken(provider: ProviderId): AuthToken? {
+        val valid = provider == currentFollowedProvider() ||
+            linkedAccounts?.linked?.value?.provider == provider
+        if (!valid) return null
+        return resolveToken(provider)
     }
 
-    /** Drops the cached viewer and every user-scoped file (lists) together. */
-    private suspend fun clearUserData() {
-        cachedViewerStore.clear()
-        onClearUserData()
+    /**
+     * The active token for any connected provider, refreshed with the same
+     * single-flight rules. Only [mirrorTokens] calls this.
+     */
+    private suspend fun resolveToken(provider: ProviderId): AuthToken? {
+        val storage = tokenStorages[provider] ?: return null
+        val token = storage.load() ?: return null
+        if (!token.expiresWithin(REFRESH_MARGIN_SECONDS)) return token
+
+        if (token.refreshToken == null) {
+            if (!token.isExpired) return token
+            onUnauthorized(token)
+            return null
+        }
+
+        return when (
+            val outcome = refresher.refresh(
+                key = provider,
+                token = token,
+                loadStored = { storage.load() },
+                refresh = { providerFor(provider)?.refresh(token) },
+                save = { new -> saveRefreshed(provider, token, new) },
+                onInvalidGrant = { onUnauthorized(it) },
+            )
+        ) {
+            is RefreshOutcome.Token -> outcome.value
+            RefreshOutcome.Unsupported -> if (token.isExpired) {
+                onUnauthorized(token)
+                null
+            } else {
+                token
+            }
+            is RefreshOutcome.NetworkFailure -> if (token.isExpired) null else token
+            RefreshOutcome.Closed -> null
+            RefreshOutcome.Superseded -> storage.load()?.takeIf { !it.isExpired }
+        }
+    }
+
+    private suspend fun saveRefreshed(
+        providerId: ProviderId,
+        old: AuthToken,
+        new: AuthToken,
+    ): RefreshSaveResult = mutex.withLock {
+        val storage = tokenStorages[providerId] ?: return@withLock RefreshSaveResult.Closed
+        val current = storage.load() ?: return@withLock RefreshSaveResult.Closed
+        if (current.accessToken != old.accessToken) return@withLock RefreshSaveResult.Superseded
+        storage.save(new)
+        RefreshSaveResult.Saved(new)
+    }
+
+    // ---------------------------------------------------------------------
+    // State helpers
+    // ---------------------------------------------------------------------
+
+    private fun publishConnectedLocked() {
+        _followed.value = followedProvider
+        _connected.value = buildList {
+            val followed = followedProvider
+            val viewer = (state.value as? SessionState.Authenticated)?.viewer
+            if (followed != null && viewer != null && viewer.provider == followed) {
+                add(
+                    ConnectedAccount(
+                        provider = followed,
+                        viewerId = viewer.id,
+                        name = viewer.name,
+                        avatarUrl = viewer.avatarUrl,
+                        bannerUrl = viewer.bannerUrl,
+                        scoreFormat = parseScoreFormat(viewer.scoreFormat),
+                    ),
+                )
+            }
+            linkedAccounts?.linked?.value?.let { other ->
+                if (other.provider != followed) {
+                    add(
+                        ConnectedAccount(
+                            provider = other.provider,
+                            viewerId = other.viewer.id,
+                            name = other.viewer.name,
+                            avatarUrl = other.viewer.avatarUrl,
+                            bannerUrl = other.viewer.bannerUrl,
+                            scoreFormat = other.viewer.scoreFormat,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun currentFollowedProvider(): ProviderId? {
+        followedProvider?.let { return it }
+        val stored = activeProviderStore.load()
+        return stored.takeIf { tokenStorages[it]?.load() != null }
+    }
+
+    private fun isConnectedLocked(provider: ProviderId): Boolean =
+        provider == followedProvider || linkedAccounts?.linked?.value?.provider == provider
+
+    private fun connectedProvidersLocked(): List<ProviderId> = buildList {
+        followedProvider?.let { add(it) }
+        linkedAccounts?.linked?.value?.provider?.let { if (it != followedProvider) add(it) }
     }
 
     private fun providerFor(id: ProviderId): AuthProvider? =
         providers.firstOrNull { it.id == id }
-
-    /** The provider that owns the current session; guests/unknowns are AniList. */
-    internal fun activeProvider(): ProviderId = activeProviderId()
-
-    /**
-     * The stored provider when it is actually wired (provider + storage);
-     * otherwise the first provider (AniList today).
-     */
-    private fun activeProviderId(): ProviderId {
-        val stored = activeProviderStore.load()
-        return if (providers.any { it.id == stored } && tokenStorages.containsKey(stored)) {
-            stored
-        } else {
-            providers.firstOrNull()?.id ?: ProviderId.AniList
-        }
-    }
 
     private companion object {
         const val REFRESH_MARGIN_SECONDS = 60L

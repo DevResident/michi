@@ -319,41 +319,84 @@ object EnglishStrings : LanguageStrings {
     override val aboutDataByTitle = "Data by AniList"
     override val aboutThemesByTitle = "Openings by AnimeThemes"
     override val aboutNotAffiliatedText = "Michi is not affiliated with AniList"
-    override val settingsAccountTitle = "Account"
-    override val settingsAccountSettingsTitle = "Account settings"
     override val settingsSignInTitle = "Sign in"
     override val settingsSignOutTitle = "Sign out"
     override val settingsSignOutConfirmAction = "Sign out"
     override val settingsSignOutConfirmMessage =
-        "You will sign out on this device. Your lists stay safe on AniList."
-    override val settingsLinkedAccountTitle = "Linked account"
-    override fun settingsLinkedLinkAction(provider: String): String = "Link $provider"
-    override val settingsLinkedUnlinkTitle = "Unlink"
-    override fun settingsLinkedUnlinkConfirmMessage(provider: String): String =
-        "Stop copying changes to $provider? Nothing is deleted there and your session stays signed in."
-    override fun settingsLinkedLostAccess(provider: String): String =
-        "Lost access to $provider. Link it again."
-    override val settingsLinkedRelinkAction = "Link again"
-    override val settingsLinkedDismissAction = "Dismiss"
-    override val settingsLinkedLinkFailed = "Could not link the account."
-    override val settingsLinkedAutoCopyTitle = "Copy changes automatically"
-    override val settingsMirrorStatusTitle = "Copies"
-    override val settingsMirrorUpToDate = "Up to date"
-    override fun settingsMirrorPending(count: Int): String =
+        "You will sign out on this device. Your lists stay safe on their services."
+    override val accountsTitle = "Accounts"
+    override val accountsConnectedSection = "Connected accounts"
+    override val accountsFollowedSection = "List you follow"
+    override val accountsFollowedHint =
+        "New changes are copied from this list to the other account."
+    override val accountsSyncSection = "Sync with both"
+    override val accountsSyncComparing = "Comparing lists…"
+    override val accountsSyncUpToDate = "Up to date"
+    override fun accountsSyncCopying(done: Int, total: Int): String = "Copying $done/$total"
+    override fun accountsSyncPending(count: Int): String =
         if (count == 1) "1 pending" else "$count pending"
-    override fun settingsMirrorWithErrors(count: Int): String =
+    override fun accountsSyncErrors(count: Int): String =
         if (count == 1) "1 with errors" else "$count with errors"
-    override val settingsMirrorRetryTitle = "Retry"
-    override val mirrorSyncTitle = "Sync now"
+    override fun accountsSyncNewer(count: Int, provider: String): String =
+        if (count == 1) {
+            "1 more recent in $provider"
+        } else {
+            "$count more recent in $provider"
+        }
+    override fun accountsSyncRegression(count: Int): String =
+        if (count == 1) "1 would move backwards" else "$count would move backwards"
+    override val accountsCompareTitle = "Compare lists"
+    override fun accountsCompareMessage(provider: String, additions: Int, updates: Int): String {
+        val add = if (additions == 1) "1 missing title" else "$additions missing titles"
+        val upd = if (updates == 1) "1 difference" else "$updates differences"
+        return "$provider has $add and $upd."
+    }
+    override fun accountsCompareSkippedNewer(count: Int, provider: String): String =
+        if (count == 1) {
+            "1 stays as it is: more recent in $provider"
+        } else {
+            "$count stay as they are: more recent in $provider"
+        }
+    override fun accountsCompareSkippedRegression(count: Int): String =
+        if (count == 1) "1 stays as it is: it would move backwards" else
+            "$count stay as they are: they would move backwards"
+    override val accountsCompareApply = "Catch up"
+    override val accountsCompareView = "View changes"
+    override val accountsCompareLater = "Not now"
+    override val accountsConnect = "Connect"
+    override val accountsDisconnect = "Disconnect"
+    override fun accountsConnectedAs(name: String): String = "Connected as $name"
+    override val accountsNotConnected = "Not connected"
+    override fun accountsProviderSection(provider: String): String = "$provider account"
+    override val accountsEditProfile = "Edit profile"
+    override val accountsManageAccount = "Manage account"
+    override val accountsCompareLists = "Compare lists"
+    override val accountsDisconnectTitle = "Disconnect"
+    override fun accountsDisconnectMessage(provider: String): String =
+        "Disconnect $provider? Its token and local data are deleted here. Nothing is deleted in the account."
+    override fun accountsDisconnectFollowedMessage(provider: String, other: String): String =
+        "Disconnect $provider? $other becomes the list you follow and you stay signed in. " +
+            "Queued changes for $provider are discarded."
+    override fun accountsLostAccess(provider: String): String = "Lost access to $provider."
+    override val accountsLostAccessDismiss = "Dismiss"
+    override val accountsLostAccessReconnect = "Reconnect"
+    override val accountsConnectFailed = "Could not connect the account."
+    override fun accountsEventConnected(provider: String): String = "$provider connected"
+    override fun accountsEventDisconnected(provider: String): String = "$provider disconnected"
+    override fun accountsEventLostAccess(provider: String): String =
+        "Lost access to $provider"
+    override fun accountsEventFollowed(provider: String): String = "Now following $provider"
+    override val mirrorSyncTitle = "Compare lists"
+    override val mirrorSyncRegression = "Would move backwards"
     override val mirrorSyncAddSection = "Add"
     override val mirrorSyncUpdateSection = "Update"
-    override val mirrorSyncLinkedOnlySection = "Only in the linked account"
+    override val mirrorSyncLinkedOnlySection = "Only in the other account"
     override fun mirrorSyncAddCount(count: Int): String =
         if (count == 1) "1 to add" else "$count to add"
     override fun mirrorSyncUpdateCount(count: Int): String =
         if (count == 1) "1 to update" else "$count to update"
     override fun mirrorSyncLinkedOnlyCount(count: Int): String =
-        if (count == 1) "1 only in the linked account" else "$count only in the linked account"
+        if (count == 1) "1 only in the other account" else "$count only in the other account"
     override fun mirrorSyncNoEquivalent(count: Int): String =
         if (count == 1) "1 without a match" else "$count without a match"
     override fun mirrorSyncPrivateOmitted(count: Int): String =
@@ -363,8 +406,7 @@ object EnglishStrings : LanguageStrings {
     override val mirrorSyncSlowHint = "This may take a few minutes."
     override val mirrorSyncEmptyTitle = "Nothing to sync"
     override val mirrorSyncEmptyMessage = "Your lists already match."
-    override val mirrorSyncNewerInLinked = "Updated later in the linked account"
-    override fun settingsMirrorProgress(done: Int, total: Int): String = "$done/$total"
+    override val mirrorSyncNewerInLinked = "Updated later in the other account"
     override val backButton = "Back"
     override val authWelcomeTitle = "Welcome to Michi"
     override val authModalSubtitle = "Your client for anime, manga, lists, and favorites."

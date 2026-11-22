@@ -14,14 +14,24 @@ import com.luum.michi.app.core.medialist.domain.MirrorSnapshotEntry
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private fun media(type: MediaType = MediaType.ANIME, malId: Int? = 20) = MirrorMediaSummary(
+private fun media(
+    type: MediaType = MediaType.ANIME,
+    malId: Int? = 20,
+    totalEpisodes: Int? = null,
+    totalChapters: Int? = null,
+    totalVolumes: Int? = null,
+) = MirrorMediaSummary(
     aniListId = 10,
     malId = malId,
     type = type,
     title = "Test",
+    totalEpisodes = totalEpisodes,
+    totalChapters = totalChapters,
+    totalVolumes = totalVolumes,
 )
 
 private fun entry(
@@ -59,9 +69,26 @@ private fun entry(
     updatedAt = updatedAt,
 )
 
-private fun snapshot(provider: ProviderId, vararg entries: MirrorEntry) = MirrorSnapshot(
+private fun snapshot(
+    provider: ProviderId,
+    vararg entries: MirrorEntry,
+    totalEpisodes: Int? = null,
+    totalChapters: Int? = null,
+    totalVolumes: Int? = null,
+) = MirrorSnapshot(
     provider = provider,
-    entries = entries.map { MirrorSnapshotEntry(media(it.type), it) },
+    entries = entries.map {
+        MirrorSnapshotEntry(
+            media(
+                type = it.type,
+                malId = it.malId,
+                totalEpisodes = totalEpisodes,
+                totalChapters = totalChapters,
+                totalVolumes = totalVolumes,
+            ),
+            it,
+        )
+    },
 )
 
 private fun malEntry(
@@ -258,5 +285,224 @@ class MirrorDifferTest {
         )
 
         assertTrue(result.updates.isEmpty())
+    }
+
+    @Test
+    fun theTargetsOwnTotalCapsProgress() {
+        val result = diff(
+            snapshot(
+                ProviderId.AniList,
+                entry(status = MediaListStatus.COMPLETED, progress = 13),
+                totalEpisodes = 13,
+            ),
+            snapshot(
+                ProviderId.Mal,
+                malEntry(status = MediaListStatus.COMPLETED, progress = 12),
+                totalEpisodes = 12,
+            ),
+        )
+
+        assertTrue(result.updates.isEmpty())
+    }
+
+    @Test
+    fun anUnknownOrZeroTotalNeverCaps() {
+        val unknown = diff(
+            snapshot(ProviderId.AniList, entry(progress = 13)),
+            snapshot(ProviderId.Mal, malEntry(progress = 12)),
+        )
+        val zero = diff(
+            snapshot(ProviderId.AniList, entry(progress = 13)),
+            snapshot(ProviderId.Mal, malEntry(progress = 12), totalEpisodes = 0),
+        )
+
+        assertEquals(setOf(MirrorField.PROGRESS), unknown.updates.single().changedFields)
+        assertEquals(setOf(MirrorField.PROGRESS), zero.updates.single().changedFields)
+    }
+
+    @Test
+    fun aRealIncreaseStillUpdates() {
+        val result = diff(
+            snapshot(ProviderId.AniList, entry(status = MediaListStatus.COMPLETED, progress = 24)),
+            snapshot(
+                ProviderId.Mal,
+                malEntry(status = MediaListStatus.CURRENT, progress = 12),
+                totalEpisodes = 24,
+            ),
+        )
+
+        val row = result.updates.single()
+        assertTrue(MirrorField.PROGRESS in row.changedFields)
+        assertEquals(24, row.after.progress)
+        assertFalse(row.regression)
+    }
+
+    @Test
+    fun loweringProgressIsARegression() {
+        val result = MirrorDiffer.diff(
+            primary = snapshot(
+                ProviderId.Mal,
+                malEntry(status = MediaListStatus.CURRENT, progress = 12),
+                totalEpisodes = 24,
+            ),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(
+                    status = MediaListStatus.COMPLETED,
+                    progress = 24,
+                    score = 9f,
+                    scoreFormat = ScoreFormat.POINT_100,
+                ),
+                totalEpisodes = 24,
+            ),
+            targetProvider = ProviderId.AniList,
+            targetScoreFormat = ScoreFormat.POINT_100,
+        )
+
+        val row = result.updates.single()
+        assertTrue(row.regression)
+        assertTrue(MirrorField.PROGRESS in row.changedFields)
+    }
+
+    @Test
+    fun leavingCompletedIsARegression() {
+        val result = MirrorDiffer.diff(
+            primary = snapshot(
+                ProviderId.Mal,
+                malEntry(status = MediaListStatus.CURRENT, progress = 12),
+                totalEpisodes = 24,
+            ),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(status = MediaListStatus.COMPLETED, progress = 12),
+                totalEpisodes = 24,
+            ),
+            targetProvider = ProviderId.AniList,
+            targetScoreFormat = ScoreFormat.POINT_100,
+        )
+
+        assertTrue(result.updates.single().regression)
+    }
+
+    @Test
+    fun catchUpSkipsNewerAndRegressions() {
+        val primary = snapshot(
+            ProviderId.Mal,
+            malEntry(status = MediaListStatus.CURRENT, progress = 12, notes = "a"),
+            malEntry(status = MediaListStatus.CURRENT, progress = 12, notes = "b").copy(aniListId = 11, malId = 21),
+            malEntry(status = MediaListStatus.CURRENT, progress = 12, notes = "c").copy(aniListId = 12, malId = 22),
+        )
+        val linked = snapshot(
+            ProviderId.AniList,
+            entry(status = MediaListStatus.CURRENT, progress = 24, notes = "old", updatedAt = 100L),
+            entry(status = MediaListStatus.CURRENT, progress = 12, notes = "old", updatedAt = 50L)
+                .copy(aniListId = 11, malId = 21),
+            entry(status = MediaListStatus.CURRENT, progress = 12, notes = "old", updatedAt = 200L)
+                .copy(aniListId = 12, malId = 22),
+        )
+        val result = MirrorDiffer.diff(
+            primary = primary,
+            linked = linked,
+            targetProvider = ProviderId.AniList,
+            targetScoreFormat = ScoreFormat.POINT_100,
+        )
+
+        // 12 is a regression; 11 is newer in the primary (not newerInLinked);
+        // 12 (third) is newerInLinked because the linked entry is newer.
+        assertTrue(result.updates.size >= 2)
+        assertTrue(result.catchUpRows.size < result.updates.size)
+    }
+
+    @Test
+    fun roundTripForEachFieldIsStable() {
+        val primaries = listOf(
+            entry(),
+            entry(status = MediaListStatus.COMPLETED, progress = 12, completedAt = MirrorDate(2024, 6, 1)),
+            entry(status = MediaListStatus.PAUSED, score = 0f, priority = 0, repeat = 0),
+            entry(notes = "", startedAt = MirrorDate(2020), completedAt = null),
+            entry(status = MediaListStatus.REPEATING, isRewatching = true, repeat = 2),
+            entry(progress = 4, score = 85f, priority = 5, notes = "x", repeat = 3),
+        )
+        primaries.forEach { primary ->
+            val linked = linkedMal(primary)
+            val result = diff(
+                snapshot(ProviderId.AniList, primary, totalEpisodes = 100),
+                MirrorSnapshot(
+                    ProviderId.Mal,
+                    listOf(MirrorSnapshotEntry(media(totalEpisodes = 100), linked)),
+                ),
+            )
+            assertTrue(result.updates.isEmpty(), "round trip diff for $primary")
+        }
+    }
+
+    @Test
+    fun roundTripToAniListIsStable() {
+        val primary = malEntry(
+            status = MediaListStatus.REPEATING,
+            progress = 12,
+            score = 9f,
+            priority = 2,
+            notes = "note",
+            repeat = 2,
+            isRewatching = true,
+        )
+        val values = com.luum.michi.app.core.medialist.domain.MirrorTranslator
+            .toAniList(primary, ScoreFormat.POINT_10_DECIMAL)!!
+        val linked = MirrorEntry(
+            sourceProvider = ProviderId.AniList,
+            aniListId = 10,
+            malId = 20,
+            type = MediaType.ANIME,
+            status = values.status,
+            progress = values.progress,
+            progressVolumes = values.progressVolumes,
+            score = values.score,
+            scoreFormat = ScoreFormat.POINT_10_DECIMAL,
+            repeat = values.repeat,
+            priority = values.priority,
+            notes = values.notes,
+            isPrivate = false,
+            isRewatching = values.status == MediaListStatus.REPEATING,
+            startedAt = values.startedAt,
+            completedAt = values.completedAt,
+            updatedAt = 100L,
+        )
+        val result = MirrorDiffer.diff(
+            primary = snapshot(ProviderId.Mal, primary, totalEpisodes = 24),
+            linked = MirrorSnapshot(
+                ProviderId.AniList,
+                listOf(MirrorSnapshotEntry(media(totalEpisodes = 24), linked)),
+            ),
+            targetProvider = ProviderId.AniList,
+            targetScoreFormat = ScoreFormat.POINT_10_DECIMAL,
+        )
+
+        assertTrue(result.updates.isEmpty())
+    }
+
+    private fun linkedMal(primary: MirrorEntry): MirrorEntry {
+        val values = com.luum.michi.app.core.medialist.domain.MirrorTranslator.toMal(primary)!!
+        return MirrorEntry(
+            sourceProvider = ProviderId.Mal,
+            aniListId = 10,
+            malId = 20,
+            type = primary.type,
+            status = com.luum.michi.app.core.mal.domain
+                .malStatusToMediaListStatus(values.status)
+                .let { if (values.isRewatching) MediaListStatus.REPEATING else it },
+            progress = values.progress,
+            progressVolumes = values.progressVolumes,
+            score = values.score.toFloat(),
+            scoreFormat = ScoreFormat.POINT_10,
+            repeat = values.repeat,
+            priority = values.priority,
+            notes = values.comments,
+            isPrivate = false,
+            isRewatching = values.isRewatching,
+            startedAt = values.startDate,
+            completedAt = values.finishDate,
+            updatedAt = primary.updatedAt,
+        )
     }
 }

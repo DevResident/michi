@@ -31,6 +31,7 @@ import com.luum.michi.app.ui.icons.generated.MangaRounded
 import com.luum.michi.app.ui.icons.generated.MangaRoundedFilled
 import com.luum.michi.app.ui.icons.generated.MichiSymbol
 import com.luum.michi.app.ui.icons.generated.MoreRounded
+import com.luum.michi.app.ui.icons.generated.MyAnimeListBrand
 import com.luum.michi.app.ui.icons.generated.NotificationsRounded
 import com.luum.michi.app.ui.icons.generated.PlayRounded
 import com.luum.michi.app.ui.icons.generated.ProfileRounded
@@ -115,6 +116,10 @@ internal object AppIcons {
     /** AniList mark. Tint it for mono use (e.g. white on the brand button). */
     val AniList: ImageVector
         get() = IconPack.Anilist
+
+    /** MyAnimeList mark (Simple Icons, CC0); tint it with its brand color (#2E51A2). */
+    val Mal: ImageVector
+        get() = IconPack.MyAnimeListBrand
 
     // ---- Lists: filter + sort share one capsule (lone search circle aside) ----
     /** Funnel-list: opens the list filter sheet (anime/manga rails). */

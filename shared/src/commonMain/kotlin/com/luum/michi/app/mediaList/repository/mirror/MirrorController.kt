@@ -28,18 +28,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * The automatic mirror: turns a successful primary save into an outbox
+ * The automatic mirror: turns a successful followed-account save into an outbox
  * operation and drains it in the background. It never throws into the primary
  * save path.
+ *
+ * Pending operations keep their destination: after a followed switch they are
+ * still delivered to the account they were queued for. Only a disconnect drops
+ * the operations aimed at that account.
  */
 internal class MirrorController(
     private val outbox: MirrorOutbox,
     private val linkedAccounts: LinkedAccountManager,
     private val writers: Map<ProviderId, MirrorWriter>,
-    private val isSessionAuthenticated: () -> Boolean,
-    private val activeProvider: () -> ProviderId,
+    private val followedProvider: () -> ProviderId?,
     private val sourceScoreFormat: () -> ScoreFormat,
-    private val onLinkDead: suspend () -> Unit,
+    private val isConnected: (ProviderId) -> Boolean,
     private val scope: CoroutineScope,
     private val nowMillis: () -> Long = { currentEpochSeconds() * 1000L },
 ) : MirrorSink {
@@ -49,14 +52,25 @@ internal class MirrorController(
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private var job: Job? = null
 
+    /**
+     * Set by a disconnect: queued changes aimed at the account that stays must
+     * be delivered even though the toggle was turned off with the disconnect.
+     */
+    private var deliverPreserved = false
+
     /** Called once after session + linked-account bootstrap. */
     suspend fun start() {
         outbox.load()
-        if (!isSessionAuthenticated() || linkedAccounts.linked.value == null) {
+        if (followedProvider() == null) {
             outbox.clear()
             return
         }
-        if (linkedAccounts.autoCopy.value) resume()
+        if (linkedAccounts.autoCopy.value) {
+            resume()
+        } else if (outbox.state.value.pending > 0) {
+            deliverPreserved = true
+            resume()
+        }
     }
 
     fun resume() {
@@ -81,15 +95,11 @@ internal class MirrorController(
      * fields the user saw in the preview.
      */
     suspend fun startBatch(items: List<MirrorBatchItem>): Boolean {
-        if (items.isEmpty() || !isSessionAuthenticated()) return false
-        val linked = linkedAccounts.linked.value ?: return false
+        if (items.isEmpty() || followedProvider() == null) return false
+        val other = linkedAccounts.linked.value?.provider ?: return false
         val valid = items.filter { item ->
-            val target = if (item.entry.sourceProvider == ProviderId.AniList) {
-                ProviderId.Mal
-            } else {
-                ProviderId.AniList
-            }
-            target == linked.provider && item.fields.isNotEmpty()
+            val target = targetOf(item.entry.sourceProvider)
+            target == other && item.fields.isNotEmpty()
         }
         if (valid.isEmpty()) return false
         outbox.beginBatch(valid)
@@ -106,6 +116,21 @@ internal class MirrorController(
         }
     }
 
+    /** A followed switch flips the direction; queued operations keep their target. */
+    fun onFollowedChanged() {
+        if (linkedAccounts.autoCopy.value) resume()
+    }
+
+    /**
+     * Drops only the operations aimed at [provider]; the remaining account's
+     * queued changes are delivered even though the toggle is now off.
+     */
+    suspend fun onAccountDisconnected(provider: ProviderId) {
+        outbox.discardTarget(provider)
+        deliverPreserved = true
+        if (followedProvider() != null) resume() else pause()
+    }
+
     /**
      * Only the selected fields are copied. A private AniList entry never enters
      * the pipeline, and a MAL-only work never targets AniList.
@@ -116,15 +141,14 @@ internal class MirrorController(
         result: MediaListViewerEntry,
         fields: Set<MirrorField>,
     ) {
-        if (fields.isEmpty() || !isSessionAuthenticated()) return
-        val linked = linkedAccounts.linked.value ?: return
+        if (fields.isEmpty()) return
+        val source = followedProvider() ?: return
         if (!linkedAccounts.autoCopy.value) return
-        val source = activeProvider()
-        val target = if (source == ProviderId.AniList) ProviderId.Mal else ProviderId.AniList
-        if (linked.provider != target) return
+        val target = linkedAccounts.linked.value?.provider ?: return
+        if (target != targetOf(source)) return
         if (source == ProviderId.AniList && result.isPrivate) return
         val aniListId = mediaRef.id.toIntOrNull() ?: return
-        if (linked.provider == ProviderId.AniList && aniListId <= 0) return
+        if (target == ProviderId.AniList && aniListId <= 0) return
         val status = result.status ?: return
         val entry = MirrorEntry(
             sourceProvider = source,
@@ -160,7 +184,7 @@ internal class MirrorController(
      */
     internal suspend fun drainDue(now: Long = nowMillis()) {
         outbox.load()
-        if (!isSessionAuthenticated()) {
+        if (followedProvider() == null) {
             outbox.clear()
             return
         }
@@ -179,11 +203,9 @@ internal class MirrorController(
                     drainOne(operation)
                     continue
                 }
+                if (outbox.state.value.pending == 0) deliverPreserved = false
                 val next = outbox.state.value.nextAttemptAtEpochMillis
                 if (next == null) {
-                    // A parked failed operation waits for an explicit retry; an
-                    // idle queue waits for new work, but rechecks periodically
-                    // so an unlinked session can end the job.
                     if (outbox.state.value.withErrors > 0) break
                     withTimeoutOrNull(IdlePollMillis) { wake.receive() }
                 } else {
@@ -201,22 +223,18 @@ internal class MirrorController(
     }
 
     private fun isEnabled(): Boolean =
-        isSessionAuthenticated() &&
-            linkedAccounts.linked.value != null &&
-            (linkedAccounts.autoCopy.value || outbox.state.value.batch?.active == true)
+        followedProvider() != null &&
+            (linkedAccounts.autoCopy.value ||
+                outbox.state.value.batch?.active == true ||
+                deliverPreserved)
 
     private suspend fun drainOne(operation: MirrorOutboxOperation) {
-        if (!isSessionAuthenticated()) {
+        if (followedProvider() == null) {
             outbox.clear()
             return
         }
-        val linked = linkedAccounts.linked.value
-        if (linked == null) {
-            outbox.clear()
-            return
-        }
-        if (linked.provider != operation.targetProvider) {
-            outbox.markPermanent(operation, "Linked provider changed")
+        if (!isConnected(operation.targetProvider)) {
+            outbox.markPermanent(operation, "Account disconnected")
             return
         }
         val writer = writers[operation.targetProvider]
@@ -235,8 +253,9 @@ internal class MirrorController(
             is NetworkResult.Success -> outbox.markSuccess(operation)
             is NetworkResult.Failure -> when {
                 result.error is NetworkError.Unauthorized -> {
-                    onLinkDead()
-                    outbox.clear()
+                    // The provider client already reports the 401 to the session;
+                    // this account's queued copies are not retried.
+                    outbox.discardTarget(operation.targetProvider)
                 }
                 isPermanent(result.error) -> outbox.markPermanent(operation, result.error.toString())
                 else -> outbox.markTransient(operation, result.error.toString())
@@ -252,6 +271,9 @@ internal class MirrorController(
             error.status != 401 && error.status != 429
         else -> false
     }
+
+    private fun targetOf(source: ProviderId): ProviderId =
+        if (source == ProviderId.AniList) ProviderId.Mal else ProviderId.AniList
 
     private fun Long?.toMirrorDate(): MirrorDate? = this?.let { millis ->
         val parts = millisToCalendarParts(millis)

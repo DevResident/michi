@@ -2,6 +2,7 @@ package com.luum.michi.app.core
 
 import com.luum.michi.app.FakeGraphQL
 import com.luum.michi.app.InMemoryActiveProviderStore
+import com.luum.michi.app.InMemoryCachedViewerStore
 import com.luum.michi.app.InMemoryLinkedAccountStore
 import com.luum.michi.app.TestAuthProvider
 import com.luum.michi.app.core.auth.domain.AuthToken
@@ -12,10 +13,13 @@ import com.luum.michi.app.core.mal.repository.MalHttp
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.media.repository.MediaIdBridgeImpl
+import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.network.domain.AniListGraphQLRequest
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.repository.KtorAniListGraphQLClient
 import com.luum.michi.app.core.network.repository.createAniListHttpClient
+import com.luum.michi.app.core.session.domain.LinkedAccount
+import com.luum.michi.app.core.session.domain.LinkedViewer
 import com.luum.michi.app.core.session.domain.Viewer
 import com.luum.michi.app.mediaList.InMemoryFileStore
 import com.luum.michi.app.testLinkedAccountManager
@@ -35,31 +39,48 @@ private fun token(value: String) = AuthToken(
     expiresInSeconds = 3600L,
 )
 
+private fun account(provider: ProviderId, name: String) = LinkedAccount(
+    provider = provider,
+    viewer = LinkedViewer(
+        id = if (provider == ProviderId.Mal) 42 else 7,
+        name = name,
+        scoreFormat = if (provider == ProviderId.Mal) ScoreFormat.POINT_10 else ScoreFormat.POINT_10_DECIMAL,
+    ),
+)
+
+private fun viewer(provider: ProviderId, name: String) = Viewer(
+    id = if (provider == ProviderId.Mal) 42 else 7,
+    name = name,
+    provider = provider,
+    scoreFormat = if (provider == ProviderId.Mal) "POINT_10" else "POINT_10_DECIMAL",
+)
+
 class LinkedTokenIsolationTest {
 
     @Test
-    fun sessionAniListAndLinkedMalNeverSendEachOthersToken() = runBlocking {
-        val sessionAniList = InMemoryTokenStorage().apply { save(token("anilist-session")) }
-        val linkedMal = InMemoryTokenStorage().apply { save(token("mal-linked")) }
+    fun sessionClientsUseOnlyTheFollowedTokenAndMirrorClientsOnlyTheirProvider() = runBlocking {
+        val aniListStorage = InMemoryTokenStorage().apply { save(token("anilist-token")) }
+        val malStorage = InMemoryTokenStorage().apply { save(token("mal-token")) }
+        val linkedStore = InMemoryLinkedAccountStore(account = account(ProviderId.Mal, "mal-user"))
+        val linked = testLinkedAccountManager(linkedStore)
         val session = testSessionManager(
-            providers = listOf(TestAuthProvider(id = ProviderId.AniList)),
-            tokenStorages = mapOf(ProviderId.AniList to sessionAniList),
-            activeProviderStore = InMemoryActiveProviderStore(ProviderId.AniList),
-        )
-        val linked = testLinkedAccountManager(
-            providers = listOf(TestAuthProvider(id = ProviderId.Mal)),
-            tokenStorages = mapOf(ProviderId.Mal to linkedMal),
-            store = InMemoryLinkedAccountStore(),
-            viewerFetchers = mapOf(
-                ProviderId.Mal to {
-                    NetworkResult.Success(Viewer(id = 42, name = "mal", provider = ProviderId.Mal))
-                },
+            providers = listOf(
+                TestAuthProvider(id = ProviderId.AniList),
+                TestAuthProvider(id = ProviderId.Mal),
             ),
+            tokenStorages = mapOf(
+                ProviderId.AniList to aniListStorage,
+                ProviderId.Mal to malStorage,
+            ),
+            activeProviderStore = InMemoryActiveProviderStore(ProviderId.AniList),
+            cachedViewerStore = InMemoryCachedViewerStore(viewer(ProviderId.AniList, "ani-user")),
+            linkedAccounts = linked,
         )
-        linked.link(TestAuthProvider(id = ProviderId.Mal), token("mal-linked"))
+        linked.bootstrap()
+        session.bootstrap()
 
         var aniListAuthorization: String? = null
-        val aniListClient = KtorAniListGraphQLClient(
+        val sessionAniList = KtorAniListGraphQLClient(
             httpClient = createAniListHttpClient(
                 MockEngine { request ->
                     aniListAuthorization = request.headers["Authorization"]
@@ -68,10 +89,10 @@ class LinkedTokenIsolationTest {
             ),
             tokenProvider = { session.validToken(ProviderId.AniList) },
         )
-        aniListClient.execute(AniListGraphQLRequest("query X { ok }")) { it.toString() }
+        sessionAniList.execute(AniListGraphQLRequest("query X { ok }")) { it.toString() }
 
         var malAuthorization: String? = null
-        val malClient = MalEntryClient(
+        val mirrorMal = MalEntryClient(
             http = MalHttp(
                 httpClient = HttpClient(
                     MockEngine { request ->
@@ -86,71 +107,58 @@ class LinkedTokenIsolationTest {
                 redirectUri = "michi://oauth/callback",
             ),
             bridge = MediaIdBridgeImpl(FakeGraphQL(emptyList()), InMemoryFileStore()),
-            tokenProvider = { linked.validToken(ProviderId.Mal) },
+            tokenProvider = { session.mirrorTokens.mirrorToken(ProviderId.Mal) },
         )
-        malClient.read(aniListId = 10, type = MediaType.ANIME, idMal = 20)
+        mirrorMal.read(aniListId = 10, type = MediaType.ANIME, idMal = 20)
 
-        assertEquals("Bearer anilist-session", aniListAuthorization)
-        assertEquals("Bearer mal-linked", malAuthorization)
-        assertNull(session.validToken(ProviderId.Mal), "the session never lends a MAL token")
-        assertNull(linked.validToken(ProviderId.AniList), "the link never lends an AniList token")
+        assertEquals("Bearer anilist-token", aniListAuthorization)
+        assertEquals("Bearer mal-token", malAuthorization)
+        assertNull(session.validToken(ProviderId.Mal), "a followed AniList session never lends MAL")
+        assertEquals(
+            "anilist-token",
+            session.mirrorTokens.mirrorToken(ProviderId.AniList)?.accessToken,
+        )
     }
 
     @Test
-    fun sessionMalAndLinkedAniListNeverSendEachOthersToken() = runBlocking {
-        val sessionMal = InMemoryTokenStorage().apply { save(token("mal-session")) }
-        val linkedAniList = InMemoryTokenStorage().apply { save(token("anilist-linked")) }
+    fun switchingTheFollowedAccountSwapsTheTokenSeams() = runBlocking {
+        val aniListStorage = InMemoryTokenStorage().apply { save(token("anilist-token")) }
+        val malStorage = InMemoryTokenStorage().apply { save(token("mal-token")) }
+        val linkedStore = InMemoryLinkedAccountStore(account = account(ProviderId.Mal, "mal-user"))
+        val linked = testLinkedAccountManager(linkedStore)
         val session = testSessionManager(
-            providers = listOf(TestAuthProvider(id = ProviderId.Mal)),
-            tokenStorages = mapOf(ProviderId.Mal to sessionMal),
-            activeProviderStore = InMemoryActiveProviderStore(ProviderId.Mal),
-        )
-        val linked = testLinkedAccountManager(
-            providers = listOf(TestAuthProvider(id = ProviderId.AniList)),
-            tokenStorages = mapOf(ProviderId.AniList to linkedAniList),
-            store = InMemoryLinkedAccountStore(),
-            viewerFetchers = mapOf(
-                ProviderId.AniList to {
-                    NetworkResult.Success(
-                        Viewer(
-                            id = 7,
-                            name = "ani",
-                            provider = ProviderId.AniList,
-                            scoreFormat = "POINT_10",
-                        ),
-                    )
-                },
+            providers = listOf(
+                TestAuthProvider(id = ProviderId.AniList),
+                TestAuthProvider(id = ProviderId.Mal),
             ),
+            tokenStorages = mapOf(
+                ProviderId.AniList to aniListStorage,
+                ProviderId.Mal to malStorage,
+            ),
+            activeProviderStore = InMemoryActiveProviderStore(ProviderId.AniList),
+            cachedViewerStore = InMemoryCachedViewerStore(viewer(ProviderId.AniList, "ani-user")),
+            linkedAccounts = linked,
         )
-        linked.link(TestAuthProvider(id = ProviderId.AniList), token("anilist-linked"))
+        linked.bootstrap()
+        session.bootstrap()
+        session.setFollowed(ProviderId.Mal)
 
-        var sessionAniListAuthorization: String? = "unset"
-        val sessionAniListClient = KtorAniListGraphQLClient(
+        assertNull(session.validToken(ProviderId.AniList), "the session no longer owns AniList")
+        assertEquals("mal-token", session.validToken(ProviderId.Mal)?.accessToken)
+        assertEquals("anilist-token", session.mirrorTokens.mirrorToken(ProviderId.AniList)?.accessToken)
+
+        var mirrorAniListAuthorization: String? = null
+        val mirrorAniList = KtorAniListGraphQLClient(
             httpClient = createAniListHttpClient(
                 MockEngine { request ->
-                    sessionAniListAuthorization = request.headers["Authorization"]
+                    mirrorAniListAuthorization = request.headers["Authorization"]
                     respond("""{"data":{"ok":true}}""", HttpStatusCode.OK)
                 },
             ),
-            tokenProvider = { session.validToken(ProviderId.AniList) },
+            tokenProvider = { session.mirrorTokens.mirrorToken(ProviderId.AniList) },
         )
-        sessionAniListClient.execute(AniListGraphQLRequest("query X { ok }")) { it.toString() }
+        mirrorAniList.execute(AniListGraphQLRequest("query X { ok }")) { it.toString() }
 
-        var linkedAniListAuthorization: String? = null
-        val linkedAniListClient = KtorAniListGraphQLClient(
-            httpClient = createAniListHttpClient(
-                MockEngine { request ->
-                    linkedAniListAuthorization = request.headers["Authorization"]
-                    respond("""{"data":{"ok":true}}""", HttpStatusCode.OK)
-                },
-            ),
-            tokenProvider = { linked.validToken(ProviderId.AniList) },
-        )
-        linkedAniListClient.execute(AniListGraphQLRequest("query X { ok }")) { it.toString() }
-
-        assertNull(sessionAniListAuthorization, "an anonymous session cannot send the MAL token to AniList")
-        assertEquals("Bearer anilist-linked", linkedAniListAuthorization)
-        assertNull(session.validToken(ProviderId.AniList), "a MAL session has no AniList token")
-        assertNull(linked.validToken(ProviderId.Mal), "the link never lends a MAL token")
+        assertEquals("Bearer anilist-token", mirrorAniListAuthorization)
     }
 }

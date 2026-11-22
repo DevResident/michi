@@ -7,14 +7,14 @@ import com.luum.michi.app.core.medialist.domain.MirrorDiff
 import com.luum.michi.app.core.medialist.domain.MirrorPreviewRow
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
-import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncCoordinator
+import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncSource
 
 /**
  * State for the "Sync now" preview page. The page can close immediately after
  * applying: the actual copies continue in the app-scoped mirror controller.
  */
 internal class MirrorSyncStateHolder(
-    private val coordinator: MirrorSyncCoordinator,
+    private val coordinator: MirrorSyncSource,
 ) {
     var loading by mutableStateOf(false)
         private set
@@ -47,7 +47,9 @@ internal class MirrorSyncStateHolder(
                 preview = diff
                 selectedKeys = buildSet {
                     diff.additions.forEach { add(it.key) }
-                    diff.updates.filterNot { it.newerInLinked }.forEach { add(it.key) }
+                    diff.updates
+                        .filterNot { it.newerInLinked || it.regression }
+                        .forEach { add(it.key) }
                 }
             }
             is NetworkResult.Failure -> error = result.error

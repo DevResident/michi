@@ -17,8 +17,9 @@ import com.luum.michi.app.core.medialist.repository.MirrorBatchItem
 import com.luum.michi.app.core.medialist.repository.MirrorOutbox
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
+import com.luum.michi.app.core.session.domain.LinkedAccount
 import com.luum.michi.app.core.session.domain.LinkedAccountManager
-import com.luum.michi.app.core.session.domain.Viewer
+import com.luum.michi.app.core.session.domain.LinkedViewer
 import com.luum.michi.app.mediaList.repository.mirror.MirrorController
 import com.luum.michi.app.mediaList.repository.mirror.MirrorWriter
 import com.luum.michi.app.testLinkedAccountManager
@@ -73,20 +74,21 @@ private class RecordingWriter(
     }
 }
 
-private suspend fun linkedManager(autoCopy: Boolean): LinkedAccountManager {
-    val provider = TestAuthProvider(id = ProviderId.Mal)
+private fun linkedManager(autoCopy: Boolean): LinkedAccountManager {
     val manager = testLinkedAccountManager(
-        providers = listOf(provider),
-        tokenStorages = mapOf(ProviderId.Mal to InMemoryTokenStorage()),
-        store = InMemoryLinkedAccountStore(),
-        viewerFetchers = mapOf(
-            ProviderId.Mal to {
-                NetworkResult.Success(Viewer(id = 42, name = "mal", provider = ProviderId.Mal))
-            },
+        InMemoryLinkedAccountStore(
+            account = LinkedAccount(
+                provider = ProviderId.Mal,
+                viewer = LinkedViewer(
+                    id = 42,
+                    name = "mal",
+                    scoreFormat = ScoreFormat.POINT_10,
+                ),
+            ),
+            autoCopy = autoCopy,
         ),
     )
-    manager.link(provider, token())
-    manager.setAutoCopy(autoCopy)
+    manager.bootstrap()
     return manager
 }
 
@@ -95,15 +97,14 @@ private fun controller(
     linked: LinkedAccountManager,
     writer: MirrorWriter,
     authenticated: Boolean = true,
-    onLinkDead: suspend () -> Unit = {},
+    writers: Map<ProviderId, MirrorWriter> = mapOf(writer.provider to writer),
 ) = MirrorController(
     outbox = outbox,
     linkedAccounts = linked,
-    writers = mapOf(writer.provider to writer),
-    isSessionAuthenticated = { authenticated },
-    activeProvider = { ProviderId.AniList },
+    writers = writers,
+    followedProvider = { if (authenticated) ProviderId.AniList else null },
     sourceScoreFormat = { ScoreFormat.POINT_10_DECIMAL },
-    onLinkDead = onLinkDead,
+    isConnected = { authenticated },
     scope = CoroutineScope(Dispatchers.Unconfined),
     nowMillis = { 0L },
 )
@@ -172,19 +173,28 @@ class MirrorControllerTest {
     }
 
     @Test
-    fun unauthorizedUnlinksAndClearsTheOutbox() = runBlocking {
+    fun unauthorizedDropsOnlyThatTargetsOperations() = runBlocking {
         val outbox = MirrorOutbox(InMemoryFileStore())
         outbox.load()
         outbox.enqueue(controllerEntry(), AllMirrorFields)
+        outbox.enqueue(
+            controllerEntry().copy(sourceProvider = ProviderId.Mal, aniListId = 11),
+            AllMirrorFields,
+        )
         val linked = linkedManager(autoCopy = true)
         val writer = RecordingWriter(
             results = ArrayDeque(listOf(NetworkResult.Failure(NetworkError.Unauthorized(null)))),
         )
-        var linkDead = 0
+        val aniListWriter = RecordingWriter(provider = ProviderId.AniList)
 
-        controller(outbox, linked, writer, onLinkDead = { linkDead++ }).drainDue(now = 0L)
+        controller(
+            outbox = outbox,
+            linked = linked,
+            writer = writer,
+            writers = mapOf(ProviderId.Mal to writer, ProviderId.AniList to aniListWriter),
+        ).drainDue(now = 0L)
 
-        assertEquals(1, linkDead)
+        assertEquals(1, aniListWriter.calls.size)
         assertEquals(0, outbox.state.value.pending)
     }
 
@@ -250,28 +260,52 @@ class MirrorControllerTest {
     }
 
     @Test
-    fun unlinkingClearsTheOutboxThroughTheManagerCallback() = runBlocking {
+    fun disconnectingOneAccountKeepsTheOtherAccountsQueue() = runBlocking {
         val outbox = MirrorOutbox(InMemoryFileStore())
         outbox.load()
         outbox.enqueue(controllerEntry(), AllMirrorFields)
-        val provider = TestAuthProvider(id = ProviderId.Mal)
-        val linked = testLinkedAccountManager(
-            providers = listOf(provider),
-            tokenStorages = mapOf(ProviderId.Mal to InMemoryTokenStorage()),
-            store = InMemoryLinkedAccountStore(),
-            viewerFetchers = mapOf(
-                ProviderId.Mal to {
-                    NetworkResult.Success(Viewer(id = 42, name = "mal", provider = ProviderId.Mal))
-                },
-            ),
-            onUnlinked = { outbox.clear() },
+        outbox.enqueue(
+            controllerEntry().copy(sourceProvider = ProviderId.Mal, aniListId = 11),
+            AllMirrorFields,
         )
-        linked.link(provider, token())
+        val linked = linkedManager(autoCopy = true)
+        val aniListWriter = RecordingWriter(provider = ProviderId.AniList)
+        val controller = controller(
+            outbox = outbox,
+            linked = linked,
+            writer = aniListWriter,
+            writers = mapOf(ProviderId.AniList to aniListWriter),
+        )
 
-        linked.unlink()
+        controller.onAccountDisconnected(ProviderId.Mal)
+        controller.drainDue(now = 0L)
 
+        assertEquals(1, aniListWriter.calls.size)
         assertEquals(0, outbox.state.value.pending)
-        assertNull(outbox.nextDue(now = 0L))
+    }
+
+    @Test
+    fun preservedOperationsToTheRemainingAccountAreDelivered() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        outbox.enqueue(
+            controllerEntry().copy(sourceProvider = ProviderId.Mal, aniListId = 11),
+            AllMirrorFields,
+        )
+        val linked = linkedManager(autoCopy = false)
+        val aniListWriter = RecordingWriter(provider = ProviderId.AniList)
+        val controller = controller(
+            outbox = outbox,
+            linked = linked,
+            writer = aniListWriter,
+            writers = mapOf(ProviderId.AniList to aniListWriter),
+        )
+
+        controller.onAccountDisconnected(ProviderId.Mal)
+        controller.drainDue(now = 0L)
+
+        assertEquals(1, aniListWriter.calls.size)
+        assertEquals(0, outbox.state.value.pending)
     }
 
     @Test

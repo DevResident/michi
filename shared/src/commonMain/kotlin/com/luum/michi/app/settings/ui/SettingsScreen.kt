@@ -44,7 +44,7 @@ import com.luum.michi.app.settings.domain.model.StartTabOption
 import com.luum.michi.app.settings.domain.model.TitleLanguage
 import com.luum.michi.app.settings.domain.model.label
 import com.luum.michi.app.core.session.domain.Viewer
-import com.luum.michi.app.settings.ui.state.LinkedAccountUiState
+import com.luum.michi.app.accounts.ui.state.AccountsUiState
 import com.luum.michi.app.settings.ui.state.SettingsState
 import com.luum.michi.app.ui.components.ModalSheet
 import com.luum.michi.app.ui.components.OptionGroup
@@ -80,23 +80,15 @@ internal fun SettingsScreen(
     settingsState: SettingsState,
     startDestination: StartDestinationChoice = StartDestinationChoice(),
     viewer: Viewer?,
-    linkedAccount: LinkedAccountUiState? = null,
-    onLogin: () -> Unit,
-    onLogout: () -> Unit,
-    onLinkAccount: (ProviderId) -> Unit = {},
-    onUnlinkAccount: () -> Unit = {},
+    accounts: AccountsUiState? = null,
     onDismissLostAccess: () -> Unit = {},
-    onAutoCopyChange: (Boolean) -> Unit = {},
-    onRetryMirror: () -> Unit = {},
-    onOpenMirrorSync: () -> Unit = {},
+    onOpenAccounts: () -> Unit = {},
     onOpenAbout: () -> Unit,
     bottomPadding: Dp,
     strings: LanguageStrings = Strings.current,
     modifier: Modifier = Modifier,
 ) {
     var openSheet: SettingsSheet? by remember { mutableStateOf(null) }
-    var signOutConfirmSheet by remember { mutableStateOf(false) }
-    var unlinkConfirmSheet by remember { mutableStateOf(false) }
 
     val listContent: @Composable () -> Unit = {
         LazyColumn(
@@ -112,25 +104,24 @@ internal fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                SettingsAccountCard(
+                SettingsAccountsRow(
                     viewer = viewer,
+                    accounts = accounts,
                     strings = strings,
-                    onSignIn = onLogin,
-                    onAccountSettings = { openSheet = SettingsSheet.Account },
+                    onOpenAccounts = onOpenAccounts,
                 )
             }
-            if (viewer != null && linkedAccount != null && !linkedAccount.isEmpty) {
+            accounts?.lostAccess?.let { provider ->
                 item {
-                    SettingsLinkedAccountCard(
-                        state = linkedAccount,
-                        strings = strings,
-                        onLink = onLinkAccount,
-                        onUnlink = { unlinkConfirmSheet = true },
-                        onDismissLostAccess = onDismissLostAccess,
-                        onAutoCopyChange = onAutoCopyChange,
-                        onRetryMirror = onRetryMirror,
-                        onOpenMirrorSync = onOpenMirrorSync,
-                    )
+                    OptionGroup(title = null) {
+                        SettingsRow(
+                            label = strings.accountsLostAccess(accounts.label(provider)),
+                            value = strings.accountsLostAccessDismiss,
+                            onClick = onDismissLostAccess,
+                            valueColor = LocalWarning.current,
+                            divider = false,
+                        )
+                    }
                 }
             }
             item {
@@ -512,78 +503,6 @@ internal fun SettingsScreen(
         )
     }
 
-    if (openSheet == SettingsSheet.Account && viewer != null) {
-        ModalSheet(
-            title = strings.settingsAccountSettingsTitle,
-            dismissLabel = strings.dismissAction,
-            onDismiss = { openSheet = null },
-        ) {
-            OptionGroup(title = null) {
-                SettingsRow(
-                    label = viewer.name,
-                    value = strings.settingsSignOutTitle,
-                    onClick = { signOutConfirmSheet = true },
-                    divider = false,
-                    valueColor = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-    }
-
-    if (signOutConfirmSheet) {
-        ModalSheet(
-            title = strings.settingsSignOutTitle,
-            dismissLabel = strings.dismissAction,
-            onDismiss = { signOutConfirmSheet = false },
-            footer = {
-                AppButton(
-                    label = strings.settingsSignOutConfirmAction,
-                    onClick = {
-                        signOutConfirmSheet = false
-                        openSheet = null
-                        onLogout()
-                    },
-                    emphasis = ButtonEmphasis.Secondary,
-                    containerColor = null,
-                    contentColor = MaterialTheme.colorScheme.error,
-                )
-            },
-        ) {
-            Text(
-                text = strings.settingsSignOutConfirmMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-
-    if (unlinkConfirmSheet && linkedAccount?.account != null) {
-        val account = linkedAccount.account
-        val label = linkedAccount.label(account.provider)
-        ModalSheet(
-            title = strings.settingsLinkedUnlinkTitle,
-            dismissLabel = strings.dismissAction,
-            onDismiss = { unlinkConfirmSheet = false },
-            footer = {
-                AppButton(
-                    label = strings.settingsLinkedUnlinkTitle,
-                    onClick = {
-                        unlinkConfirmSheet = false
-                        onUnlinkAccount()
-                    },
-                    emphasis = ButtonEmphasis.Secondary,
-                    containerColor = null,
-                    contentColor = MaterialTheme.colorScheme.error,
-                )
-            },
-        ) {
-            Text(
-                text = strings.settingsLinkedUnlinkConfirmMessage(label),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
 }
 
 @Composable
@@ -628,173 +547,37 @@ private fun ThemePaletteSection(
     )
 }
 
-/** Linked-account card, under the session card. Guests never see it. */
+/** First Settings section: the followed account + the connected services summary.
+ *  Connected and guest share the same row; it always opens Accounts. */
 @Composable
-private fun SettingsLinkedAccountCard(
-    state: LinkedAccountUiState,
-    strings: LanguageStrings,
-    onLink: (ProviderId) -> Unit,
-    onUnlink: () -> Unit,
-    onDismissLostAccess: () -> Unit,
-    onAutoCopyChange: (Boolean) -> Unit,
-    onRetryMirror: () -> Unit,
-    onOpenMirrorSync: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OptionGroup(
-        title = strings.settingsLinkedAccountTitle,
-        modifier = modifier,
-    ) {
-        val account = state.account
-        if (account != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Avatar(
-                    imageUrl = account.viewer.avatarUrl,
-                    initials = initialsFor(account.viewer.name),
-                    size = AvatarSize.Row,
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = account.viewer.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            ToggleRow(
-                title = strings.settingsLinkedAutoCopyTitle,
-                checked = state.autoCopy,
-                onCheckedChange = onAutoCopyChange,
-            )
-            val hasErrors = state.mirrorErrors > 0
-            val activeBatch = state.mirrorBatch?.takeIf { it.active }
-            SettingsRow(
-                label = strings.settingsMirrorStatusTitle,
-                value = when {
-                    activeBatch != null -> buildString {
-                        append(strings.settingsMirrorProgress(activeBatch.done, activeBatch.total))
-                        if (activeBatch.errors > 0) {
-                            append(" · ")
-                            append(strings.settingsMirrorWithErrors(activeBatch.errors))
-                        }
-                    }
-                    hasErrors -> strings.settingsMirrorWithErrors(state.mirrorErrors) +
-                        " · " + strings.settingsMirrorRetryTitle
-                    state.mirrorPending > 0 -> strings.settingsMirrorPending(state.mirrorPending)
-                    else -> strings.settingsMirrorUpToDate
-                },
-                onClick = if (hasErrors && activeBatch == null) onRetryMirror else null,
-                valueColor = if (hasErrors && activeBatch == null) {
-                    LocalWarning.current
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            SettingsRow(
-                label = strings.mirrorSyncTitle,
-                value = "",
-                onClick = onOpenMirrorSync,
-            )
-            SettingsRow(
-                label = strings.settingsLinkedUnlinkTitle,
-                value = "",
-                onClick = onUnlink,
-                divider = false,
-                valueColor = MaterialTheme.colorScheme.error,
-            )
-        } else {
-            state.linkableProviders
-                .filter { it != state.lostAccessProvider }
-                .forEachIndexed { index, provider ->
-                    val visibleCount = state.linkableProviders.count { it != state.lostAccessProvider }
-                    SettingsRow(
-                        label = strings.settingsLinkedLinkAction(state.label(provider)),
-                        value = "",
-                        onClick = { onLink(provider) },
-                        divider = index < visibleCount - 1 ||
-                            state.lostAccessProvider != null || state.error != null,
-                    )
-                }
-        }
-
-        state.lostAccessProvider?.let { provider ->
-            SettingsRow(
-                label = strings.settingsLinkedLostAccess(state.label(provider)),
-                value = strings.settingsLinkedDismissAction,
-                onClick = onDismissLostAccess,
-                valueColor = LocalWarning.current,
-                divider = !state.labels.containsKey(provider),
-            )
-            if (state.labels.containsKey(provider)) {
-                SettingsRow(
-                    label = strings.settingsLinkedRelinkAction,
-                    value = "",
-                    onClick = { onLink(provider) },
-                    divider = false,
-                )
-            }
-        }
-
-        state.error?.let { error ->
-            Text(
-                text = strings.settingsLinkedLinkFailed + " " + strings.networkErrorMessage(error),
-                style = MaterialTheme.typography.bodySmall,
-                color = LocalWarning.current,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
-        }
-    }
-}
-
-/** Session card, first in Settings (identity before prefs). Plain [OptionGroup]:
- * the glass pilot (sep-2026) proved content cards read worse in light mode
- * (translucency washes out, shadow + 40% border render a ghost edge), so
- * glass stays reserved for floating surfaces and actions. */
-@Composable
-private fun SettingsAccountCard(
+private fun SettingsAccountsRow(
     viewer: Viewer?,
+    accounts: AccountsUiState?,
     strings: LanguageStrings,
-    onSignIn: () -> Unit,
-    onAccountSettings: () -> Unit,
+    onOpenAccounts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OptionGroup(
-        title = strings.settingsAccountTitle,
-        modifier = modifier,
-    ) {
+    OptionGroup(title = null, modifier = modifier) {
         if (viewer != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Avatar(
-                    imageUrl = viewer.avatarUrl,
-                    initials = initialsFor(viewer.name),
-                    size = AvatarSize.Row,
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = viewer.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
-            }
             SettingsRow(
-                label = strings.settingsAccountSettingsTitle,
+                label = viewer.name,
                 value = "",
-                onClick = onAccountSettings,
+                onClick = onOpenAccounts,
+                supportingText = accounts?.summary?.takeIf { it.isNotBlank() },
+                leading = {
+                    Avatar(
+                        imageUrl = viewer.avatarUrl,
+                        initials = initialsFor(viewer.name),
+                        size = AvatarSize.Row,
+                    )
+                },
+                divider = false,
             )
         } else {
             SettingsRow(
                 label = strings.settingsSignInTitle,
                 value = "",
-                onClick = onSignIn,
+                onClick = onOpenAccounts,
                 divider = false,
             )
         }
@@ -891,7 +674,6 @@ private enum class SettingsSheet {
     StaffNameLanguage,
     ScoreFormat,
     Sort,
-    Account,
 }
 
 private fun ThemeType.label(strings: LanguageStrings): String = when (this) {

@@ -19,6 +19,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +35,7 @@ import com.luum.michi.app.core.medialist.domain.MirrorLinkedOnlyRow
 import com.luum.michi.app.core.medialist.domain.MirrorPreviewRow
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.label
+import com.luum.michi.app.core.medialist.repository.MirrorOutboxState
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.mirror.ui.model.summaryLine
 import com.luum.michi.app.mirror.ui.state.MirrorSyncStateHolder
@@ -56,6 +58,8 @@ import kotlinx.coroutines.launch
 internal fun MirrorSyncScreen(
     holder: MirrorSyncStateHolder,
     bottomPadding: Dp,
+    outbox: MirrorOutboxState = MirrorOutboxState(),
+    onRetry: () -> Unit = {},
     onApplied: () -> Unit,
     strings: LanguageStrings = Strings.current,
     modifier: Modifier = Modifier,
@@ -135,6 +139,27 @@ internal fun MirrorSyncScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = LocalWarning.current,
                                 )
+                            }
+                        }
+                    }
+                }
+
+                if (outbox.withErrors > 0) {
+                    item(key = "outbox-errors") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = strings.accountsSyncErrors(outbox.withErrors),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = LocalWarning.current,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = onRetry) {
+                                Text(strings.retryAction)
                             }
                         }
                     }
@@ -273,6 +298,13 @@ private fun MirrorPreviewRowItem(
                 if (row.newerInLinked) {
                     Text(
                         text = strings.mirrorSyncNewerInLinked,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LocalWarning.current,
+                    )
+                }
+                if (row.regression) {
+                    Text(
+                        text = strings.mirrorSyncRegression,
                         style = MaterialTheme.typography.bodySmall,
                         color = LocalWarning.current,
                     )

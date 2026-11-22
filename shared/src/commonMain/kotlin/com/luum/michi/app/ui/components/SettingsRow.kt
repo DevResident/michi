@@ -42,6 +42,8 @@ internal fun SettingsRow(
     // the row (the same row measures the same height in both modes).
     trailing: (@Composable () -> Unit)? = null,
     icon: ImageVector? = null,
+    /** Custom leading slot (e.g. the followed account's avatar); wins over [icon]. */
+    leading: (@Composable () -> Unit)? = null,
     supportingText: String? = null,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -56,7 +58,10 @@ internal fun SettingsRow(
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (icon != null) {
+                if (leading != null) {
+                    leading()
+                    Spacer(modifier = Modifier.width(16.dp))
+                } else if (icon != null) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,

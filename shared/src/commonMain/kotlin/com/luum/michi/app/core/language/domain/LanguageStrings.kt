@@ -313,27 +313,50 @@ interface LanguageStrings {
     val aboutDataByTitle: String
     val aboutThemesByTitle: String
     val aboutNotAffiliatedText: String
-    val settingsAccountTitle: String
-    val settingsAccountSettingsTitle: String
     val settingsSignInTitle: String
     val settingsSignOutTitle: String
     val settingsSignOutConfirmAction: String
     val settingsSignOutConfirmMessage: String
-    val settingsLinkedAccountTitle: String
-    fun settingsLinkedLinkAction(provider: String): String
-    val settingsLinkedUnlinkTitle: String
-    fun settingsLinkedUnlinkConfirmMessage(provider: String): String
-    fun settingsLinkedLostAccess(provider: String): String
-    val settingsLinkedRelinkAction: String
-    val settingsLinkedDismissAction: String
-    val settingsLinkedLinkFailed: String
-    val settingsLinkedAutoCopyTitle: String
-    val settingsMirrorStatusTitle: String
-    val settingsMirrorUpToDate: String
-    fun settingsMirrorPending(count: Int): String
-    fun settingsMirrorWithErrors(count: Int): String
-    val settingsMirrorRetryTitle: String
+    val accountsTitle: String
+    val accountsConnectedSection: String
+    val accountsFollowedSection: String
+    val accountsFollowedHint: String
+    val accountsSyncSection: String
+    val accountsSyncComparing: String
+    val accountsSyncUpToDate: String
+    fun accountsSyncCopying(done: Int, total: Int): String
+    fun accountsSyncPending(count: Int): String
+    fun accountsSyncErrors(count: Int): String
+    fun accountsSyncNewer(count: Int, provider: String): String
+    fun accountsSyncRegression(count: Int): String
+    val accountsCompareTitle: String
+    fun accountsCompareMessage(provider: String, additions: Int, updates: Int): String
+    fun accountsCompareSkippedNewer(count: Int, provider: String): String
+    fun accountsCompareSkippedRegression(count: Int): String
+    val accountsCompareApply: String
+    val accountsCompareView: String
+    val accountsCompareLater: String
+    val accountsConnect: String
+    val accountsDisconnect: String
+    fun accountsConnectedAs(name: String): String
+    val accountsNotConnected: String
+    fun accountsProviderSection(provider: String): String
+    val accountsEditProfile: String
+    val accountsManageAccount: String
+    val accountsCompareLists: String
+    val accountsDisconnectTitle: String
+    fun accountsDisconnectMessage(provider: String): String
+    fun accountsDisconnectFollowedMessage(provider: String, other: String): String
+    fun accountsLostAccess(provider: String): String
+    val accountsLostAccessDismiss: String
+    val accountsLostAccessReconnect: String
+    val accountsConnectFailed: String
+    fun accountsEventConnected(provider: String): String
+    fun accountsEventDisconnected(provider: String): String
+    fun accountsEventLostAccess(provider: String): String
+    fun accountsEventFollowed(provider: String): String
     val mirrorSyncTitle: String
+    val mirrorSyncRegression: String
     val mirrorSyncAddSection: String
     val mirrorSyncUpdateSection: String
     val mirrorSyncLinkedOnlySection: String
@@ -347,7 +370,6 @@ interface LanguageStrings {
     val mirrorSyncEmptyTitle: String
     val mirrorSyncEmptyMessage: String
     val mirrorSyncNewerInLinked: String
-    fun settingsMirrorProgress(done: Int, total: Int): String
     val backButton: String
     val authWelcomeTitle: String
     val authModalSubtitle: String

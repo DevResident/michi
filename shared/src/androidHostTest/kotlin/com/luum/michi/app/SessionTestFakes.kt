@@ -9,6 +9,7 @@ import com.luum.michi.app.core.mal.domain.PendingMalAuthStore
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.domain.map
+import com.luum.michi.app.core.session.domain.AccountEvents
 import com.luum.michi.app.core.session.domain.ActiveProviderStore
 import com.luum.michi.app.core.session.domain.CachedViewerStore
 import com.luum.michi.app.core.session.domain.LinkedAccount
@@ -173,20 +174,8 @@ internal class InMemoryLinkedAccountStore(
 }
 
 internal fun testLinkedAccountManager(
-    providers: List<AuthProvider> = listOf(TestAuthProvider()),
-    tokenStorages: Map<ProviderId, com.luum.michi.app.core.auth.domain.TokenStorage>,
     store: InMemoryLinkedAccountStore = InMemoryLinkedAccountStore(),
-    viewerFetchers: Map<ProviderId, suspend (com.luum.michi.app.core.auth.domain.AuthToken) -> NetworkResult<Viewer>> =
-        emptyMap(),
-    onUnlinked: suspend () -> Unit = {},
-): LinkedAccountManager = LinkedAccountManager(
-    providers = providers,
-    tokenStorages = tokenStorages,
-    store = store,
-    viewerFetchers = viewerFetchers,
-    refresher = TokenRefreshCoordinator(),
-    onUnlinked = onUnlinked,
-)
+): LinkedAccountManager = LinkedAccountManager(store = store)
 
 internal fun testSessionManager(
     providers: List<AuthProvider>,
@@ -198,6 +187,11 @@ internal fun testSessionManager(
     linkedAccounts: LinkedAccountManager? = null,
     onSessionClosed: suspend () -> Unit = {},
     onSessionAuthenticated: suspend (ProviderId) -> Unit = {},
+    otherViewerFetchers: Map<ProviderId, suspend (AuthToken) -> NetworkResult<Viewer>> = emptyMap(),
+    onClearAccountData: suspend (ProviderId, Int?) -> Unit = { _, _ -> },
+    onFollowedChanged: suspend (ProviderId) -> Unit = {},
+    onAccountDisconnected: suspend (ProviderId) -> Unit = {},
+    events: AccountEvents = AccountEvents(),
 ): SessionManager = SessionManager(
     providers = providers,
     tokenStorages = tokenStorages,
@@ -208,6 +202,11 @@ internal fun testSessionManager(
     linkedAccounts = linkedAccounts,
     onSessionClosed = onSessionClosed,
     onSessionAuthenticated = onSessionAuthenticated,
+    otherViewerFetchers = otherViewerFetchers,
+    onClearAccountData = onClearAccountData,
+    onFollowedChanged = onFollowedChanged,
+    onAccountDisconnected = onAccountDisconnected,
+    events = events,
 )
 
 internal fun testSessionManager(
@@ -220,6 +219,11 @@ internal fun testSessionManager(
     linkedAccounts: LinkedAccountManager? = null,
     onSessionClosed: suspend () -> Unit = {},
     onSessionAuthenticated: suspend (ProviderId) -> Unit = {},
+    otherViewerFetchers: Map<ProviderId, suspend (AuthToken) -> NetworkResult<Viewer>> = emptyMap(),
+    onClearAccountData: suspend (ProviderId, Int?) -> Unit = { _, _ -> },
+    onFollowedChanged: suspend (ProviderId) -> Unit = {},
+    onAccountDisconnected: suspend (ProviderId) -> Unit = {},
+    events: AccountEvents = AccountEvents(),
 ): SessionManager = testSessionManager(
     providers = listOf(provider),
     tokenStorages = mapOf(provider.id to storage),
@@ -230,4 +234,9 @@ internal fun testSessionManager(
     linkedAccounts = linkedAccounts,
     onSessionClosed = onSessionClosed,
     onSessionAuthenticated = onSessionAuthenticated,
+    otherViewerFetchers = otherViewerFetchers,
+    onClearAccountData = onClearAccountData,
+    onFollowedChanged = onFollowedChanged,
+    onAccountDisconnected = onAccountDisconnected,
+    events = events,
 )

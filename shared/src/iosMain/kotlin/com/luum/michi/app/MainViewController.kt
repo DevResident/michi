@@ -45,7 +45,7 @@ private object IosMichiDependencies {
                 ProviderId.AniList to NSUserDefaultsTokenStorage(ProviderId.AniList),
                 ProviderId.Mal to NSUserDefaultsTokenStorage(ProviderId.Mal),
             ),
-            linkedTokenStorages = mapOf(
+            legacyLinkedTokenStorages = mapOf(
                 ProviderId.AniList to NSUserDefaultsTokenStorage(
                     ProviderId.AniList,
                     keyPrefix = linkedTokenKeyPrefix(ProviderId.AniList),

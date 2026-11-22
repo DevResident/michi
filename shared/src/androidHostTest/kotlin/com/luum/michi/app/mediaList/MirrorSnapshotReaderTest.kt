@@ -45,11 +45,7 @@ class MirrorSnapshotReaderTest {
             tokenProvider = { null },
             bridge = bridge,
         )
-        val linked = testLinkedAccountManager(
-            providers = emptyList(),
-            tokenStorages = emptyMap(),
-            store = InMemoryLinkedAccountStore(),
-        )
+        val linked = testLinkedAccountManager(InMemoryLinkedAccountStore())
         val reader = MirrorSnapshotReader(
             sessionProvider = { ProviderId.AniList },
             sessionUserId = { 7 },
@@ -58,8 +54,10 @@ class MirrorSnapshotReaderTest {
             sessionMalLoader = pageMalLoader,
             linkedAccounts = linked,
             linkedAniListClient = FakeGraphQL(emptyList()),
+            mirrorTokens = com.luum.michi.app.core.session.domain.MirrorTokenSource { null },
             malHttp = malHttp,
             bridge = bridge,
+            onUnauthorized = {},
         )
 
         val result = reader.readPrimary()

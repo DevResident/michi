@@ -17,6 +17,7 @@ private data class LinkedAccountDto(
     val viewerId: Int,
     val name: String,
     val avatarUrl: String? = null,
+    val bannerUrl: String? = null,
     val scoreFormat: String? = null,
 )
 
@@ -42,6 +43,7 @@ internal class SettingsStoreLinkedAccountStore(
                 id = dto.viewerId,
                 name = dto.name,
                 avatarUrl = dto.avatarUrl,
+                bannerUrl = dto.bannerUrl,
                 scoreFormat = format,
             ),
         )
@@ -56,6 +58,7 @@ internal class SettingsStoreLinkedAccountStore(
                     viewerId = account.viewer.id,
                     name = account.viewer.name,
                     avatarUrl = account.viewer.avatarUrl,
+                    bannerUrl = account.viewer.bannerUrl,
                     scoreFormat = account.viewer.scoreFormat.name,
                 ),
             ),

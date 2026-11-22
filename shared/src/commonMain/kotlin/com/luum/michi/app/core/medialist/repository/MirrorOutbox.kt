@@ -21,6 +21,12 @@ import kotlinx.serialization.json.Json
 
 internal const val MirrorOutboxFileName = "mirror_outbox_v1.json"
 
+/** One destination for one work: the same media can travel in both directions. */
+internal data class MirrorOutboxKey(
+    val targetProvider: ProviderId,
+    val aniListId: Int,
+)
+
 /** One coalesced copy, persisted across app launches. */
 internal data class MirrorOutboxOperation(
     val entry: MirrorEntry,
@@ -65,8 +71,8 @@ internal class MirrorOutbox(
     private val nowMillis: () -> Long = { currentEpochSeconds() * 1000L },
 ) {
     private val mutex = Mutex()
-    private val operations = linkedMapOf<Int, MirrorOutboxOperation>()
-    private val batchKeys = mutableSetOf<Int>()
+    private val operations = linkedMapOf<MirrorOutboxKey, MirrorOutboxOperation>()
+    private val batchKeys = mutableSetOf<MirrorOutboxKey>()
     private var batchTotal = 0
     private var batchDone = 0
     private var batchErrors = 0
@@ -93,39 +99,68 @@ internal class MirrorOutbox(
         dropped = dto.dropped.coerceAtLeast(0)
         dto.operations.forEach { op ->
             val resolved = op.toDomainOrNull() ?: return@forEach
-            operations[resolved.entry.aniListId] = resolved
+            operations[resolved.key()] = resolved
         }
         publishLocked()
     }
 
     suspend fun enqueue(entry: MirrorEntry, fields: Set<MirrorField>) {
         if (fields.isEmpty()) return
+        load()
         mutex.withLock {
-            operations[entry.aniListId] = mergeLocked(entry, fields)
+            val key = MirrorOutboxKey(entry.targetProvider(), entry.aniListId)
+            operations[key] = mergeLocked(key, entry, fields)
             persistLocked()
             publishLocked()
         }
     }
 
     /** Coalesced apply of a preview: one persistence write for the whole batch. */
-    suspend fun beginBatch(items: List<MirrorBatchItem>) = mutex.withLock {
-        val keys = linkedSetOf<Int>()
-        items.forEach { item ->
-            if (item.fields.isEmpty()) return@forEach
-            operations[item.entry.aniListId] = mergeLocked(item.entry, item.fields)
-            keys += item.entry.aniListId
+    suspend fun beginBatch(items: List<MirrorBatchItem>) {
+        load()
+        mutex.withLock {
+            val keys = linkedSetOf<MirrorOutboxKey>()
+            items.forEach { item ->
+                if (item.fields.isEmpty()) return@forEach
+                val key = MirrorOutboxKey(item.entry.targetProvider(), item.entry.aniListId)
+                operations[key] = mergeLocked(key, item.entry, item.fields)
+                keys += key
+            }
+            batchKeys.clear()
+            batchKeys += keys
+            batchTotal = keys.size
+            batchDone = 0
+            batchErrors = 0
+            persistLocked()
+            publishLocked()
         }
-        batchKeys.clear()
-        batchKeys += keys
-        batchTotal = keys.size
-        batchDone = 0
-        batchErrors = 0
-        persistLocked()
-        publishLocked()
     }
 
-    private fun mergeLocked(entry: MirrorEntry, fields: Set<MirrorField>): MirrorOutboxOperation {
-        val existing = operations[entry.aniListId]
+    /**
+     * Drops only the copies aimed at [provider]: disconnecting one account must
+     * never discard queued changes for the account that stays.
+     */
+    suspend fun discardTarget(provider: ProviderId) {
+        load()
+        mutex.withLock {
+            val keys = operations.filterValues { it.targetProvider == provider }.keys
+            if (keys.isEmpty()) return@withLock
+            keys.forEach(operations::remove)
+            val batchRemoved = keys.count { batchKeys.remove(it) }
+            if (batchRemoved > 0) {
+                batchTotal = (batchTotal - batchRemoved).coerceAtLeast(batchDone + batchErrors)
+            }
+            persistLocked()
+            publishLocked()
+        }
+    }
+
+    private fun mergeLocked(
+        key: MirrorOutboxKey,
+        entry: MirrorEntry,
+        fields: Set<MirrorField>,
+    ): MirrorOutboxOperation {
+        val existing = operations[key]
         return if (existing == null) {
             MirrorOutboxOperation(
                 entry = entry,
@@ -146,73 +181,91 @@ internal class MirrorOutbox(
         }
     }
 
-    suspend fun nextDue(now: Long = nowMillis()): MirrorOutboxOperation? = mutex.withLock {
-        operations.values.firstOrNull { it.nextAttemptAtEpochMillis <= now }
+    suspend fun nextDue(now: Long = nowMillis()): MirrorOutboxOperation? {
+        load()
+        return mutex.withLock {
+            operations.values.firstOrNull { it.nextAttemptAtEpochMillis <= now }
+        }
     }
 
     /** Removes only the version that was actually written. */
-    suspend fun markSuccess(operation: MirrorOutboxOperation) = mutex.withLock {
-        val current = operations[operation.entry.aniListId] ?: return@withLock
-        if (current.version != operation.version) return@withLock
-        operations.remove(operation.entry.aniListId)
-        completeBatchKeyLocked(operation.entry.aniListId, error = false)
-        persistLocked()
-        publishLocked()
-    }
-
-    suspend fun markTransient(operation: MirrorOutboxOperation, error: String) = mutex.withLock {
-        val current = operations[operation.entry.aniListId] ?: return@withLock
-        if (current.version != operation.version) return@withLock
-        val now = nowMillis()
-        val attempts = current.attempts + 1
-        val firstFailure = current.firstFailureAtEpochMillis ?: now
-        val exhausted = attempts >= MaxAttempts ||
-            now - firstFailure >= RetryWindowMillis
-        val backoff = if (exhausted) {
-            Long.MAX_VALUE
-        } else {
-            val exponent = (attempts - 1).coerceIn(0, 10)
-            val delay = (BaseBackoffMillis shl exponent).coerceAtMost(MaxBackoffMillis)
-            now + delay
+    suspend fun markSuccess(operation: MirrorOutboxOperation) {
+        load()
+        mutex.withLock {
+            val key = operation.key()
+            val current = operations[key] ?: return@withLock
+            if (current.version != operation.version) return@withLock
+            operations.remove(key)
+            completeBatchKeyLocked(key, error = false)
+            persistLocked()
+            publishLocked()
         }
-        operations[current.entry.aniListId] = current.copy(
-            attempts = attempts,
-            lastError = error,
-            firstFailureAtEpochMillis = firstFailure,
-            nextAttemptAtEpochMillis = backoff,
-        )
-        if (exhausted) completeBatchKeyLocked(current.entry.aniListId, error = true)
-        persistLocked()
-        publishLocked()
     }
 
-    suspend fun markPermanent(operation: MirrorOutboxOperation, error: String) = mutex.withLock {
-        val current = operations[operation.entry.aniListId] ?: return@withLock
-        if (current.version != operation.version) return@withLock
-        operations.remove(operation.entry.aniListId)
-        completeBatchKeyLocked(operation.entry.aniListId, error = true)
-        dropped += 1
-        persistLocked()
-        publishLocked()
+    suspend fun markTransient(operation: MirrorOutboxOperation, error: String) {
+        load()
+        mutex.withLock {
+            val key = operation.key()
+            val current = operations[key] ?: return@withLock
+            if (current.version != operation.version) return@withLock
+            val now = nowMillis()
+            val attempts = current.attempts + 1
+            val firstFailure = current.firstFailureAtEpochMillis ?: now
+            val exhausted = attempts >= MaxAttempts ||
+                now - firstFailure >= RetryWindowMillis
+            val backoff = if (exhausted) {
+                Long.MAX_VALUE
+            } else {
+                val exponent = (attempts - 1).coerceIn(0, 10)
+                val delay = (BaseBackoffMillis shl exponent).coerceAtMost(MaxBackoffMillis)
+                now + delay
+            }
+            operations[key] = current.copy(
+                attempts = attempts,
+                lastError = error,
+                firstFailureAtEpochMillis = firstFailure,
+                nextAttemptAtEpochMillis = backoff,
+            )
+            if (exhausted) completeBatchKeyLocked(key, error = true)
+            persistLocked()
+            publishLocked()
+        }
+    }
+
+    suspend fun markPermanent(operation: MirrorOutboxOperation, error: String) {
+        load()
+        mutex.withLock {
+            val key = operation.key()
+            val current = operations[key] ?: return@withLock
+            if (current.version != operation.version) return@withLock
+            operations.remove(key)
+            completeBatchKeyLocked(key, error = true)
+            dropped += 1
+            persistLocked()
+            publishLocked()
+        }
     }
 
     /** Re-arms every parked/failed operation and asks the drainer to try now. */
-    suspend fun retryFailed() = mutex.withLock {
-        var changed = false
-        for ((key, op) in operations) {
-            if (op.lastError == null) continue
-            operations[key] = op.copy(
-                attempts = 0,
-                lastError = null,
-                firstFailureAtEpochMillis = null,
-                nextAttemptAtEpochMillis = 0L,
-                version = op.version + 1L,
-            )
-            changed = true
-        }
-        if (changed) {
-            persistLocked()
-            publishLocked()
+    suspend fun retryFailed() {
+        load()
+        mutex.withLock {
+            var changed = false
+            for ((key, op) in operations) {
+                if (op.lastError == null) continue
+                operations[key] = op.copy(
+                    attempts = 0,
+                    lastError = null,
+                    firstFailureAtEpochMillis = null,
+                    nextAttemptAtEpochMillis = 0L,
+                    version = op.version + 1L,
+                )
+                changed = true
+            }
+            if (changed) {
+                persistLocked()
+                publishLocked()
+            }
         }
     }
 
@@ -276,10 +329,13 @@ internal class MirrorOutbox(
         )
     }
 
-    private fun completeBatchKeyLocked(key: Int, error: Boolean) {
+    private fun completeBatchKeyLocked(key: MirrorOutboxKey, error: Boolean) {
         if (!batchKeys.remove(key)) return
         if (error) batchErrors += 1 else batchDone += 1
     }
+
+    private fun MirrorOutboxOperation.key(): MirrorOutboxKey =
+        MirrorOutboxKey(targetProvider, entry.aniListId)
 
     private fun MirrorEntry.targetProvider(): ProviderId =
         if (sourceProvider == ProviderId.AniList) ProviderId.Mal else ProviderId.AniList

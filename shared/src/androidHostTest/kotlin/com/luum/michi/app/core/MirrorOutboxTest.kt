@@ -11,6 +11,7 @@ import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.repository.MirrorOutbox
 import com.luum.michi.app.core.medialist.repository.MirrorBatchItem
 import com.luum.michi.app.core.medialist.repository.MirrorOutboxFileName
+import com.luum.michi.app.core.medialist.repository.MirrorOutboxKey
 import com.luum.michi.app.mediaList.InMemoryFileStore
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -218,6 +219,61 @@ class MirrorOutboxTest {
         outbox.markPermanent(secondDue, "not on target")
         assertEquals(1, outbox.state.value.batch?.errors)
         assertFalse(outbox.state.value.batch?.active == true)
+    }
+
+    @Test
+    fun theSameWorkCanTravelInBothDirectionsWithoutCoalescing() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        outbox.enqueue(outboxEntry(), setOf(MirrorField.PROGRESS))
+        outbox.enqueue(
+            outboxEntry(progress = 2).copy(sourceProvider = ProviderId.Mal),
+            setOf(MirrorField.NOTES),
+        )
+
+        assertEquals(2, outbox.state.value.pending)
+        val first = assertNotNull(outbox.nextDue(now = 0L))
+        outbox.markSuccess(first)
+        val second = assertNotNull(outbox.nextDue(now = 0L))
+        assertEquals(ProviderId.AniList, second.targetProvider)
+        assertEquals(setOf(MirrorField.NOTES), second.fields)
+        assertEquals(MirrorOutboxKey(ProviderId.Mal, 10), MirrorOutboxKey(first.targetProvider, first.entry.aniListId))
+    }
+
+    @Test
+    fun discardingOneTargetKeepsTheOtherQueue() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        outbox.enqueue(outboxEntry(), AllMirrorFields)
+        outbox.enqueue(
+            outboxEntry(progress = 2).copy(sourceProvider = ProviderId.Mal),
+            AllMirrorFields,
+        )
+
+        outbox.discardTarget(ProviderId.Mal)
+
+        assertEquals(1, outbox.state.value.pending)
+        assertEquals(ProviderId.AniList, outbox.nextDue(now = 0L)?.targetProvider)
+    }
+
+    @Test
+    fun discardingABatchTargetAdjustsItsProgress() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        val malTarget = outboxEntry()
+        val aniListTarget = outboxEntry(progress = 2).copy(sourceProvider = ProviderId.Mal)
+        outbox.beginBatch(
+            listOf(
+                MirrorBatchItem(malTarget, AllMirrorFields),
+                MirrorBatchItem(aniListTarget, AllMirrorFields),
+            ),
+        )
+
+        outbox.discardTarget(ProviderId.Mal)
+
+        assertEquals(1, outbox.state.value.batch?.total)
+        assertEquals(1, outbox.state.value.pending)
+        assertEquals(ProviderId.AniList, outbox.nextDue(now = 0L)?.targetProvider)
     }
 
     @Test

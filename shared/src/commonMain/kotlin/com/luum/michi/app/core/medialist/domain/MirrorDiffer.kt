@@ -49,6 +49,8 @@ internal data class MirrorPreviewRow(
     val after: MirrorPreviewValues,
     val changedFields: Set<MirrorField>,
     val newerInLinked: Boolean,
+    /** Applying this row would move the other account backwards. */
+    val regression: Boolean = false,
 )
 
 internal data class MirrorLinkedOnlyRow(
@@ -64,7 +66,17 @@ internal data class MirrorDiff(
     val linkedOnly: List<MirrorLinkedOnlyRow>,
     val noEquivalent: Int,
     val privateOmitted: Int,
-)
+) {
+    /** Rows "Poner al día" applies: adds and safe updates only. */
+    val catchUpRows: List<MirrorPreviewRow>
+        get() = additions + updates.filterNot { it.newerInLinked || it.regression }
+
+    val newerInLinkedCount: Int
+        get() = updates.count { it.newerInLinked && !it.regression }
+
+    val regressionCount: Int
+        get() = updates.count { it.regression }
+}
 
 /**
  * Pure list comparison. Fields are compared in the target scale; an empty
@@ -102,7 +114,12 @@ internal object MirrorDiffer {
             }
             val target = linkedByKey[key]
             if (target == null) {
-                val after = targetValues(source.entry, targetProvider, targetScoreFormat) ?: run {
+                val after = targetValues(
+                    entry = source.entry,
+                    targetProvider = targetProvider,
+                    targetFormat = targetScoreFormat,
+                    targetMedia = null,
+                ) ?: run {
                     noEquivalent += 1
                     return@forEach
                 }
@@ -120,7 +137,12 @@ internal object MirrorDiffer {
 
             matched += key
             val before = linkedValues(target.entry)
-            val after = targetValues(source.entry, targetProvider, targetScoreFormat) ?: run {
+            val after = targetValues(
+                entry = source.entry,
+                targetProvider = targetProvider,
+                targetFormat = targetScoreFormat,
+                targetMedia = target.media,
+            ) ?: run {
                 noEquivalent += 1
                 return@forEach
             }
@@ -135,6 +157,7 @@ internal object MirrorDiffer {
                 after = effectiveAfter,
                 changedFields = changed,
                 newerInLinked = isNewerInLinked(source.entry, target.entry),
+                regression = isRegression(before, effectiveAfter),
             )
         }
 
@@ -180,6 +203,7 @@ internal object MirrorDiffer {
         entry: MirrorEntry,
         targetProvider: ProviderId,
         targetFormat: ScoreFormat,
+        targetMedia: MirrorMediaSummary?,
     ): MirrorPreviewValues? = when (targetProvider) {
         ProviderId.Mal -> {
             val values = MirrorTranslator.toMal(entry) ?: return null
@@ -188,10 +212,17 @@ internal object MirrorDiffer {
             } else {
                 malStatusToMediaListStatus(values.status)
             }
+            val chapters = entry.type == MediaType.MANGA
             MirrorPreviewValues(
                 status = status,
-                progress = values.progress,
-                progressVolumes = values.progressVolumes,
+                progress = capToTotal(
+                    values.progress,
+                    if (chapters) targetMedia?.totalChapters else targetMedia?.totalEpisodes,
+                ) ?: 0,
+                progressVolumes = capToTotal(
+                    values.progressVolumes,
+                    targetMedia?.totalVolumes,
+                ),
                 score = values.score.toFloat(),
                 priority = values.priority,
                 repeat = values.repeat,
@@ -202,10 +233,14 @@ internal object MirrorDiffer {
         }
         else -> {
             val values = MirrorTranslator.toAniList(entry, targetFormat) ?: return null
+            val chapters = entry.type == MediaType.MANGA
             MirrorPreviewValues(
                 status = values.status,
-                progress = values.progress,
-                progressVolumes = values.progressVolumes,
+                progress = capToTotal(
+                    values.progress,
+                    if (chapters) targetMedia?.totalChapters else targetMedia?.totalEpisodes,
+                ) ?: 0,
+                progressVolumes = capToTotal(values.progressVolumes, targetMedia?.totalVolumes),
                 score = values.score,
                 priority = values.priority,
                 repeat = values.repeat,
@@ -215,6 +250,30 @@ internal object MirrorDiffer {
             )
         }
     }
+
+    /**
+     * A target cannot store more progress than its own total. Only a positive
+     * total caps; null or 0 (airing/unknown) leaves the value untouched.
+     */
+    private fun capToTotal(value: Int?, total: Int?): Int? {
+        if (value == null) return null
+        if (total == null || total <= 0) return value
+        return value.coerceAtMost(total)
+    }
+
+    /**
+     * Catch-up never moves the other list backwards: lower progress, volumes or
+     * repeat, or leaving COMPLETED. The automatic per-save mirror is untouched.
+     */
+    private fun isRegression(
+        before: MirrorPreviewValues,
+        after: MirrorPreviewValues,
+    ): Boolean =
+        after.progress < before.progress ||
+            (after.progressVolumes ?: 0) < (before.progressVolumes ?: 0) ||
+            after.repeat < before.repeat ||
+            (before.status == MediaListStatus.COMPLETED &&
+                after.status != MediaListStatus.COMPLETED)
 
     /**
      * The empty-primary rule: notes, dates, priority, score and repeat never

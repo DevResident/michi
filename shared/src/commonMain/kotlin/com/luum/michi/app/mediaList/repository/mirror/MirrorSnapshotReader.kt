@@ -1,10 +1,12 @@
 package com.luum.michi.app.mediaList.repository.mirror
 
+import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.mal.domain.MalListEntry
 import com.luum.michi.app.core.mal.domain.malStatusToMediaListStatus
 import com.luum.michi.app.core.mal.repository.MalHttp
 import com.luum.michi.app.core.mal.repository.parseMalFuzzyDate
 import com.luum.michi.app.core.mal.repository.parseMalUpdatedAt
+import com.luum.michi.app.core.media.domain.MalRef
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.media.repository.MediaIdBridge
@@ -23,9 +25,17 @@ import com.luum.michi.app.core.network.domain.AniListGraphQLClient
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.session.domain.LinkedAccountManager
+import com.luum.michi.app.core.session.domain.MirrorTokenSource
 import com.luum.michi.app.mediaList.repository.MediaListEntryDto
 import com.luum.michi.app.mediaList.repository.fetchMediaListCollection
 import com.luum.michi.app.mediaList.repository.mal.MalListLoader
+
+/** The destination's own totals; the differ only caps with positive values. */
+internal data class MirrorTargetTotals(
+    val episodes: Int? = null,
+    val chapters: Int? = null,
+    val volumes: Int? = null,
+)
 
 /**
  * Fresh snapshots for "Sync now". The primary is never read from the UI cache:
@@ -39,8 +49,10 @@ internal class MirrorSnapshotReader(
     private val sessionMalLoader: MalListLoader,
     private val linkedAccounts: LinkedAccountManager,
     private val linkedAniListClient: AniListGraphQLClient,
+    private val mirrorTokens: MirrorTokenSource,
     private val malHttp: MalHttp,
     private val bridge: MediaIdBridge,
+    private val onUnauthorized: suspend (AuthToken) -> Unit,
 ) {
     suspend fun readPrimary(): NetworkResult<MirrorSnapshot> {
         val provider = sessionProvider()
@@ -108,7 +120,7 @@ internal class MirrorSnapshotReader(
                 }
             }
             ProviderId.Mal -> {
-                val token = linkedAccounts.validToken(ProviderId.Mal)
+                val token = mirrorTokens.mirrorToken(ProviderId.Mal)
                     ?: return NetworkResult.Failure(NetworkError.Unauthorized(null))
                 for (type in MediaType.entries) {
                     val result = when (type) {
@@ -118,7 +130,7 @@ internal class MirrorSnapshotReader(
                     when (result) {
                         is NetworkResult.Failure -> {
                             if (result.error is NetworkError.Unauthorized) {
-                                linkedAccounts.onUnauthorized(token)
+                                onUnauthorized(token)
                             }
                             return result
                         }
@@ -133,6 +145,40 @@ internal class MirrorSnapshotReader(
             )
         }
         return NetworkResult.Success(MirrorSnapshot(linked.provider, entries))
+    }
+
+    /**
+     * MAL's user-list endpoint only returns id/title/picture for the node, so
+     * the target totals are fetched only for the rows that would increase
+     * progress. A failure leaves the total unknown (no cap), never fails the
+     * whole preview.
+     */
+    suspend fun readMalTotals(
+        requests: List<Pair<MediaType, Int>>,
+    ): Map<Pair<MediaType, Int>, MirrorTargetTotals> {
+        val distinct = requests.distinct()
+        if (distinct.isEmpty()) return emptyMap()
+        val token = mirrorTokens.mirrorToken(ProviderId.Mal) ?: return emptyMap()
+        val result = mutableMapOf<Pair<MediaType, Int>, MirrorTargetTotals>()
+        for ((type, malId) in distinct) {
+            when (val entry = malHttp.fetchWorkEntry(token, MalRef(malId, type))) {
+                is NetworkResult.Success -> {
+                    result[type to malId] = MirrorTargetTotals(
+                        episodes = entry.value.episodes,
+                        chapters = entry.value.chapters,
+                        volumes = entry.value.volumes,
+                    )
+                }
+                is NetworkResult.Failure -> {
+                    if (entry.error is NetworkError.Unauthorized) {
+                        onUnauthorized(token)
+                        return result
+                    }
+                    // Unknown total: leave the row uncapped.
+                }
+            }
+        }
+        return result
     }
 
     private suspend fun List<MediaListEntryDto>.toMirrorEntries(

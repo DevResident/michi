@@ -24,7 +24,7 @@ fun createMichiDependencies(context: Context): MichiDependencies = MichiDependen
         ProviderId.Mal to
             SharedPreferencesTokenStorage(context.applicationContext, ProviderId.Mal),
     ),
-    linkedTokenStorages = mapOf(
+    legacyLinkedTokenStorages = mapOf(
         ProviderId.AniList to SharedPreferencesTokenStorage(
             context.applicationContext,
             ProviderId.AniList,

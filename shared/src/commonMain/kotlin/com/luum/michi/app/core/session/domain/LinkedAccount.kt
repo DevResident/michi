@@ -25,24 +25,42 @@ internal interface PendingLinkStore {
     fun clear()
 }
 
-/** The minimum identity the linked-account card shows. */
+/** The minimum identity an account row and a followed-account switch need. */
 internal data class LinkedViewer(
     val id: Int,
     val name: String,
     val avatarUrl: String? = null,
+    val bannerUrl: String? = null,
     val scoreFormat: ScoreFormat,
 )
 
 /**
- * The one non-session account that only receives copies. Its token lives in a
- * separate storage namespace, never in the session's per-provider storage.
+ * The connected account that is not followed. Its token lives in the same
+ * per-provider session storage as every other connected account.
  */
 internal data class LinkedAccount(
     val provider: ProviderId,
     val viewer: LinkedViewer,
+) {
+    fun toViewer(): Viewer = Viewer(
+        provider = provider,
+        id = viewer.id,
+        name = viewer.name,
+        avatarUrl = viewer.avatarUrl,
+        bannerUrl = viewer.bannerUrl,
+        scoreFormat = viewer.scoreFormat.name,
+    )
+}
+
+internal fun Viewer.toLinkedViewer(): LinkedViewer = LinkedViewer(
+    id = id,
+    name = name,
+    avatarUrl = avatarUrl,
+    bannerUrl = bannerUrl,
+    scoreFormat = com.luum.michi.app.core.medialist.domain.parseScoreFormat(scoreFormat),
 )
 
-/** Persists the linked viewer + the local mirror preferences. */
+/** Persists the other connected viewer + the local mirror preferences. */
 internal interface LinkedAccountStore {
     fun load(): LinkedAccount?
     fun save(account: LinkedAccount)

@@ -33,6 +33,7 @@ internal sealed interface BackStep {
     data object CloseFavoritesEdit : BackStep
     data object CloseSheet : BackStep
     data object CloseSettingsAbout : BackStep
+    data object CloseSettingsAccounts : BackStep
     data object CloseSettingsMirror : BackStep
     data object CloseOverlay : BackStep
     data object CloseDetail : BackStep
@@ -71,6 +72,7 @@ internal class State(
         // Settings always starts on the list, never on a subpage.
         if (overlay == RootOverlay.Settings) {
             settingsAboutOpen = false
+            settingsAccountsOpen = false
             settingsMirrorOpen = false
         }
         openOverlays = openOverlays + overlay
@@ -80,6 +82,7 @@ internal class State(
         openOverlays = openOverlays - overlay
         if (overlay == RootOverlay.Settings) {
             settingsAboutOpen = false
+            settingsAccountsOpen = false
             settingsMirrorOpen = false
         }
     }
@@ -93,6 +96,7 @@ internal class State(
 
     fun openSettingsAbout() {
         settingsMirrorOpen = false
+        settingsAccountsOpen = false
         settingsAboutOpen = true
     }
 
@@ -100,7 +104,21 @@ internal class State(
         settingsAboutOpen = false
     }
 
-    /** "Sync now" preview: another page inside the settings overlay. */
+    /** Accounts page: another page inside the settings overlay. */
+    var settingsAccountsOpen: Boolean by mutableStateOf(false)
+        private set
+
+    fun openSettingsAccounts() {
+        settingsMirrorOpen = false
+        settingsAboutOpen = false
+        settingsAccountsOpen = true
+    }
+
+    fun closeSettingsAccounts() {
+        settingsAccountsOpen = false
+    }
+
+    /** Mirror preview: another page inside the settings overlay. */
     var settingsMirrorOpen: Boolean by mutableStateOf(false)
         private set
 
@@ -230,6 +248,8 @@ internal class State(
         // Settings subpages: back leaves the page before the settings overlay.
         settingsMirrorOpen && isOpen(RootOverlay.Settings) && !isOpen(RootOverlay.SignIn) &&
             !isEditorOpen -> BackStep.CloseSettingsMirror
+        settingsAccountsOpen && isOpen(RootOverlay.Settings) && !isOpen(RootOverlay.SignIn) &&
+            !isEditorOpen -> BackStep.CloseSettingsAccounts
         settingsAboutOpen && isOpen(RootOverlay.Settings) && !isOpen(RootOverlay.SignIn) &&
             !isEditorOpen -> BackStep.CloseSettingsAbout
         // Surfaces drawn ABOVE the detail page (modal sheets + settings), plus
@@ -277,6 +297,10 @@ internal class State(
         }
         BackStep.CloseSettingsMirror -> {
             closeSettingsMirror()
+            true
+        }
+        BackStep.CloseSettingsAccounts -> {
+            closeSettingsAccounts()
             true
         }
         BackStep.CloseOverlay -> {
@@ -378,6 +402,8 @@ internal class State(
         favoritesEditing = false
         openOverlays = emptySet()
         settingsAboutOpen = false
+        settingsAccountsOpen = false
+        settingsMirrorOpen = false
     }
 }
 

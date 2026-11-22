@@ -26,7 +26,6 @@ import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.OAuthBrowser
 import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.TokenStorage
-import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.auth.repository.AniListAuthProvider
 import com.luum.michi.app.core.mal.domain.MalOAuthConfig
 import com.luum.michi.app.core.mal.repository.MalAuthProvider
@@ -57,10 +56,12 @@ import com.luum.michi.app.core.network.repository.AniListRateLimiter
 import com.luum.michi.app.core.network.repository.KtorAniListGraphQLClient
 import com.luum.michi.app.core.network.repository.createAniListHttpClient
 import com.luum.michi.app.core.session.domain.AniListViewerRepository
+import com.luum.michi.app.core.session.domain.AccountEvents
+import com.luum.michi.app.core.session.domain.LegacyTokenMigration
 import com.luum.michi.app.core.session.domain.LinkedAccountManager
-import com.luum.michi.app.core.session.domain.PendingLink
 import com.luum.michi.app.core.session.domain.PendingLinkStore
 import com.luum.michi.app.core.session.domain.SessionManager
+import com.luum.michi.app.core.session.domain.MirrorTokenSource
 import com.luum.michi.app.core.session.domain.SessionState
 import com.luum.michi.app.core.session.domain.Viewer
 import com.luum.michi.app.core.session.repository.AniListViewerRepositoryImpl
@@ -117,7 +118,8 @@ import com.luum.michi.app.mediaDetail.repository.ExternalLinkCatalogRepositoryIm
  */
 class MichiDependencies internal constructor(
     private val tokenStorages: Map<ProviderId, TokenStorage>,
-    private val linkedTokenStorages: Map<ProviderId, TokenStorage>,
+    /** Legacy 11.6 namespaces; only [legacyTokenMigration] reads/clears them. */
+    private val legacyLinkedTokenStorages: Map<ProviderId, TokenStorage>,
     private val oAuthBrowser: OAuthBrowser,
     internal val urlOpener: UrlOpener,
     internal val shareLauncher: ShareLauncher,
@@ -180,32 +182,38 @@ class MichiDependencies internal constructor(
     private val pendingLinkStore: PendingLinkStore =
         SettingsStorePendingLinkStore(settingsStore)
 
-    private val mirrorOutbox: MirrorOutbox = MirrorOutbox(fileStore)
-
-    /**
-     * The one linked account and its separate token namespace. Its viewer
-     * fetch uses an explicit-token client so linking never touches the session
-     * client; later mirror clients are built on the linked manager below.
-     */
-    internal val linkedAccountManager: LinkedAccountManager = LinkedAccountManager(
-        providers = authProviders,
-        tokenStorages = linkedTokenStorages,
-        store = SettingsStoreLinkedAccountStore(settingsStore),
-        viewerFetchers = mapOf(
-            ProviderId.AniList to { token -> fetchLinkedAniListViewer(token) },
-            ProviderId.Mal to { token -> malHttp.fetchViewer(token) },
-        ),
-        onUnlinked = { mirrorOutbox.clear() },
+    private val legacyTokenMigration = LegacyTokenMigration(
+        providers = tokenStorages.keys + legacyLinkedTokenStorages.keys,
+        sessionStorages = tokenStorages,
+        legacyStorages = legacyLinkedTokenStorages,
     )
 
-    /** A second GraphQL client for the linked AniList account, same limiter. */
+    private val mirrorOutbox: MirrorOutbox = MirrorOutbox(fileStore)
+
+    /** Ephemeral account notices; the UI paints them as a short pill. */
+    internal val accountEvents: AccountEvents = AccountEvents()
+
+    internal val linkedAccountManager = LinkedAccountManager(
+        store = SettingsStoreLinkedAccountStore(settingsStore),
+    )
+
+    /**
+     * The mirror-only token seam. It is passed only to the two mirror clients
+     * and the snapshot reader; the rest of the app uses the followed-only
+     * session clients.
+     */
+    private val mirrorTokens: MirrorTokenSource = MirrorTokenSource { provider ->
+        sessionManager.mirrorTokens.mirrorToken(provider)
+    }
+
+    /** A second GraphQL client for the other AniList account, same limiter. */
     internal val linkedAniListGraphQLClient: AniListGraphQLClient = KtorAniListGraphQLClient(
         httpClient = httpClient,
-        tokenProvider = { linkedAccountManager.validToken(ProviderId.AniList) },
+        tokenProvider = { mirrorTokens.mirrorToken(ProviderId.AniList) },
         debugLogging = isDebug,
         rateLimiter = rateLimiter,
         onUnauthorized = { token ->
-            scope.launch { linkedAccountManager.onUnauthorized(token) }
+            scope.launch { sessionManager.onUnauthorized(token) }
         },
     )
 
@@ -215,7 +223,7 @@ class MichiDependencies internal constructor(
             favouriteRepository = UnsupportedFavouriteRepository(),
         )
 
-    private suspend fun fetchLinkedAniListViewer(token: AuthToken): NetworkResult<Viewer> =
+    private suspend fun fetchOtherAniListViewer(token: AuthToken): NetworkResult<Viewer> =
         AniListViewerRepositoryImpl(
             KtorAniListGraphQLClient(
                 httpClient = httpClient,
@@ -248,12 +256,12 @@ class MichiDependencies internal constructor(
         onUnauthorized = { token -> sessionManager.onUnauthorized(token) },
     )
 
-    /** The same MAL gateway bound to the linked token; 401 unlinks, never closes the session. */
+    /** The same MAL gateway bound to the mirror token; a 401 drops that account. */
     internal val linkedMalEntryClient: MalEntryClient = MalEntryClient(
         http = malHttp,
         bridge = mediaIdBridge,
-        tokenProvider = { linkedAccountManager.validToken(ProviderId.Mal) },
-        onUnauthorized = { token -> linkedAccountManager.onUnauthorized(token) },
+        tokenProvider = { mirrorTokens.mirrorToken(ProviderId.Mal) },
+        onUnauthorized = { token -> scope.launch { sessionManager.onUnauthorized(token) } },
     )
 
     private val linkedMalEntryRepository: MalMediaListEntryRepository =
@@ -264,8 +272,13 @@ class MichiDependencies internal constructor(
         ProviderId.AniList to AniListMirrorWriter(
             repository = linkedAniListEntryRepository,
             targetFormat = {
-                linkedAccountManager.linked.value?.viewer?.scoreFormat
-                    ?: ScoreFormat.POINT_10_DECIMAL
+                if (sessionManager.followed.value == ProviderId.AniList) {
+                    val viewer = (sessionManager.state.value as? SessionState.Authenticated)?.viewer
+                    parseScoreFormat(viewer?.scoreFormat)
+                } else {
+                    linkedAccountManager.linked.value?.viewer?.scoreFormat
+                        ?: ScoreFormat.POINT_10_DECIMAL
+                }
             },
         ),
     )
@@ -278,15 +291,14 @@ class MichiDependencies internal constructor(
         outbox = mirrorOutbox,
         linkedAccounts = linkedAccountManager,
         writers = mirrorWriters,
-        isSessionAuthenticated = { sessionManager.state.value is SessionState.Authenticated },
-        activeProvider = { sessionManager.activeProvider() },
+        followedProvider = { sessionManager.followed.value },
         sourceScoreFormat = {
             val viewer = (sessionManager.state.value as? SessionState.Authenticated)?.viewer
             parseScoreFormat(viewer?.scoreFormat)
         },
-        onLinkDead = {
-            linkedAccountManager.unlink(lostAccess = true)
-            linkedMalEntryClient.clear()
+        isConnected = { provider ->
+            provider == sessionManager.followed.value ||
+                sessionManager.connected.value.any { it.provider == provider }
         },
         scope = scope,
     )
@@ -317,8 +329,10 @@ class MichiDependencies internal constructor(
             sessionMalLoader = malListLoader,
             linkedAccounts = linkedAccountManager,
             linkedAniListClient = linkedAniListGraphQLClient,
+            mirrorTokens = mirrorTokens,
             malHttp = malHttp,
             bridge = mediaIdBridge,
+            onUnauthorized = { token -> sessionManager.onUnauthorized(token) },
         ),
         linkedAccounts = linkedAccountManager,
         mirror = mirrorController,
@@ -427,18 +441,36 @@ class MichiDependencies internal constructor(
                 mediaListCache.clear()
                 profileCache.clear()
                 malEntryClient.clear()
+                linkedMalEntryClient.clear()
             },
             pendingLinkStore = pendingLinkStore,
             linkedAccounts = linkedAccountManager,
-            // Any session closure (logout, 401, invalid_grant, provider switch)
-            // invalidates the copies of that principal.
+            // A replaced/closed session invalidates every queued copy.
             onSessionClosed = {
-                linkedAccountManager.unlink()
+                mirrorOutbox.clear()
+                mirrorController.pause()
+                malEntryClient.clear()
                 linkedMalEntryClient.clear()
             },
-            onSessionAuthenticated = { provider ->
-                linkedAccountManager.onSessionProviderAuthenticated(provider)
+            otherViewerFetchers = mapOf(
+                ProviderId.AniList to { token -> fetchOtherAniListViewer(token) },
+                ProviderId.Mal to { token -> malHttp.fetchViewer(token) },
+            ),
+            onClearAccountData = { provider, viewerId ->
+                if (viewerId != null) {
+                    mediaListCache.clear(viewerId, provider)
+                    profileCache.clear(viewerId)
+                }
+                if (provider == ProviderId.Mal) {
+                    malEntryClient.clear()
+                    linkedMalEntryClient.clear()
+                }
             },
+            onFollowedChanged = { mirrorController.onFollowedChanged() },
+            onAccountDisconnected = { provider ->
+                mirrorController.onAccountDisconnected(provider)
+            },
+            events = accountEvents,
         )
 
     /**
@@ -450,8 +482,9 @@ class MichiDependencies internal constructor(
     fun bootstrap() {
         clearLegacyDashboardCache(settingsStore)
         scope.launch {
-            sessionManager.bootstrap()
+            legacyTokenMigration.migrate()
             linkedAccountManager.bootstrap()
+            sessionManager.bootstrap()
             mirrorController.start()
         }
     }
@@ -465,30 +498,17 @@ class MichiDependencies internal constructor(
         scope.launch { sessionManager.onOAuthCallback(uri) }
     }
 
-    /** Starts linking another provider from Settings; no session change. */
+    /** Connects a provider (guest login or second account); no session change yet. */
     internal fun beginLink(providerId: ProviderId) {
-        scope.launch {
-            val provider = authProviders.firstOrNull {
-                it.id == providerId && it.isConfigured
-            } ?: return@launch
-            if (sessionManager.state.value !is SessionState.Authenticated) return@launch
-            if (sessionManager.activeProvider() == providerId) return@launch
-            linkedAccountManager.clearLinkError()
-            pendingLinkStore.save(
-                PendingLink(
-                    provider = providerId,
-                    createdAtEpochSeconds = currentEpochSeconds(),
-                ),
-            )
-            provider.open()
-        }
+        sessionManager.beginLink(providerId)
     }
 
-    internal fun unlinkAccount() {
-        scope.launch {
-            linkedAccountManager.unlink()
-            linkedMalEntryClient.clear()
-        }
+    internal fun disconnectAccount(providerId: ProviderId) {
+        scope.launch { sessionManager.disconnect(providerId) }
+    }
+
+    internal fun setFollowed(providerId: ProviderId) {
+        scope.launch { sessionManager.setFollowed(providerId) }
     }
 
     internal fun setAutoCopy(enabled: Boolean) {
