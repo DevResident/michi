@@ -384,6 +384,49 @@ class SessionManagerTest {
     }
 
     @Test
+    fun aCancelledCallerDoesNotLoseTheRefreshedToken() = runBlocking {
+        val storage = InMemoryTokenStorage()
+        storage.save(expiringToken())
+        val gate = CompletableDeferred<Unit>()
+        val provider = TestAuthProvider(
+            refreshResult = NetworkResult.Success(refreshedToken(refreshToken = "refresh-2")),
+        ).apply { refreshGate = gate }
+        val manager = testSessionManager(storage = storage, provider = provider)
+
+        val caller = launch { manager.validToken(ProviderId.AniList) }
+        yield()
+        assertEquals(1, provider.refreshCalls)
+        caller.cancel()
+        gate.complete(Unit)
+        caller.join()
+
+        assertEquals("new", storage.load()?.accessToken, "the response is saved anyway")
+        assertEquals("refresh-2", storage.load()?.refreshToken)
+    }
+
+    @Test
+    fun aStaleCallerDoesNotSpendTheOldRefreshTokenAgain() = runBlocking {
+        val real = InMemoryTokenStorage()
+        real.save(refreshedToken(refreshToken = "refresh-2"))
+        // The caller read the token just before another refresh replaced it.
+        val storage = object : TokenStorage by real {
+            var stale = true
+            override suspend fun load(): AuthToken? =
+                if (stale) expiringToken("refresh-1").also { stale = false } else real.load()
+        }
+        val provider = TestAuthProvider(
+            refreshResult = NetworkResult.Success(refreshedToken(refreshToken = "refresh-3")),
+        )
+        val manager = testSessionManager(storage = storage, provider = provider)
+
+        val token = manager.validToken(ProviderId.AniList)
+
+        assertEquals(0, provider.refreshCalls)
+        assertEquals("new", token?.accessToken)
+        assertEquals("refresh-2", real.load()?.refreshToken)
+    }
+
+    @Test
     fun refreshKeepsThePreviousRefreshToken() = runBlocking {
         val storage = InMemoryTokenStorage()
         storage.save(expiringToken("refresh-1"))

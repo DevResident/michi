@@ -247,6 +247,7 @@ fun App(
                             sortPersistence = sortPersistence,
                             authServices = authServices,
                             loginErrorMessage = loginErrorMessage,
+                            onSignInDismissed = { dependencies.sessionManager.clearLoginError() },
                             isAuthConfigured = isAuthConfigured,
                             autoOpenSignIn = autoOpenSignIn,
                             onAutoSignInShown = {

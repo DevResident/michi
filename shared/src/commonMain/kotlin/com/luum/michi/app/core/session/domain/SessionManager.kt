@@ -7,11 +7,13 @@ import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Coordinates the active provider's token with the current `Viewer`.
@@ -175,6 +177,9 @@ internal class SessionManager(
                     if (clearedAnotherSession) clearUserData()
                     tokenStorages[provider.id]?.save(token)
                     activeProviderStore.save(provider.id)
+                    // The routers follow the new provider right away; never let
+                    // the UI keep the previous account's viewer meanwhile.
+                    if (_state.value is SessionState.Authenticated) _state.value = SessionState.Loading
                     g
                 }
                 refreshViewer(gen, provider, token, keepCachedOnNetworkError = false)
@@ -251,8 +256,26 @@ internal class SessionManager(
         }
         if (!leader) return entry.deferred.await()
 
+        // The refresh outlives a cancelled caller: if MAL rotates the refresh
+        // token, losing the response before saveRefreshed would close the session.
+        return withContext(NonCancellable) { leadRefresh(entry, providerId, provider, token) }
+    }
+
+    private suspend fun leadRefresh(
+        entry: RefreshEntry,
+        providerId: ProviderId,
+        provider: AuthProvider,
+        token: AuthToken,
+    ): RefreshOutcome {
         var outcome: RefreshOutcome = RefreshOutcome.Closed
         try {
+            // Another leader may have finished between our load() and here:
+            // never spend the old refresh token a second time.
+            val stored = tokenStorages[providerId]?.load()
+            if (stored != null && stored.accessToken != token.accessToken) {
+                outcome = RefreshOutcome.Superseded
+                return outcome
+            }
             outcome = when (val result = provider.refresh(token)) {
                 null -> RefreshOutcome.Unsupported
                 is NetworkResult.Success -> {
