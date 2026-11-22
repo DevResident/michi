@@ -294,6 +294,7 @@ private object NoopEntryRepository : MediaListEntryRepository {
         hiddenFromStatusLists: Boolean,
         startedAtMillis: Long?,
         completedAtMillis: Long?,
+        mediaType: MediaType,
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(
@@ -301,7 +302,8 @@ private object NoopEntryRepository : MediaListEntryRepository {
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
-    ): NetworkResult<Unit> = NetworkResult.Failure(NetworkError.Unknown(null))
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =
         NetworkResult.Failure(NetworkError.Unknown(null))

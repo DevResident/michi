@@ -14,4 +14,6 @@ internal data class MalEntryUpdate(
     val comments: String? = null,
     val startDate: String? = null,
     val finishDate: String? = null,
+    /** Mirror-only: the editor leaves it null so MAL preserves its own flag. */
+    val isRewatching: Boolean? = null,
 )

@@ -75,7 +75,9 @@ fun App(
     val lastLoginError by dependencies.sessionManager.lastLoginError.collectAsState()
     val linkedAccount by dependencies.linkedAccountManager.linked.collectAsState()
     val linkedLostAccess by dependencies.linkedAccountManager.lostAccess.collectAsState()
+    val linkedAutoCopy by dependencies.linkedAccountManager.autoCopy.collectAsState()
     val linkError by dependencies.linkedAccountManager.linkError.collectAsState()
+    val mirrorOutbox by dependencies.mirrorController.state.collectAsState()
     val deepLinkDestination by dependencies.pendingDeepLink.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -162,6 +164,9 @@ fun App(
             .associate { it.id to it.label },
         lostAccessProvider = linkedLostAccess.takeIf { authenticatedProvider != null },
         error = linkError.takeIf { authenticatedProvider != null },
+        autoCopy = linkedAutoCopy,
+        mirrorPending = mirrorOutbox.pending,
+        mirrorErrors = mirrorOutbox.withErrors,
     )
     // Sort memory backing (Settings persist toggle, per tab): store-owned,
     // session-independent — Root hydrates holders from it, holders save
@@ -286,6 +291,8 @@ fun App(
                             onLinkAccount = { dependencies.beginLink(it) },
                             onUnlinkAccount = { dependencies.unlinkAccount() },
                             onDismissLostAccess = { dependencies.dismissLostAccess() },
+                            onAutoCopyChange = { dependencies.setAutoCopy(it) },
+                            onRetryMirror = { dependencies.retryMirror() },
                             autoOpenSignIn = autoOpenSignIn,
                             onAutoSignInShown = {
                                 store.putBoolean(SettingsStoreKeys.SeenSignIn, true)

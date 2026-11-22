@@ -110,6 +110,8 @@ internal fun Root(
     onLinkAccount: (ProviderId) -> Unit = {},
     onUnlinkAccount: () -> Unit = {},
     onDismissLostAccess: () -> Unit = {},
+    onAutoCopyChange: (Boolean) -> Unit = {},
+    onRetryMirror: () -> Unit = {},
     autoOpenSignIn: Boolean = false,
     onAutoSignInShown: () -> Unit = {},
     deepLinkDestination: DetailDestination? = null,
@@ -278,6 +280,8 @@ internal fun Root(
                                     onLinkAccount = onLinkAccount,
                                     onUnlinkAccount = onUnlinkAccount,
                                     onDismissLostAccess = onDismissLostAccess,
+                                    onAutoCopyChange = onAutoCopyChange,
+                                    onRetryMirror = onRetryMirror,
                                     onOpenAbout = { state.openSettingsAbout() },
                                     bottomPadding = padding.calculateBottomPadding(),
                                 )

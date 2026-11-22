@@ -3,6 +3,7 @@ package com.luum.michi.app.mediaDetail.ui.media.state
 import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.editableStatuses
 import com.luum.michi.app.core.favourite.domain.FavouriteTarget
+import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
@@ -323,6 +324,7 @@ internal class MediaEntryEditorState(
                 hiddenFromStatusLists = hiddenFromStatusLists,
                 startedAtMillis = startedAtMillis,
                 completedAtMillis = completedAtMillis,
+                mediaType = if (isManga) MediaType.MANGA else MediaType.ANIME,
             )
             when (result) {
                 is NetworkResult.Success -> onSaved()

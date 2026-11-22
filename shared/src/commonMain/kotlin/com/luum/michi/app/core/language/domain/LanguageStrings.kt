@@ -327,6 +327,12 @@ interface LanguageStrings {
     val settingsLinkedRelinkAction: String
     val settingsLinkedDismissAction: String
     val settingsLinkedLinkFailed: String
+    val settingsLinkedAutoCopyTitle: String
+    val settingsMirrorStatusTitle: String
+    val settingsMirrorUpToDate: String
+    fun settingsMirrorPending(count: Int): String
+    fun settingsMirrorWithErrors(count: Int): String
+    val settingsMirrorRetryTitle: String
     val backButton: String
     val authWelcomeTitle: String
     val authModalSubtitle: String

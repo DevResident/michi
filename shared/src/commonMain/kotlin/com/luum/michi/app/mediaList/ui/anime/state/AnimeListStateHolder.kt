@@ -1,10 +1,12 @@
 package com.luum.michi.app.mediaList.ui.anime.state
 
+import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.SortPersistence
 import com.luum.michi.app.core.medialist.domain.SortScope
 import com.luum.michi.app.core.network.domain.NetworkResult
+import com.luum.michi.app.core.network.domain.map
 import com.luum.michi.app.mediaList.domain.anime.AnimeListRepository
 import com.luum.michi.app.mediaList.domain.anime.model.AnimeListEntry
 import com.luum.michi.app.mediaList.domain.anime.model.AnimeListSection
@@ -49,7 +51,8 @@ internal class AnimeListStateHolder(
             mediaRef = aniListRef(entry.id),
             progress = entry.progress,
             status = entry.status.toMediaListStatus(),
-        )
+            mediaType = MediaType.ANIME,
+        ).map { }
 
     fun incrementProgress(entry: AnimeListEntry) {
         enqueue(entry.id) { it.incremented(lastSplitCompleted) }

@@ -15,4 +15,8 @@ internal data class MediaListViewerEntry(
     val hiddenFromStatusLists: Boolean,
     val startedAtMillis: Long?,
     val completedAtMillis: Long?,
+    val isRewatching: Boolean = false,
+    /** Raw partial dates, preserved for a mirror copy; null falls back to millis. */
+    val startedAtDate: MirrorDate? = null,
+    val completedAtDate: MirrorDate? = null,
 )

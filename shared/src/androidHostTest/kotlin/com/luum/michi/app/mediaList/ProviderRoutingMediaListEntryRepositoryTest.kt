@@ -1,6 +1,7 @@
 package com.luum.michi.app.mediaList
 
 import com.luum.michi.app.core.media.domain.EntityRef
+import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
@@ -36,6 +37,7 @@ private class RoutingCountingEntryRepository : MediaListEntryRepository {
         hiddenFromStatusLists: Boolean,
         startedAtMillis: Long?,
         completedAtMillis: Long?,
+        mediaType: MediaType,
     ): NetworkResult<MediaListViewerEntry> {
         saveCalls++
         return NetworkResult.Success(entry())
@@ -46,9 +48,10 @@ private class RoutingCountingEntryRepository : MediaListEntryRepository {
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
-    ): NetworkResult<Unit> {
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry> {
         progressCalls++
-        return NetworkResult.Success(Unit)
+        return NetworkResult.Success(entry())
     }
 
     override suspend fun toggleFavourite(
@@ -97,8 +100,8 @@ class ProviderRoutingMediaListEntryRepositoryTest {
         )
         val ref = aniListRef(1)
 
-        router.saveEntry(ref, MediaListStatus.CURRENT, 0, null, 0f, null, "", 0, 0, false, false, null, null)
-        router.saveProgress(ref, 1, null, null)
+        router.saveEntry(ref, MediaListStatus.CURRENT, 0, null, 0f, null, "", 0, 0, false, false, null, null, MediaType.ANIME)
+        router.saveProgress(ref, 1, null, null, MediaType.ANIME)
         router.toggleFavourite(ref, isManga = false)
         router.deleteEntry(7, ref)
         assertEquals(1, aniList.saveCalls)
@@ -108,7 +111,7 @@ class ProviderRoutingMediaListEntryRepositoryTest {
         assertEquals(0, mal.saveCalls)
 
         active = ProviderId.Mal
-        router.saveProgress(ref, 2, null, null)
+        router.saveProgress(ref, 2, null, null, MediaType.ANIME)
         assertEquals(1, mal.progressCalls)
         assertEquals(1, aniList.progressCalls)
     }

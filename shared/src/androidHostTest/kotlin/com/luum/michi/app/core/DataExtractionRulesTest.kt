@@ -37,6 +37,15 @@ class DataExtractionRulesTest {
                     assertTrue(file in excluded, "$file is not excluded in <$section>")
                 }
             }
+            val rootPaths = (0 until excludes.length)
+                .map { excludes.item(it) as Element }
+                .filter { it.getAttribute("domain") == "root" }
+                .map { it.getAttribute("path") }
+                .toSet()
+            assertTrue(
+                "cache/michi_cache/" in rootPaths,
+                "the mirror/list cache is not excluded in <$section>",
+            )
         }
     }
 

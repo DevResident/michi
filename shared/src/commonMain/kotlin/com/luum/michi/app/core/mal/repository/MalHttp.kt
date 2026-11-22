@@ -238,9 +238,11 @@ internal class MalHttp(
             progress?.let { append("num_chapters_read", it.toString()) }
             progressVolumes?.let { append("num_volumes_read", it.toString()) }
             repeat?.let { append("num_times_reread", it.toString()) }
+            isRewatching?.let { append("is_rereading", it.toString()) }
         } else {
             progress?.let { append("num_watched_episodes", it.toString()) }
             repeat?.let { append("num_times_rewatched", it.toString()) }
+            isRewatching?.let { append("is_rewatching", it.toString()) }
         }
     }
 

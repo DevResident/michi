@@ -86,6 +86,8 @@ internal fun SettingsScreen(
     onLinkAccount: (ProviderId) -> Unit = {},
     onUnlinkAccount: () -> Unit = {},
     onDismissLostAccess: () -> Unit = {},
+    onAutoCopyChange: (Boolean) -> Unit = {},
+    onRetryMirror: () -> Unit = {},
     onOpenAbout: () -> Unit,
     bottomPadding: Dp,
     strings: LanguageStrings = Strings.current,
@@ -124,6 +126,8 @@ internal fun SettingsScreen(
                         onLink = onLinkAccount,
                         onUnlink = { unlinkConfirmSheet = true },
                         onDismissLostAccess = onDismissLostAccess,
+                        onAutoCopyChange = onAutoCopyChange,
+                        onRetryMirror = onRetryMirror,
                     )
                 }
             }
@@ -630,6 +634,8 @@ private fun SettingsLinkedAccountCard(
     onLink: (ProviderId) -> Unit,
     onUnlink: () -> Unit,
     onDismissLostAccess: () -> Unit,
+    onAutoCopyChange: (Boolean) -> Unit,
+    onRetryMirror: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     OptionGroup(
@@ -656,6 +662,27 @@ private fun SettingsLinkedAccountCard(
                     modifier = Modifier.weight(1f),
                 )
             }
+            ToggleRow(
+                title = strings.settingsLinkedAutoCopyTitle,
+                checked = state.autoCopy,
+                onCheckedChange = onAutoCopyChange,
+            )
+            val hasErrors = state.mirrorErrors > 0
+            SettingsRow(
+                label = strings.settingsMirrorStatusTitle,
+                value = when {
+                    hasErrors -> strings.settingsMirrorWithErrors(state.mirrorErrors) +
+                        " · " + strings.settingsMirrorRetryTitle
+                    state.mirrorPending > 0 -> strings.settingsMirrorPending(state.mirrorPending)
+                    else -> strings.settingsMirrorUpToDate
+                },
+                onClick = if (hasErrors) onRetryMirror else null,
+                valueColor = if (hasErrors) {
+                    LocalWarning.current
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
             SettingsRow(
                 label = strings.settingsLinkedUnlinkTitle,
                 value = "",

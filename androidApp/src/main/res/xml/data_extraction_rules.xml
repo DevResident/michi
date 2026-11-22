@@ -19,6 +19,10 @@
         <exclude
             domain="sharedpref"
             path="michi_link_mal.xml" />
+        <!-- The list/mirror caches (notes, statuses) live under cacheDir; never back them up. -->
+        <exclude
+            domain="root"
+            path="cache/michi_cache/" />
     </cloud-backup>
     <device-transfer>
         <exclude
@@ -33,5 +37,8 @@
         <exclude
             domain="sharedpref"
             path="michi_link_mal.xml" />
+        <exclude
+            domain="root"
+            path="cache/michi_cache/" />
     </device-transfer>
 </data-extraction-rules>

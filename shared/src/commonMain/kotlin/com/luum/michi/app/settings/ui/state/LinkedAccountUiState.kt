@@ -14,6 +14,9 @@ internal data class LinkedAccountUiState(
     val labels: Map<ProviderId, String>,
     val lostAccessProvider: ProviderId?,
     val error: NetworkError?,
+    val autoCopy: Boolean = false,
+    val mirrorPending: Int = 0,
+    val mirrorErrors: Int = 0,
 ) {
     val isEmpty: Boolean
         get() = account == null && lostAccessProvider == null && linkableProviders.isEmpty() && error == null

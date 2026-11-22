@@ -336,6 +336,14 @@ object EnglishStrings : LanguageStrings {
     override val settingsLinkedRelinkAction = "Link again"
     override val settingsLinkedDismissAction = "Dismiss"
     override val settingsLinkedLinkFailed = "Could not link the account."
+    override val settingsLinkedAutoCopyTitle = "Copy changes automatically"
+    override val settingsMirrorStatusTitle = "Copies"
+    override val settingsMirrorUpToDate = "Up to date"
+    override fun settingsMirrorPending(count: Int): String =
+        if (count == 1) "1 pending" else "$count pending"
+    override fun settingsMirrorWithErrors(count: Int): String =
+        if (count == 1) "1 with errors" else "$count with errors"
+    override val settingsMirrorRetryTitle = "Retry"
     override val backButton = "Back"
     override val authWelcomeTitle = "Welcome to Michi"
     override val authModalSubtitle = "Your client for anime, manga, lists, and favorites."

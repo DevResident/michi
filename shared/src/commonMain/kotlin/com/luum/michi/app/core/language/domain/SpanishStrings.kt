@@ -338,6 +338,14 @@ object SpanishStrings : LanguageStrings {
     override val settingsLinkedRelinkAction = "Vincular de nuevo"
     override val settingsLinkedDismissAction = "Descartar"
     override val settingsLinkedLinkFailed = "No se pudo vincular la cuenta."
+    override val settingsLinkedAutoCopyTitle = "Copiar cambios automáticamente"
+    override val settingsMirrorStatusTitle = "Copias"
+    override val settingsMirrorUpToDate = "Al día"
+    override fun settingsMirrorPending(count: Int): String =
+        if (count == 1) "1 pendiente" else "$count pendientes"
+    override fun settingsMirrorWithErrors(count: Int): String =
+        if (count == 1) "1 con error" else "$count con error"
+    override val settingsMirrorRetryTitle = "Reintentar"
     override val backButton = "Volver"
     override val authWelcomeTitle = "Bienvenido a Michi"
     override val authModalSubtitle = "Tu cliente para anime, manga, listas y favoritos."
