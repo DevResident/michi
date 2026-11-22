@@ -66,7 +66,12 @@ internal fun ModalSheet(
         onDismissRequest = onDismiss,
         dragHandle = { SheetDragHandle() },
         modifier = modifier,
-        sheetState = rememberModalBottomSheetState(
+        // Deprecated on iOS (material3 1.12) in favour of rememberBottomSheetState,
+        // but Android still compiles against androidx material3 1.4.0, which
+        // does not have the replacement, so common code keeps this call. The
+        // replacement also changes how the half detent is measured; swap it in
+        // once both targets compile against the same material3.
+        sheetState = @Suppress("DEPRECATION") rememberModalBottomSheetState(
             skipPartiallyExpanded = fullscreen,
             confirmValueChange = { target ->
                 if (target == SheetValue.Hidden && blocked.value) {
