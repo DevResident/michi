@@ -1,5 +1,6 @@
 package com.luum.michi.app.mediaList.ui.common.state
 
+import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -120,6 +121,8 @@ internal abstract class MediaListStateHolderBase<T : SortableMediaListEntry, S>(
         // Hydrated-only entries are not confirmed by the network: a `+1` would
         // send progress calculated from stale data. Wait for the revalidation.
         if (!canEditEntries) return
+        // MAL-only entries are read-only: nothing to save them through.
+        if (isMalOnlyMediaId(id)) return
         progressSaver.enqueue(id, transform)
     }
 

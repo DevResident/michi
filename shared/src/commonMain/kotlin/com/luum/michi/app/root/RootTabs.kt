@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.Dp
 import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.effectiveScoreFormat
 import com.luum.michi.app.core.language.domain.LanguageStrings
+import com.luum.michi.app.core.mal.domain.malPageUrl
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.navigation.domain.TabSection
@@ -116,6 +117,8 @@ internal fun RootTabContent(
     tabQuery: String,
     strings: LanguageStrings,
     bottomPadding: Dp,
+    // MAL-only list entries open their myanimelist.net page.
+    onOpenUrl: (String) -> Unit = {},
 ) {
     // Card smiley pill: translated here so settings types never cross
     // into mediaList (same rule as the editor score lambdas).
@@ -189,6 +192,7 @@ internal fun RootTabContent(
             onOpenDetail = { state.openMedia(aniListRef(it), MediaType.ANIME) },
             onEditEntry = { state.openEditor(it) },
             onCompleteEntry = { id, progress -> state.openEditorForCompletion(id, progress) },
+            onOpenMalOnly = { malId -> onOpenUrl(malPageUrl(MediaType.ANIME, malId)) },
         )
     } else if (activeTab == TabSection.MANGA && holders.manga != null && viewerId != null) {
         MangaListScreen(
@@ -213,6 +217,7 @@ internal fun RootTabContent(
             onOpenDetail = { state.openMedia(aniListRef(it), MediaType.MANGA) },
             onEditEntry = { state.openEditor(it) },
             onCompleteEntry = { id, progress -> state.openEditorForCompletion(id, progress) },
+            onOpenMalOnly = { malId -> onOpenUrl(malPageUrl(MediaType.MANGA, malId)) },
         )
     } else if (activeTab == TabSection.DISCOVER && holders.explore.hasSearched) {
         // Explore: the DISCOVER search results (server search), guests included.

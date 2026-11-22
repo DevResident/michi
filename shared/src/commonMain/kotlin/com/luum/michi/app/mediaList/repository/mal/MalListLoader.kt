@@ -3,6 +3,10 @@ package com.luum.michi.app.mediaList.repository.mal
 import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.mal.domain.MalListEntry
+import com.luum.michi.app.core.mal.domain.malMediaTypeToFormat
+import com.luum.michi.app.core.mal.domain.malOnlyMediaId
+import com.luum.michi.app.core.mal.domain.malSeasonToMediaSeason
+import com.luum.michi.app.core.mal.domain.malWorkStatusToMediaStatus
 import com.luum.michi.app.core.mal.domain.malStatusToMediaListStatus
 import com.luum.michi.app.core.mal.repository.MalHttp
 import com.luum.michi.app.core.mal.repository.parseMalFuzzyDate
@@ -10,7 +14,9 @@ import com.luum.michi.app.core.mal.repository.parseMalUpdatedAt
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.media.repository.MediaIdBridge
+import com.luum.michi.app.core.media.repository.dto.MediaCoverImageDto
 import com.luum.michi.app.core.media.repository.dto.MediaListMediaDto
+import com.luum.michi.app.core.media.repository.dto.MediaTitleDto
 import com.luum.michi.app.core.medialist.domain.toApiValue
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
@@ -23,7 +29,8 @@ private const val FullHydrationTtlSeconds = 24L * 60L * 60L
  * Shared body of the two MAL list repositories: fetch all MAL pages, hydrate
  * the ids through AniList, compose the same DTO the AniList path caches, and
  * persist it under [ProviderId.Mal]. A hydration failure fails the whole load
- * (no partial list); the previous cache stays untouched.
+ * (no partial list); the previous cache stays untouched. A work AniList does
+ * not have becomes a MAL-only entry built from MAL's node data.
  *
  * Media hydration is incremental: a normal reload reuses the cached AniList
  * media for known malIds and only asks AniList for new ones. A full hydration
@@ -86,15 +93,17 @@ internal class MalListLoader(
         val media = reused + hydrated
 
         val unmatchedIds = entries.map { it.malId }.filterNot { it in media }
-        val matched = entries.mapNotNull { entry ->
-            media[entry.malId]?.let { entry.toDto(it) }
+        // A work AniList does not have still shows, built from MAL's own data
+        // under a synthetic negative id (see MalOnlyMedia).
+        val composed = entries.map { entry ->
+            entry.toDto(media[entry.malId] ?: entry.malOnlyMedia(type))
         }
         if (unmatchedIds.isNotEmpty()) onUnmatched(type, unmatchedIds)
         hydrationStore?.saveUnmatched(type, unmatchedIds.toSet())
 
-        cache?.write(userId, type, matched, ProviderId.Mal)
+        cache?.write(userId, type, composed, ProviderId.Mal)
         if (fullHydration) hydrationStore?.markFull(type, nowSeconds)
-        return NetworkResult.Success(matched)
+        return NetworkResult.Success(composed)
     }
 
     suspend fun cached(type: MediaType, userId: Int): List<MediaListEntryDto>? =
@@ -137,3 +146,39 @@ private fun MalListEntry.toDto(media: MediaListMediaDto): MediaListEntryDto = Me
     priority = priority,
     media = media,
 )
+
+/**
+ * The card media of a work AniList does not have, from MAL's node data. Its id
+ * is synthetic and negative: nothing may send it to AniList.
+ */
+private fun MalListEntry.malOnlyMedia(type: MediaType): MediaListMediaDto {
+    val title = node.title?.takeIf { it.isNotBlank() } ?: "MAL #$malId"
+    return MediaListMediaDto(
+        id = malOnlyMediaId(malId),
+        idMal = malId,
+        format = malMediaTypeToFormat(node.mediaType),
+        status = malWorkStatusToMediaStatus(node.status),
+        episodes = if (type == MediaType.ANIME) node.episodes else null,
+        chapters = if (type == MediaType.MANGA) node.chapters else null,
+        volumes = if (type == MediaType.MANGA) node.volumes else null,
+        season = malSeasonToMediaSeason(node.startSeason),
+        seasonYear = node.startYear,
+        title = MediaTitleDto(
+            romaji = title,
+            english = node.englishTitle,
+            native = node.japaneseTitle,
+            // MAL's main title leads, as on the user's MAL list.
+            userPreferred = title,
+        ),
+        // "black" is MAL's explicit rating; the adult filter hides it.
+        isAdult = node.nsfw == "black",
+        coverImage = if (node.pictureLarge != null || node.pictureMedium != null) {
+            MediaCoverImageDto(
+                large = node.pictureLarge ?: node.pictureMedium,
+                medium = node.pictureMedium ?: node.pictureLarge,
+            )
+        } else {
+            null
+        },
+    )
+}

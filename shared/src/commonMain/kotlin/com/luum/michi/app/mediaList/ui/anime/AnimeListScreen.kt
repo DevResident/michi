@@ -46,6 +46,7 @@ internal fun AnimeListScreen(
     // Card tap opens media detail, pencil opens the entry editor.
     onOpenDetail: (Int) -> Unit = {},
     onEditEntry: (Int) -> Unit = {},
+    onOpenMalOnly: (malId: Int) -> Unit = {},
     // The `+1` that lands on the total opens the editor in Completed instead of
     // saving from the list (Otraku/AL-chan): cancelling leaves the entry as is.
     onCompleteEntry: (mediaId: Int, progress: Int) -> Unit,
@@ -93,6 +94,7 @@ internal fun AnimeListScreen(
         onDismissSort = onDismissSort,
         onOpenDetail = onOpenDetail,
         onEditEntry = onEditEntry,
+        onOpenMalOnly = onOpenMalOnly,
     )
 }
 

@@ -5,6 +5,7 @@ import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.mal.domain.MalEntryStatus
 import com.luum.michi.app.core.mal.domain.MalEntryUpdate
 import com.luum.michi.app.core.mal.domain.MalListEntry
+import com.luum.michi.app.core.mal.domain.MalNodeInfo
 import com.luum.michi.app.core.mal.domain.MalOAuthConfig
 import com.luum.michi.app.core.media.domain.MalRef
 import com.luum.michi.app.core.media.domain.MediaType
@@ -56,6 +57,16 @@ private const val MalAnimeStatusFields =
 private const val MalMangaStatusFields =
     "status,score,num_chapters_read,num_volumes_read,is_rereading,updated_at,start_date,finish_date," +
         "priority,num_times_reread,comments"
+
+/*
+ * The work's own fields, next to list_status: they only matter for works
+ * AniList does not have (MAL-only entries), which the list then builds from
+ * MAL's data. `id` is always returned.
+ */
+private const val MalAnimeNodeFields =
+    "title,alternative_titles,main_picture,media_type,status,num_episodes,start_season,nsfw"
+private const val MalMangaNodeFields =
+    "title,alternative_titles,main_picture,media_type,status,num_chapters,num_volumes,start_date,nsfw"
 
 /**
  * MyAnimeList's REST calls: code exchange, refresh, viewer and user lists.
@@ -291,7 +302,8 @@ internal class MalHttp(
     }
 
     private fun listFields(isManga: Boolean): String =
-        "list_status{${if (isManga) MalMangaStatusFields else MalAnimeStatusFields}}"
+        "list_status{${if (isManga) MalMangaStatusFields else MalAnimeStatusFields}}," +
+            if (isManga) MalMangaNodeFields else MalAnimeNodeFields
 
     private fun buildListUrl(path: String, fields: String): String =
         URLBuilder("${MalOAuthConfig.ApiBaseUrl}/users/@me/$path").apply {
@@ -343,6 +355,7 @@ internal class MalHttp(
                 startDate = status.startDate,
                 finishDate = status.finishDate,
                 priority = status.priority,
+                node = item.node.toInfo(),
             )
         }
         return NetworkResult.Success(MalListPage(entries, dto.paging?.next))
@@ -454,6 +467,54 @@ private data class MalListEntryItemDto(
 @Serializable
 private data class MalListNodeDto(
     val id: Int,
+    val title: String? = null,
+    @SerialName("alternative_titles") val alternativeTitles: MalAlternativeTitlesDto? = null,
+    @SerialName("main_picture") val mainPicture: MalPictureDto? = null,
+    @SerialName("media_type") val mediaType: String? = null,
+    val status: String? = null,
+    @SerialName("num_episodes") val numEpisodes: Int? = null,
+    @SerialName("num_chapters") val numChapters: Int? = null,
+    @SerialName("num_volumes") val numVolumes: Int? = null,
+    @SerialName("start_season") val startSeason: MalStartSeasonDto? = null,
+    @SerialName("start_date") val startDate: String? = null,
+    val nsfw: String? = null,
+)
+
+@Serializable
+private data class MalAlternativeTitlesDto(
+    val en: String? = null,
+    val ja: String? = null,
+)
+
+@Serializable
+private data class MalPictureDto(
+    val medium: String? = null,
+    val large: String? = null,
+)
+
+@Serializable
+private data class MalStartSeasonDto(
+    val year: Int? = null,
+    val season: String? = null,
+)
+
+/** MAL sends 0 for an unknown episode/chapter/volume count. */
+private fun Int?.positiveOrNull(): Int? = this?.takeIf { it > 0 }
+
+private fun MalListNodeDto.toInfo(): MalNodeInfo = MalNodeInfo(
+    title = title,
+    englishTitle = alternativeTitles?.en?.takeIf { it.isNotBlank() },
+    japaneseTitle = alternativeTitles?.ja?.takeIf { it.isNotBlank() },
+    pictureMedium = mainPicture?.medium,
+    pictureLarge = mainPicture?.large,
+    mediaType = mediaType,
+    status = status,
+    episodes = numEpisodes.positiveOrNull(),
+    chapters = numChapters.positiveOrNull(),
+    volumes = numVolumes.positiveOrNull(),
+    startYear = startSeason?.year ?: startDate?.take(4)?.toIntOrNull(),
+    startSeason = startSeason?.season,
+    nsfw = nsfw,
 )
 
 @Serializable

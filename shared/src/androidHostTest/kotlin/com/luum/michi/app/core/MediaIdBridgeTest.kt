@@ -214,4 +214,19 @@ class MediaIdBridgeTest {
             raw,
         )
     }
+
+    @Test
+    fun aMalOnlySyntheticIdIsNeverResolvedOrRemembered() = runBlocking {
+        val graphQL = FakeGraphQL(pages = emptyList())
+        val store = InMemoryFileStore()
+        val bridge = bridge(graphQL, store)
+
+        val resolved = bridge.resolveMal(-29317)
+        bridge.rememberMalRef(-29317, MalRef(malId = 29317, type = MediaType.ANIME))
+
+        assertTrue(resolved is NetworkResult.Success)
+        assertNull(resolved.value)
+        assertEquals(0, graphQL.calls, "AniList must not be asked about a synthetic id")
+        assertTrue(bridge.cachedIdMap(MediaType.ANIME).isEmpty())
+    }
 }

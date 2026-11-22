@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luum.michi.app.core.language.domain.LanguageStrings
+import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
+import com.luum.michi.app.core.mal.domain.malIdOfMalOnly
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.model.FilterOption
 import com.luum.michi.app.core.media.domain.MediaGenres
@@ -96,6 +98,8 @@ internal fun <T : SortableMediaListEntry, S> MediaListScreenScaffold(
     // Card tap opens media detail, pencil opens the entry editor.
     onOpenDetail: (Int) -> Unit = {},
     onEditEntry: (Int) -> Unit = {},
+    // A MAL-only entry (no AniList media) opens its MAL page instead.
+    onOpenMalOnly: (malId: Int) -> Unit = {},
 ) {
     val sections = listOf(allSection) + statusSections(settings.splitCompleted)
     // Toggling split can strand the selection on a gone section (e.g.
@@ -204,18 +208,34 @@ internal fun <T : SortableMediaListEntry, S> MediaListScreenScaffold(
                             items = entries,
                             key = { it.id },
                         ) { entry ->
+                            val isMalOnly = isMalOnlyMediaId(entry.id)
                             MediaCoverCard(
                                 cover = entry.cover,
                                 title = entry.title,
                                 subtitle = meta(entry, strings),
-                                onClick = { onOpenDetail(entry.id) },
+                                onClick = {
+                                    if (isMalOnly) {
+                                        onOpenMalOnly(malIdOfMalOnly(entry.id))
+                                    } else {
+                                        onOpenDetail(entry.id)
+                                    }
+                                },
                                 titleTrailing = {
-                                    IconButton(onClick = { onEditEntry(entry.id) }) {
-                                        Icon(
-                                            imageVector = AppIcons.Edit,
-                                            contentDescription = strings.editEntryAction,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    // MAL-only: no AniList detail or editor, so
+                                    // the badge takes the pencil's place.
+                                    if (isMalOnly) {
+                                        MalOnlyBadge(
+                                            label = strings.malOnlyBadgeLabel,
+                                            description = strings.malOnlyBadgeDescription,
                                         )
+                                    } else {
+                                        IconButton(onClick = { onEditEntry(entry.id) }) {
+                                            Icon(
+                                                imageVector = AppIcons.Edit,
+                                                contentDescription = strings.editEntryAction,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                     }
                                 },
                                 content = { cardContent(entry) },

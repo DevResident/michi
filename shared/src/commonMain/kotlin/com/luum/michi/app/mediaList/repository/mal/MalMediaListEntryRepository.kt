@@ -1,6 +1,7 @@
 package com.luum.michi.app.mediaList.repository.mal
 
 import com.luum.michi.app.core.mal.domain.MalEntryUpdate
+import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
 import com.luum.michi.app.core.mal.domain.toMalStatus
 import com.luum.michi.app.core.mal.repository.MalEntryClient
 import com.luum.michi.app.core.mal.repository.formatMalDate
@@ -21,7 +22,8 @@ import kotlin.math.roundToInt
 /**
  * Writes the viewer's MAL list: the editor keeps AniList media ids, so every
  * write first resolves the MAL id through [MediaIdBridge]. The PATCH is
- * partial; unsupported AniList fields are simply never sent.
+ * partial; unsupported AniList fields are simply never sent. A MAL-only
+ * synthetic id is refused before any lookup: those entries are read-only.
  */
 internal class MalMediaListEntryRepository(
     private val bridge: MediaIdBridge,
@@ -44,6 +46,7 @@ internal class MalMediaListEntryRepository(
         completedAtMillis: Long?,
     ): NetworkResult<MediaListViewerEntry> {
         val aniListId = mediaRef.requireAniListId()
+        if (isMalOnlyMediaId(aniListId)) return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
         val ref = when (val resolved = bridge.resolveMal(aniListId)) {
             is NetworkResult.Failure -> return resolved
             is NetworkResult.Success -> resolved.value
@@ -78,6 +81,7 @@ internal class MalMediaListEntryRepository(
         progressVolumes: Int?,
     ): NetworkResult<Unit> {
         val aniListId = mediaRef.requireAniListId()
+        if (isMalOnlyMediaId(aniListId)) return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
         val ref = when (val resolved = bridge.resolveMal(aniListId)) {
             is NetworkResult.Failure -> return resolved
             is NetworkResult.Success -> resolved.value
@@ -112,6 +116,7 @@ internal class MalMediaListEntryRepository(
 
     override suspend fun deleteEntry(entryId: Int, mediaRef: EntityRef): NetworkResult<Unit> {
         val aniListId = mediaRef.requireAniListId()
+        if (isMalOnlyMediaId(aniListId)) return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
         val ref: MalRef = when (val resolved = bridge.resolveMal(aniListId)) {
             is NetworkResult.Failure -> return resolved
             // The work is not on MAL, so there is nothing to delete.

@@ -140,6 +140,10 @@ interface LanguageStrings {
     val mediaDetailErrorLabel: String
     val entryNotOnProvider: String
     val editEntryAction: String
+    /** Tag on a list card for a work only MyAnimeList has (no AniList media). */
+    val malOnlyBadgeLabel: String
+    /** Screen-reader text for [malOnlyBadgeLabel]: tapping the card opens MAL. */
+    val malOnlyBadgeDescription: String
     val cancelAction: String
     val mediaDetailEditorDeleteAction: String
     val deleteEntryConfirmTitle: String

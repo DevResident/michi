@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.luum.michi.app.core.mal.domain.isMalOnlyAniListRef
+import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
 import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.DetailListKind
@@ -285,8 +287,11 @@ internal class State(
         push(destination)
     }
 
-    fun openMedia(ref: EntityRef, typeHint: MediaType? = null) =
+    fun openMedia(ref: EntityRef, typeHint: MediaType? = null) {
+        // A MAL-only list entry has a synthetic AniList-shaped id: no detail.
+        if (ref.isMalOnlyAniListRef()) return
         openDeepLink(DetailDestination.Media(ref, typeHint))
+    }
     fun openCharacter(ref: EntityRef) = push(DetailDestination.Character(ref))
     fun openStaff(ref: EntityRef) = push(DetailDestination.Staff(ref))
     fun openStudio(ref: EntityRef) = push(DetailDestination.Studio(ref))
@@ -311,12 +316,14 @@ internal class State(
     }
 
     fun openEditor(id: Int) {
+        if (isMalOnlyMediaId(id)) return
         editorMediaId = id
         editorInitialStatus = null
         editorInitialProgress = null
     }
 
     fun openEditorForCompletion(id: Int, progress: Int) {
+        if (isMalOnlyMediaId(id)) return
         editorMediaId = id
         editorInitialStatus = MediaListStatus.COMPLETED
         editorInitialProgress = progress

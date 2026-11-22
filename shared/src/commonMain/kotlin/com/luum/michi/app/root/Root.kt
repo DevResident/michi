@@ -322,6 +322,7 @@ internal fun Root(
                                 tabQuery = tabQuery,
                                 strings = strings,
                                 bottomPadding = padding.calculateBottomPadding(),
+                                onOpenUrl = { urlOpener.open(it) },
                             )
                         }
                     }

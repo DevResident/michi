@@ -43,8 +43,12 @@ private class FakeBridge(
         type: MediaType,
     ): NetworkResult<Map<Int, MediaListMediaDto>> = NetworkResult.Success(emptyMap())
 
-    override suspend fun resolveMal(aniListId: Int): NetworkResult<MalRef?> =
-        NetworkResult.Success(ref)
+    var resolveCalls = 0
+
+    override suspend fun resolveMal(aniListId: Int): NetworkResult<MalRef?> {
+        resolveCalls++
+        return NetworkResult.Success(ref)
+    }
 
     override suspend fun rememberMalRef(aniListId: Int, ref: MalRef) = Unit
 
@@ -561,5 +565,33 @@ class MalMediaListEntryRepositoryTest {
         val result = harness.repository.toggleFavourite(aniListRef(100), isManga = false)
 
         assertTrue(result is NetworkResult.Failure)
+    }
+
+    @Test
+    fun aMalOnlyIdNeverReachesTheBridgeOrMal() = runBlocking {
+        var requests = 0
+        val harness = Harness(
+            engine = MockEngine {
+                requests++
+                error("a MAL-only entry must not send anything")
+            },
+        )
+        val malOnly = aniListRef(-29317)
+
+        val saved = harness.repository.save(ref = malOnly)
+        val progress = harness.repository.saveProgress(
+            mediaRef = malOnly,
+            progress = 3,
+            status = null,
+            progressVolumes = null,
+        )
+        val deleted = harness.repository.deleteEntry(entryId = 1, mediaRef = malOnly)
+
+        for (result in listOf(saved, progress, deleted)) {
+            assertTrue(result is NetworkResult.Failure)
+            assertEquals(NetworkError.EntryNotOnProvider, result.error)
+        }
+        assertEquals(0, harness.bridge.resolveCalls)
+        assertEquals(0, requests)
     }
 }

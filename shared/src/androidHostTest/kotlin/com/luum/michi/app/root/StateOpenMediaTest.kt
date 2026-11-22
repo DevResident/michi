@@ -53,4 +53,13 @@ class StateOpenMediaTest {
         state.closeDetail()
         assertFalse(state.isDetailOpen, "only one entry was stacked")
     }
+
+    @Test
+    fun aMalOnlySyntheticIdOpensNoDetail() {
+        val state = state()
+
+        state.openMedia(aniListRef(-29317), MediaType.ANIME)
+
+        assertFalse(state.isDetailOpen, "a MAL-only entry has no AniList detail")
+    }
 }

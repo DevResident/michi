@@ -1,5 +1,6 @@
 package com.luum.michi.app.core.media.repository
 
+import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
 import com.luum.michi.app.core.media.domain.MalRef
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.repository.dto.MediaListMediaDto
@@ -108,6 +109,8 @@ internal class MediaIdBridgeImpl(
     }
 
     override suspend fun resolveMal(aniListId: Int): NetworkResult<MalRef?> {
+        // A MAL-only synthetic id is not an AniList id: never ask AniList.
+        if (isMalOnlyMediaId(aniListId)) return NetworkResult.Success(null)
         cachedRef(aniListId)?.let { return NetworkResult.Success(it) }
 
         val request = AniListGraphQLRequest(
@@ -135,6 +138,8 @@ internal class MediaIdBridgeImpl(
     }
 
     override suspend fun rememberMalRef(aniListId: Int, ref: MalRef) {
+        // A synthetic id would win every "lower id" tie and poison the map.
+        if (isMalOnlyMediaId(aniListId)) return
         locks.getValue(ref.type).withLock {
             val map = readMap(ref.type)
             val existing = map[ref.malId]

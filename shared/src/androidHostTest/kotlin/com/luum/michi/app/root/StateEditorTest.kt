@@ -27,4 +27,16 @@ class StateEditorTest {
         assertNull(state.editorInitialStatus)
         assertNull(state.editorInitialProgress)
     }
+
+    @Test
+    fun aMalOnlySyntheticIdOpensNoEditor() {
+        val state = State()
+
+        state.openEditor(-29317)
+        assertFalse(state.isEditorOpen)
+
+        state.openEditorForCompletion(id = -29317, progress = 1)
+        assertFalse(state.isEditorOpen)
+        assertNull(state.editorMediaId)
+    }
 }

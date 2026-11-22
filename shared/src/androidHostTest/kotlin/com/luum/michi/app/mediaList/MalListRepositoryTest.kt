@@ -3,7 +3,12 @@ package com.luum.michi.app.mediaList
 import com.luum.michi.app.FakeGraphQL
 import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
+import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
+import com.luum.michi.app.core.mal.domain.malIdOfMalOnly
 import com.luum.michi.app.core.mal.repository.MalHttp
+import com.luum.michi.app.core.media.domain.MediaFormat
+import com.luum.michi.app.core.media.domain.MediaSeason
+import com.luum.michi.app.core.media.domain.MediaWorkStatus
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.media.repository.MediaIdBridgeImpl
@@ -56,6 +61,22 @@ private data class MalEntryJson(
     val startDate: String? = null,
     val finishDate: String? = null,
     val priority: Int = 0,
+    val node: MalNodeJson? = null,
+)
+
+/** MAL's catalog fields for the node (only read for MAL-only entries). */
+private data class MalNodeJson(
+    val title: String,
+    val mediaType: String,
+    val workStatus: String = "finished_airing",
+    val numEpisodes: Int? = null,
+    val numChapters: Int? = null,
+    val numVolumes: Int? = null,
+    val picture: String? = null,
+    val englishTitle: String? = null,
+    val seasonYear: Int? = null,
+    val season: String? = null,
+    val nsfw: String = "white",
 )
 
 private fun malPage(entries: List<MalEntryJson>, next: String? = null): String = buildJsonObject {
@@ -65,7 +86,46 @@ private fun malPage(entries: List<MalEntryJson>, next: String? = null): String =
             entries.forEach { entry ->
                 add(
                     buildJsonObject {
-                        put("node", buildJsonObject { put("id", entry.malId) })
+                        put(
+                            "node",
+                            buildJsonObject {
+                                put("id", entry.malId)
+                                entry.node?.let { node ->
+                                    put("title", node.title)
+                                    put(
+                                        "alternative_titles",
+                                        buildJsonObject {
+                                            node.englishTitle?.let { put("en", it) }
+                                            put("ja", "")
+                                        },
+                                    )
+                                    node.picture?.let { url ->
+                                        put(
+                                            "main_picture",
+                                            buildJsonObject {
+                                                put("medium", "$url-m")
+                                                put("large", "$url-l")
+                                            },
+                                        )
+                                    }
+                                    put("media_type", node.mediaType)
+                                    put("status", node.workStatus)
+                                    node.numEpisodes?.let { put("num_episodes", it) }
+                                    node.numChapters?.let { put("num_chapters", it) }
+                                    node.numVolumes?.let { put("num_volumes", it) }
+                                    if (node.seasonYear != null) {
+                                        put(
+                                            "start_season",
+                                            buildJsonObject {
+                                                put("year", node.seasonYear)
+                                                node.season?.let { put("season", it) }
+                                            },
+                                        )
+                                    }
+                                    put("nsfw", node.nsfw)
+                                }
+                            },
+                        )
                         put(
                             "list_status",
                             buildJsonObject {
@@ -335,13 +395,31 @@ class MalListRepositoryTest {
     }
 
     @Test
-    fun unmatchedEntriesAreOmittedAndCounted() = runBlocking {
-        val engine = MockEngine {
+    fun unmatchedEntriesBecomeMalOnlyEntriesFromMalData() = runBlocking {
+        val engine = MockEngine { request ->
+            val fields = request.url.parameters["fields"].orEmpty()
+            for (field in listOf("title", "main_picture", "media_type", "num_episodes", "start_season")) {
+                assertTrue(field in fields, "the list must ask for the node's $field")
+            }
             respond(
                 malPage(
                     entries = listOf(
                         MalEntryJson(malId = 101, status = "watching"),
-                        MalEntryJson(malId = 102, status = "watching"),
+                        MalEntryJson(
+                            malId = 29317,
+                            status = "completed",
+                            score = 7.0,
+                            episodes = 1,
+                            node = MalNodeJson(
+                                title = "Saenai Heroine no Sodatekata: Ai to Seishun no Service-kai",
+                                englishTitle = "Saekano Special",
+                                mediaType = "tv_special",
+                                numEpisodes = 1,
+                                picture = "https://cdn.myanimelist.net/images/anime/1.jpg",
+                                seasonYear = 2015,
+                                season = "winter",
+                            ),
+                        ),
                     ),
                 ),
                 HttpStatusCode.OK,
@@ -354,11 +432,73 @@ class MalListRepositoryTest {
             onUnmatched = { type, ids -> unmatched = type to ids },
         )
 
-        val result = MalAnimeListRepository(stack.loader).loadList(1)
+        val result = MalAnimeListRepository(stack.loader).loadList(1, splitCompleted = true)
 
         assertTrue(result is NetworkResult.Success)
-        assertEquals(1, result.value.size)
-        assertEquals(MediaType.ANIME to listOf(102), unmatched)
+        assertEquals(2, result.value.size, "a work AniList lacks still shows")
+        assertEquals(MediaType.ANIME to listOf(29317), unmatched)
+        assertEquals(1001, result.value[0].id)
+
+        val malOnly = result.value[1]
+        assertEquals(-29317, malOnly.id)
+        assertTrue(isMalOnlyMediaId(malOnly.id))
+        assertEquals(29317, malIdOfMalOnly(malOnly.id))
+        assertEquals("Saenai Heroine no Sodatekata: Ai to Seishun no Service-kai", malOnly.title)
+        assertTrue("Saekano Special" in malOnly.titles)
+        assertEquals(MediaFormat.SPECIAL, malOnly.format)
+        assertEquals(AnimeListSection.COMPLETED_SPECIAL, malOnly.status)
+        assertEquals(1, malOnly.progress)
+        assertEquals(1, malOnly.totalEpisodes)
+        assertEquals(7.0, malOnly.score)
+        assertEquals(MediaWorkStatus.FINISHED, malOnly.mediaStatus)
+        assertEquals(MediaSeason.WINTER, malOnly.season)
+        assertEquals(2015, malOnly.seasonYear)
+        assertFalse(malOnly.isAdult)
+        assertNotNull(malOnly.cover)
+
+        // The cache keeps it, so a cold start shows the same list.
+        val cached = MalAnimeListRepository(stack.loader).loadCachedList(1, splitCompleted = true)
+        assertEquals(listOf(1001, -29317), cached?.map { it.id })
+    }
+
+    @Test
+    fun aMalOnlyMangaUsesChaptersAndVolumesFromMal() = runBlocking {
+        val engine = MockEngine {
+            respond(
+                malPage(
+                    entries = listOf(
+                        MalEntryJson(
+                            malId = 555,
+                            status = "reading",
+                            chapters = 3,
+                            volumes = 1,
+                            node = MalNodeJson(
+                                title = "Some Novel",
+                                mediaType = "light_novel",
+                                workStatus = "currently_publishing",
+                                numChapters = 0,
+                                numVolumes = 9,
+                                nsfw = "black",
+                            ),
+                        ),
+                    ),
+                ),
+                HttpStatusCode.OK,
+            )
+        }
+        val stack = Stack(engine = engine, bridgePages = listOf(bridgePage()))
+
+        val result = MalMangaListRepository(stack.loader).loadList(1, splitCompleted = true)
+
+        assertTrue(result is NetworkResult.Success)
+        val entry = result.value.single()
+        assertEquals(-555, entry.id)
+        assertEquals(MediaFormat.NOVEL, entry.format)
+        assertEquals(MangaListSection.CURRENT, entry.status)
+        assertEquals(null, entry.totalChapters, "MAL's 0 means unknown")
+        assertEquals(9, entry.totalVolumes)
+        assertEquals(MediaWorkStatus.RELEASING, entry.mediaStatus)
+        assertTrue(entry.isAdult, "MAL's black rating is adult content")
     }
 
     @Test
@@ -482,7 +622,7 @@ class MalListRepositoryTest {
         repository.loadList(1)
         val second = repository.loadList(1)
         assertTrue(second is NetworkResult.Success)
-        assertEquals(1, second.value.size)
+        assertEquals(listOf(1001, -999), second.value.map { it.id }, "999 stays as a MAL-only entry")
         assertEquals(1, stack.graphQL.calls, "999 is known to be missing on AniList")
 
         now += 24L * 60L * 60L
