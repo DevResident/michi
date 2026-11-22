@@ -169,6 +169,16 @@ internal fun SettingsScreen(
                             onClick = { openSheet = SettingsSheet.StartSection },
                         )
                     }
+                    // MAL has no synced AniList settings, so 18+ becomes a
+                    // local app preference (guests keep it off with no toggle).
+                    if (settingsState.useLocalAdultContent) {
+                        ToggleRow(
+                            title = strings.settingsAdultContentTitle,
+                            subtitle = strings.settingsAdultContentSubtitle,
+                            checked = settingsState.displayAdultContent,
+                            onCheckedChange = { settingsState.displayAdultContent = it },
+                        )
+                    }
                 }
             }
             if (settingsState.canSync) {

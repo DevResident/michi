@@ -84,6 +84,18 @@ anilistClientId=YOUR_ANILIST_CLIENT_ID
 
 A release build will **fail fast** if no client ID is configured, so a shipped binary never bakes in an empty value. Debug builds are allowed to run without it for day-to-day development.
 
+#### MyAnimeList (optional)
+
+Michi can also sign in with MyAnimeList for its lists. Register an app at [myanimelist.net/apiconfig](https://myanimelist.net/apiconfig) (Android type; redirect URI `michi://oauth/callback`) and add its client ID:
+
+```properties
+malClientId=YOUR_MYANIMELIST_CLIENT_ID
+```
+
+> Alternatively, set the `MAL_CLIENT_ID` environment variable.
+>
+> This is **optional**: without a client ID the MyAnimeList button is simply hidden, and release builds still work. The AniList client ID remains the only mandatory one.
+
 ### Run
 
 ```bash

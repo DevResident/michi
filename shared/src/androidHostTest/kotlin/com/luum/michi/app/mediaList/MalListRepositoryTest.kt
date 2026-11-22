@@ -19,6 +19,7 @@ import com.luum.michi.app.mediaList.domain.manga.model.MangaListSection
 import com.luum.michi.app.mediaList.repository.MediaListDiskCache
 import com.luum.michi.app.mediaList.repository.listCacheFileName
 import com.luum.michi.app.mediaList.repository.mal.MalAnimeListRepository
+import com.luum.michi.app.mediaList.repository.mal.MalHydrationStore
 import com.luum.michi.app.mediaList.repository.mal.MalListLoader
 import com.luum.michi.app.mediaList.repository.mal.MalMangaListRepository
 import io.ktor.client.HttpClient
@@ -27,9 +28,11 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -144,9 +147,12 @@ private class Stack(
     bridgePages: List<JsonElement>,
     val store: InMemoryFileStore = InMemoryFileStore(),
     bridgeFailureAt: Int = -1,
-    onUnmatched: (MediaType, Int) -> Unit = { _, _ -> },
+    hydrationStore: MalHydrationStore? = null,
+    now: () -> Long = { 1_000L },
+    onUnmatched: (MediaType, List<Int>) -> Unit = { _, _ -> },
     onUnauthorized: suspend (AuthToken) -> Unit = {},
 ) {
+    val graphQL = FakeGraphQL(bridgePages, failureAt = bridgeFailureAt)
     val cache = MediaListDiskCache(store, decodeDispatcher = InlineCacheDispatcher)
     val loader = MalListLoader(
         http = MalHttp(
@@ -155,8 +161,10 @@ private class Stack(
             redirectUri = "michi://oauth/callback",
         ),
         tokenProvider = { token() },
-        bridge = MediaIdBridgeImpl(FakeGraphQL(bridgePages, failureAt = bridgeFailureAt), store),
+        bridge = MediaIdBridgeImpl(graphQL, store),
         cache = cache,
+        hydrationStore = hydrationStore,
+        now = now,
         onUnauthorized = onUnauthorized,
         onUnmatched = onUnmatched,
     )
@@ -334,18 +342,18 @@ class MalListRepositoryTest {
                 HttpStatusCode.OK,
             )
         }
-        var unmatched: Pair<MediaType, Int>? = null
+        var unmatched: Pair<MediaType, List<Int>>? = null
         val stack = Stack(
             engine = engine,
             bridgePages = listOf(bridgePage(media(1001, 101, "Show 1"))),
-            onUnmatched = { type, count -> unmatched = type to count },
+            onUnmatched = { type, ids -> unmatched = type to ids },
         )
 
         val result = MalAnimeListRepository(stack.loader).loadList(1)
 
         assertTrue(result is NetworkResult.Success)
         assertEquals(1, result.value.size)
-        assertEquals(MediaType.ANIME to 1, unmatched)
+        assertEquals(MediaType.ANIME to listOf(102), unmatched)
     }
 
     @Test
@@ -404,6 +412,104 @@ class MalListRepositoryTest {
 
         assertIs<NetworkResult.Failure>(result)
         assertEquals(1, requests)
+    }
+
+    @Test
+    fun aReloadOnlyHydratesNewEntries() = runBlocking {
+        val store = InMemoryFileStore()
+        val hydrationStore = MalHydrationStore(store)
+        var now = 1_000L
+        var entries = listOf(
+            MalEntryJson(malId = 101, status = "watching"),
+            MalEntryJson(malId = 102, status = "watching"),
+        )
+        val engine = MockEngine { respond(malPage(entries), HttpStatusCode.OK) }
+        val stack = Stack(
+            engine = engine,
+            bridgePages = listOf(
+                bridgePage(media(1001, 101, "Show 1"), media(1002, 102, "Show 2")),
+                bridgePage(media(1003, 103, "Show 3")),
+            ),
+            store = store,
+            hydrationStore = hydrationStore,
+            now = { now },
+        )
+        val repository = MalAnimeListRepository(stack.loader)
+
+        val first = repository.loadList(1)
+        assertTrue(first is NetworkResult.Success)
+        assertEquals(2, first.value.size)
+
+        entries = entries + MalEntryJson(malId = 103, status = "watching")
+        val second = repository.loadList(1)
+        assertTrue(second is NetworkResult.Success)
+        assertEquals(3, second.value.size)
+        assertEquals(2, stack.graphQL.calls, "only the new id needs an AniList batch")
+        assertEquals(
+            listOf(103),
+            (stack.graphQL.requests[1].variables?.get("ids") as JsonArray)
+                .map { it.jsonPrimitive.content.toInt() },
+        )
+    }
+
+    @Test
+    fun aFullHydrationRunsAgainAfterTwentyFourHours() = runBlocking {
+        val store = InMemoryFileStore()
+        val hydrationStore = MalHydrationStore(store)
+        var now = 1_000L
+        val entries = listOf(
+            MalEntryJson(malId = 101, status = "watching"),
+            MalEntryJson(malId = 102, status = "watching"),
+        )
+        val engine = MockEngine { respond(malPage(entries), HttpStatusCode.OK) }
+        val stack = Stack(
+            engine = engine,
+            bridgePages = listOf(
+                bridgePage(media(1001, 101, "Show 1"), media(1002, 102, "Show 2")),
+                bridgePage(media(1001, 101, "Show 1"), media(1002, 102, "Show 2")),
+            ),
+            store = store,
+            hydrationStore = hydrationStore,
+            now = { now },
+        )
+        val repository = MalAnimeListRepository(stack.loader)
+
+        repository.loadList(1)
+        now += 24L * 60L * 60L
+        repository.loadList(1)
+
+        assertEquals(
+            listOf(101, 102),
+            (stack.graphQL.requests[1].variables?.get("ids") as JsonArray)
+                .map { it.jsonPrimitive.content.toInt() },
+        )
+    }
+
+    @Test
+    fun aForcedHydrationIgnoresTheCachedMedia() = runBlocking {
+        val store = InMemoryFileStore()
+        val hydrationStore = MalHydrationStore(store)
+        val entries = listOf(MalEntryJson(malId = 101, status = "watching"))
+        val engine = MockEngine { respond(malPage(entries), HttpStatusCode.OK) }
+        val stack = Stack(
+            engine = engine,
+            bridgePages = listOf(
+                bridgePage(media(1001, 101, "Show 1")),
+                bridgePage(media(1001, 101, "Show 1")),
+            ),
+            store = store,
+            hydrationStore = hydrationStore,
+        )
+        val repository = MalAnimeListRepository(stack.loader)
+
+        repository.loadList(1)
+        repository.loadList(1, forceHydration = true)
+
+        assertEquals(
+            listOf(101),
+            (stack.graphQL.requests[1].variables?.get("ids") as JsonArray)
+                .map { it.jsonPrimitive.content.toInt() },
+        )
     }
 
     @Test

@@ -1,19 +1,10 @@
-package com.luum.michi.app.mediaList.repository.mal
+package com.luum.michi.app.core.mal.repository
 
 import com.luum.michi.app.core.media.repository.dto.FuzzyDateDto
-import com.luum.michi.app.core.medialist.domain.MediaListStatus
+import com.luum.michi.app.core.model.CalendarDateParts
+import com.luum.michi.app.core.model.calendarPartsToMillis
+import com.luum.michi.app.core.model.millisToCalendarParts
 import kotlin.time.Instant
-
-/** MAL statuses collapse onto AniList's vocabulary; rewatches are a flag, not a section. */
-internal fun malListStatusToMediaListStatus(status: String?): MediaListStatus = when (status?.lowercase()) {
-    "watching", "reading" -> MediaListStatus.CURRENT
-    "completed" -> MediaListStatus.COMPLETED
-    "on_hold" -> MediaListStatus.PAUSED
-    "dropped" -> MediaListStatus.DROPPED
-    "plan_to_watch", "plan_to_read" -> MediaListStatus.PLANNING
-    // Unknown/missing status keeps the same fallback the AniList mapper uses.
-    else -> MediaListStatus.CURRENT
-}
 
 /**
  * MAL dates are `YYYY`, `YYYY-MM` or `YYYY-MM-DD` (some examples omit leading
@@ -27,6 +18,39 @@ internal fun parseMalFuzzyDate(raw: String?): FuzzyDateDto? {
     val month = parts.getOrNull(1)?.toIntOrNull()
     val day = parts.getOrNull(2)?.toIntOrNull()
     return FuzzyDateDto(year = year, month = month, day = day)
+}
+
+/** Partial MAL dates become a full display date (year → Jan 1, year-month → day 1). */
+internal fun FuzzyDateDto?.toEditorMillis(): Long? {
+    val year = this?.year ?: return null
+    val month = this.month ?: 1
+    val day = this.day ?: 1
+    return runCatching {
+        calendarPartsToMillis(CalendarDateParts(year = year, month = month, day = day))
+    }.getOrNull()
+}
+
+/** A full `YYYY-MM-DD` for the editor/PATCH; null when the partial date is invalid. */
+internal fun normalizeMalDate(raw: String?): String? {
+    val date = parseMalFuzzyDate(raw) ?: return null
+    val year = date.year ?: return null
+    val millis = runCatching {
+        calendarPartsToMillis(
+            CalendarDateParts(year = year, month = date.month ?: 1, day = date.day ?: 1),
+        )
+    }.getOrNull() ?: return null
+    return formatMalDate(millis)
+}
+
+internal fun formatMalDate(millis: Long): String {
+    val parts = millisToCalendarParts(millis)
+    return buildString {
+        append(parts.year.toString().padStart(4, '0'))
+        append('-')
+        append(parts.month.toString().padStart(2, '0'))
+        append('-')
+        append(parts.day.toString().padStart(2, '0'))
+    }
 }
 
 private val DatePrefix = Regex("""^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$""")

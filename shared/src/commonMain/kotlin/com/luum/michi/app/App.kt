@@ -68,6 +68,7 @@ fun App(
     val unmeteredConnection by dependencies.connectivity.isUnmetered.collectAsState()
     val store = dependencies.settingsStore
     val session by dependencies.sessionManager.state.collectAsState()
+    val lastLoginError by dependencies.sessionManager.lastLoginError.collectAsState()
     val deepLinkDestination by dependencies.pendingDeepLink.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -81,11 +82,15 @@ fun App(
     // (local-only, never touches the network); login/logout recreates it. It
     // also owns the app appearance prefs (language, theme, font, surfaces),
     // hydrated from the store once and persisted on every change.
+    val isAuthenticated = session is SessionState.Authenticated
     val settingsState = rememberSettingsState(
         repository = dependencies.settingsRepository,
         store = dependencies.settingsStore,
         scope = scope,
-        canSync = session is SessionState.Authenticated && capabilities.remoteSettings,
+        canSync = isAuthenticated && capabilities.remoteSettings,
+        // MAL (authenticated, no remote settings) keeps 18+ as a local pref;
+        // guests stay off with no toggle.
+        useLocalAdultContent = isAuthenticated && !capabilities.remoteSettings,
     )
 
     val strings = getLanguageStrings(settingsState.language)
@@ -102,12 +107,16 @@ fun App(
         val isMal = provider.id == ProviderId.Mal
         AuthService(
             id = provider.id.value,
+            name = provider.label,
             label = when {
                 isAniList -> strings.authLoginAction
                 isMal -> strings.authLoginMalAction
                 else -> provider.label
             },
-            onLogin = provider::open,
+            onLogin = {
+                dependencies.sessionManager.clearLoginError()
+                provider.open()
+            },
             icon = if (isAniList) AppIcons.AniList else null,
             brandHex = when {
                 isAniList -> ANILIST_BRAND_HEX
@@ -115,6 +124,10 @@ fun App(
                 else -> null
             },
         )
+    }
+    val loginErrorMessage = lastLoginError?.let { failed ->
+        authServices.firstOrNull { it.id == failed.value }?.name
+            ?.let { strings.authLoginFailed.replace("%s", it) }
     }
     val isAuthConfigured = dependencies.authProviders.any { it.isConfigured }
     // Sort memory backing (Settings persist toggle, per tab): store-owned,
@@ -145,8 +158,8 @@ fun App(
 
     // Sign-in modal auto-open: first anonymous launch only. Logout never
     // reopens it (the flag persists); login closes it via the viewer effect.
-    val autoOpenSignIn =
-        session is SessionState.Anonymous && !store.getBoolean(SettingsStoreKeys.SeenSignIn, false)
+    val autoOpenSignIn = lastLoginError != null ||
+        (session is SessionState.Anonymous && !store.getBoolean(SettingsStoreKeys.SeenSignIn, false))
 
     CompositionLocalProvider(
         LocalStrings provides strings,
@@ -233,6 +246,7 @@ fun App(
                             shareLauncher = dependencies.shareLauncher,
                             sortPersistence = sortPersistence,
                             authServices = authServices,
+                            loginErrorMessage = loginErrorMessage,
                             isAuthConfigured = isAuthConfigured,
                             autoOpenSignIn = autoOpenSignIn,
                             onAutoSignInShown = {

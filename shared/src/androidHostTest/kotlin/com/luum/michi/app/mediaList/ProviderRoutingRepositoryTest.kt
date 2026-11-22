@@ -21,6 +21,7 @@ private class RecordingAnimeRepository : AnimeListRepository {
     override suspend fun loadList(
         userId: Int,
         splitCompleted: Boolean,
+        forceHydration: Boolean,
     ): NetworkResult<List<AnimeListEntry>> {
         loadCalls++
         return NetworkResult.Success(emptyList())
@@ -44,6 +45,7 @@ private class RecordingMangaRepository : MangaListRepository {
     override suspend fun loadList(
         userId: Int,
         splitCompleted: Boolean,
+        forceHydration: Boolean,
     ): NetworkResult<List<MangaListEntry>> {
         loadCalls++
         return NetworkResult.Success(emptyList())

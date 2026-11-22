@@ -17,6 +17,7 @@ internal class AnimeListRepositoryImpl(
     override suspend fun loadList(
         userId: Int,
         splitCompleted: Boolean,
+        forceHydration: Boolean,
     ): NetworkResult<List<AnimeListEntry>> {
         val result = graphQLClient.fetchMediaListCollection(userId, MediaType.ANIME)
         if (result is NetworkResult.Success) {

@@ -21,6 +21,8 @@ import com.luum.michi.app.ui.theme.brandColor
  */
 internal data class AuthService(
     val id: String,
+    /** Brand name, never translated; used by login error messages. */
+    val name: String,
     val label: String,
     val onLogin: () -> Unit,
     val icon: ImageVector? = null,

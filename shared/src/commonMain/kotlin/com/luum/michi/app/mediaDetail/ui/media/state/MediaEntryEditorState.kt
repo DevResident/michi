@@ -93,6 +93,7 @@ internal class MediaEntryEditorState(
     val editableStatuses: List<MediaListStatus> get() = capabilities.editableStatuses()
     val showAdvancedScoring: Boolean
         get() = capabilities.advancedScores && advancedScoringEnabled && advancedScoringNames.isNotEmpty()
+    val maxPriority: Int get() = capabilities.maxPriority
     val maxProgress: Int? get() = data?.let { if (it.type == MediaDetailType.MANGA) it.chapters else it.episodes }
     val maxProgressVolumes: Int? get() = data?.volumes
     val isExisting: Boolean get() = data?.viewerEntry != null
@@ -242,9 +243,9 @@ internal class MediaEntryEditorState(
     fun decrementRepeat() { if (repeat > 0) repeat-- }
     fun updateRepeat(value: Int) { repeat = value.coerceAtLeast(0) }
 
-    fun incrementPriority() { if (priority < 5) priority++ }
+    fun incrementPriority() { if (priority < maxPriority) priority++ }
     fun decrementPriority() { if (priority > 0) priority-- }
-    fun updatePriority(value: Int) { priority = value.coerceIn(0, 5) }
+    fun updatePriority(value: Int) { priority = value.coerceIn(0, maxPriority) }
 
     fun updatePrivate(value: Boolean) { isPrivate = value }
     fun updateHiddenFromStatusLists(value: Boolean) { hiddenFromStatusLists = value }
@@ -338,7 +339,7 @@ internal class MediaEntryEditorState(
         isDeleting = true
         error = null
         scope.launch {
-            when (val result = entryRepository.deleteEntry(entryId)) {
+            when (val result = entryRepository.deleteEntry(entryId, aniListRef(mediaId))) {
                 is NetworkResult.Success -> onDeleted()
                 is NetworkResult.Failure -> error = result.error
             }

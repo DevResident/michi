@@ -9,5 +9,6 @@ internal fun LanguageStrings.networkErrorMessage(error: NetworkError): String = 
     is NetworkError.Http         -> errorServerLabel
     is NetworkError.GraphQL      -> errorServerLabel
     is NetworkError.NotFound     -> notFoundLabel
+    NetworkError.EntryNotOnProvider -> entryNotOnProvider
     is NetworkError.Unknown      -> errorUnknownLabel
 }

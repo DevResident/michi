@@ -162,7 +162,8 @@ private class CountingEntryRepository : MediaListEntryRepository {
     override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =
         NetworkResult.Success(Unit)
 
-    override suspend fun deleteEntry(entryId: Int): NetworkResult<Unit> = NetworkResult.Success(Unit)
+    override suspend fun deleteEntry(entryId: Int, mediaRef: EntityRef): NetworkResult<Unit> =
+        NetworkResult.Success(Unit)
 }
 
 private fun viewer() = Viewer(id = 1, name = "user")

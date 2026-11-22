@@ -11,6 +11,7 @@ import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
 internal data class MediaEntryEditorData(
     val title: String,
     val type: MediaDetailType,
+    val idMal: Int? = null,
     val episodes: Int?,
     val chapters: Int?,
     val volumes: Int?,

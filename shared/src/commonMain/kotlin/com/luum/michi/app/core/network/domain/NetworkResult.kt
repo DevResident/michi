@@ -16,6 +16,8 @@ internal sealed class NetworkError {
     data class Unknown(val cause: Throwable?) : NetworkError()
     /** Returned when all retry attempts after a 429 are exhausted. */
     data class RateLimited(val retryAfterSeconds: Int?) : NetworkError()
+    /** The media exists in the AniList catalog but has no record on the account's provider. */
+    data object EntryNotOnProvider : NetworkError()
 }
 
 internal inline fun <T, R> NetworkResult<T>.map(transform: (T) -> R): NetworkResult<R> = when (this) {

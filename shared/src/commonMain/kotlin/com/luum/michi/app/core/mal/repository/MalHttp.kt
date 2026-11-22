@@ -2,8 +2,12 @@ package com.luum.michi.app.core.mal.repository
 
 import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
+import com.luum.michi.app.core.mal.domain.MalEntryStatus
+import com.luum.michi.app.core.mal.domain.MalEntryUpdate
 import com.luum.michi.app.core.mal.domain.MalListEntry
 import com.luum.michi.app.core.mal.domain.MalOAuthConfig
+import com.luum.michi.app.core.media.domain.MalRef
+import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.AniListNetworkPolicy
 import com.luum.michi.app.core.network.domain.NetworkError
@@ -12,10 +16,12 @@ import com.luum.michi.app.core.network.repository.AniListRateLimiter
 import com.luum.michi.app.core.network.repository.throwableToNetworkError
 import com.luum.michi.app.core.session.domain.Viewer
 import io.ktor.client.HttpClient
+import io.ktor.client.request.delete
 import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -109,6 +115,120 @@ internal class MalHttp(
 
     suspend fun loadMangaList(token: AuthToken): NetworkResult<List<MalListEntry>> =
         loadList(token, path = "mangalist", isManga = true)
+
+    /** The viewer's entry, or null when the media exists but is not in the list. */
+    suspend fun fetchEntry(token: AuthToken, ref: MalRef): NetworkResult<MalEntryStatus?> = withRetry(
+        request = {
+            httpClient.get(entryUrl(ref, includeStatus = true)) {
+                header("Authorization", token.authorizationHeaderValue)
+            }
+        },
+        parse = { response, body ->
+            when {
+                response.status == HttpStatusCode.NotFound ->
+                    NetworkResult.Failure(NetworkError.NotFound("MAL media", ref.malId))
+                !response.status.isSuccess() -> NetworkResult.Failure(httpError(response, body))
+                else -> {
+                    val dto = MalJson.decodeFromString<MalMediaEntryResponseDto>(body)
+                    NetworkResult.Success(dto.myListStatus?.toEntryStatus(ref.type))
+                }
+            }
+        },
+    )
+
+    suspend fun patchEntry(
+        token: AuthToken,
+        ref: MalRef,
+        update: MalEntryUpdate,
+    ): NetworkResult<MalEntryStatus> = withRetry(
+        request = {
+            httpClient.patch(entryUrl(ref, includeStatus = false)) {
+                header("Authorization", token.authorizationHeaderValue)
+                setBody(FormDataContent(update.toForm(ref.type)))
+            }
+        },
+        parse = { response, body ->
+            when {
+                response.status == HttpStatusCode.NotFound ->
+                    NetworkResult.Failure(NetworkError.NotFound("MAL media", ref.malId))
+                !response.status.isSuccess() -> NetworkResult.Failure(httpError(response, body))
+                else -> {
+                    val dto = MalJson.decodeFromString<MalListStatusDto>(body)
+                    NetworkResult.Success(dto.toEntryStatus(ref.type))
+                }
+            }
+        },
+    )
+
+    suspend fun deleteEntry(token: AuthToken, ref: MalRef): NetworkResult<Unit> = withRetry(
+        request = {
+            httpClient.delete(entryUrl(ref, includeStatus = false)) {
+                header("Authorization", token.authorizationHeaderValue)
+            }
+        },
+        parse = { response, body ->
+            when {
+                // MAL's docs say 404 when the entry is absent; live API also
+                // returns 200. Both are a successful, idempotent deletion.
+                response.status.isSuccess() ||
+                    response.status == HttpStatusCode.NotFound -> NetworkResult.Success(Unit)
+                else -> NetworkResult.Failure(httpError(response, body))
+            }
+        },
+    )
+
+    private fun entryUrl(ref: MalRef, includeStatus: Boolean): String {
+        val path = if (ref.type == MediaType.MANGA) "manga" else "anime"
+        if (!includeStatus) return "${MalOAuthConfig.ApiBaseUrl}/$path/${ref.malId}/my_list_status"
+        val fields = if (ref.type == MediaType.MANGA) {
+            "my_list_status,num_chapters,num_volumes"
+        } else {
+            "my_list_status,num_episodes"
+        }
+        return URLBuilder("${MalOAuthConfig.ApiBaseUrl}/$path/${ref.malId}").apply {
+            parameters.append("fields", fields)
+        }.buildString()
+    }
+
+    private fun MalEntryUpdate.toForm(type: MediaType): Parameters = Parameters.build {
+        status?.let { append("status", it) }
+        score?.let { append("score", it.toString()) }
+        priority?.let { append("priority", it.toString()) }
+        comments?.let { append("comments", it) }
+        startDate?.let { append("start_date", it) }
+        finishDate?.let { append("finish_date", it) }
+        if (type == MediaType.MANGA) {
+            progress?.let { append("num_chapters_read", it.toString()) }
+            progressVolumes?.let { append("num_volumes_read", it.toString()) }
+            repeat?.let { append("num_times_reread", it.toString()) }
+        } else {
+            progress?.let { append("num_watched_episodes", it.toString()) }
+            repeat?.let { append("num_times_rewatched", it.toString()) }
+        }
+    }
+
+    private fun httpError(response: HttpResponse, body: String?): NetworkError =
+        if (response.status == HttpStatusCode.Unauthorized) {
+            NetworkError.Unauthorized(body)
+        } else {
+            NetworkError.Http(response.status.value, body)
+        }
+
+    private fun MalListStatusDto.toEntryStatus(type: MediaType): MalEntryStatus = MalEntryStatus(
+        status = status,
+        score = score,
+        progress = if (type == MediaType.MANGA) numChaptersRead else numEpisodesWatched,
+        progressVolumes = if (type == MediaType.MANGA) numVolumesRead else null,
+        isRewatching = isRewatching,
+        isRereading = isRereading,
+        updatedAt = updatedAt,
+        startDate = startDate,
+        finishDate = finishDate,
+        priority = priority,
+        numTimesRewatched = numTimesRewatched,
+        numTimesReread = numTimesReread,
+        comments = comments,
+    )
 
     private suspend fun loadList(
         token: AuthToken,
@@ -319,6 +439,14 @@ private data class MalListNodeDto(
 )
 
 @Serializable
+private data class MalMediaEntryResponseDto(
+    @SerialName("my_list_status") val myListStatus: MalListStatusDto? = null,
+    @SerialName("num_episodes") val numEpisodes: Int? = null,
+    @SerialName("num_chapters") val numChapters: Int? = null,
+    @SerialName("num_volumes") val numVolumes: Int? = null,
+)
+
+@Serializable
 private data class MalListStatusDto(
     val status: String? = null,
     val score: Double = 0.0,
@@ -333,4 +461,5 @@ private data class MalListStatusDto(
     val priority: Int = 0,
     @SerialName("num_times_rewatched") val numTimesRewatched: Int = 0,
     @SerialName("num_times_reread") val numTimesReread: Int = 0,
+    val comments: String? = null,
 )

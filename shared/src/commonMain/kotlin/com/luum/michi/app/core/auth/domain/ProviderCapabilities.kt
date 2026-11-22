@@ -17,6 +17,8 @@ internal data class ProviderCapabilities(
     val hiddenFromStatusLists: Boolean,
     val repeatCount: Boolean,
     val priority: Boolean,
+    /** Highest priority value the provider accepts (AniList 5, MAL 2). */
+    val maxPriority: Int = 5,
     val notes: Boolean,
     /** REPEATING as its own list status (MAL uses a flag instead). */
     val repeatingStatus: Boolean,
@@ -59,6 +61,7 @@ internal data class ProviderCapabilities(
             hiddenFromStatusLists = false,
             repeatCount = true,
             priority = true,
+            maxPriority = 2,
             notes = true,
             repeatingStatus = false,
             favourites = false,

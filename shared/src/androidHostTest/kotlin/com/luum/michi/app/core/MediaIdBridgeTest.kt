@@ -1,6 +1,7 @@
 package com.luum.michi.app.core
 
 import com.luum.michi.app.FakeGraphQL
+import com.luum.michi.app.core.media.domain.MalRef
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.repository.MediaIdBridgeImpl
 import com.luum.michi.app.core.media.repository.dto.MediaListMediaDto
@@ -121,6 +122,76 @@ class MediaIdBridgeTest {
 
         assertTrue(result is NetworkResult.Failure)
         assertNull(store.read(idBridgeFileName(MediaType.ANIME)))
+    }
+
+    @Test
+    fun resolveMalUsesTheDiskMapBeforeAskingAniList() = runBlocking {
+        val store = InMemoryFileStore()
+        store.put(
+            idBridgeFileName(MediaType.ANIME),
+            AniListJson.encodeToString(
+                MapSerializer(Int.serializer(), Int.serializer()),
+                mapOf(7 to 100),
+            ),
+        )
+        val graphQL = FakeGraphQL(emptyList())
+
+        val result = bridge(graphQL, store).resolveMal(100)
+
+        assertEquals(MalRef(malId = 7, type = MediaType.ANIME), (result as NetworkResult.Success).value)
+        assertEquals(0, graphQL.calls)
+    }
+
+    @Test
+    fun resolveMalFallsBackToAniListAndPersistsTheMapping() = runBlocking {
+        val store = InMemoryFileStore()
+        val graphQL = FakeGraphQL(
+            pages = listOf(
+                buildJsonObject {
+                    put("Media", buildJsonObject {
+                        put("idMal", 7)
+                        put("type", "ANIME")
+                    })
+                },
+            ),
+        )
+
+        val result = bridge(graphQL, store).resolveMal(100)
+
+        assertEquals(MalRef(malId = 7, type = MediaType.ANIME), (result as NetworkResult.Success).value)
+        assertEquals(1, graphQL.calls)
+        assertEquals(mapOf(7 to 100), decodeMap(store.read(idBridgeFileName(MediaType.ANIME))))
+    }
+
+    @Test
+    fun resolveMalReturnsNullWhenAniListHasNoMalId() = runBlocking {
+        val store = InMemoryFileStore()
+        val graphQL = FakeGraphQL(
+            pages = listOf(
+                buildJsonObject {
+                    put("Media", buildJsonObject {
+                        put("idMal", kotlinx.serialization.json.JsonNull)
+                        put("type", "ANIME")
+                    })
+                },
+            ),
+        )
+
+        val result = bridge(graphQL, store).resolveMal(100)
+
+        assertNull((result as NetworkResult.Success).value)
+        assertNull(store.read(idBridgeFileName(MediaType.ANIME)))
+    }
+
+    @Test
+    fun rememberMalRefWritesAndCachedIdMapReads() = runBlocking {
+        val store = InMemoryFileStore()
+        val bridge = bridge(FakeGraphQL(emptyList()), store)
+
+        bridge.rememberMalRef(100, MalRef(malId = 7, type = MediaType.MANGA))
+
+        assertEquals(mapOf(7 to 100), bridge.cachedIdMap(MediaType.MANGA))
+        assertEquals(emptyMap(), bridge.cachedIdMap(MediaType.ANIME))
     }
 
     private fun decodeMap(raw: String?): Map<Int, Int> {

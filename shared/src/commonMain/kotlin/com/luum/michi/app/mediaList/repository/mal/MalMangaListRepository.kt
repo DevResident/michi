@@ -14,8 +14,9 @@ internal class MalMangaListRepository(
     override suspend fun loadList(
         userId: Int,
         splitCompleted: Boolean,
+        forceHydration: Boolean,
     ): NetworkResult<List<MangaListEntry>> =
-        loader.load(MediaType.MANGA, userId).map { entries ->
+        loader.load(MediaType.MANGA, userId, forceHydration).map { entries ->
             entries.mapIndexed { index, entry -> entry.toMangaListEntry(index, splitCompleted) }
         }
 

@@ -26,12 +26,20 @@ internal class StoredPref<T>(
     var value: T by mutableStateOf(default)
         private set
 
+    /** Current value, for callers composing two backing prefs. */
+    fun current(): T = value
+
+    /** Public-setter behavior (state + store + save scheduler), outside a delegate. */
+    fun update(newValue: T) {
+        value = newValue
+        write(newValue)
+        onChanged()
+    }
+
     override fun getValue(thisRef: Any?, property: KProperty<*>): T = value
 
     override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
-        this.value = value
-        write(value)
-        onChanged()
+        update(value)
     }
 
     /** Store -> state; a missing key (or unknown enum name) keeps the default. */

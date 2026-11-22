@@ -173,7 +173,8 @@ private class GatedEntryRepository(
     override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =
         NetworkResult.Success(Unit)
 
-    override suspend fun deleteEntry(entryId: Int): NetworkResult<Unit> = NetworkResult.Success(Unit)
+    override suspend fun deleteEntry(entryId: Int, mediaRef: EntityRef): NetworkResult<Unit> =
+        NetworkResult.Success(Unit)
 }
 
 class MediaListIntegrationTest {
@@ -755,7 +756,11 @@ private class LateAnimeRepository : AnimeListRepository {
     var failA = false
     private var calls = 0
 
-    override suspend fun loadList(userId: Int, splitCompleted: Boolean): NetworkResult<List<AnimeListEntry>> {
+    override suspend fun loadList(
+        userId: Int,
+        splitCompleted: Boolean,
+        forceHydration: Boolean,
+    ): NetworkResult<List<AnimeListEntry>> {
         val call = ++calls
         val gate = if (call == 1) gateA else gateB
         // Non-cancellable wait: cancelling the coroutine leaves it suspended

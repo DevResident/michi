@@ -33,7 +33,9 @@ internal abstract class MediaListStateHolderBase<T : SortableMediaListEntry, S>(
 ) : MediaListHolder<T, S> {
     private val loader = MediaListLoader(
         scope = scope,
-        fetch = { userId -> fetchList(userId, lastSplitCompleted) },
+        fetch = { userId, forceHydration ->
+            fetchList(userId, lastSplitCompleted, forceHydration)
+        },
         hydrate = { userId -> loadCachedList(userId, lastSplitCompleted) },
     )
     private val progressSaver = ListProgressSaver(
@@ -99,13 +101,18 @@ internal abstract class MediaListStateHolderBase<T : SortableMediaListEntry, S>(
         filterYear = year
     }
 
-    fun load(userId: Int, forceRefresh: Boolean = false, splitCompleted: Boolean = true) {
+    fun load(
+        userId: Int,
+        forceRefresh: Boolean = false,
+        forceHydration: Boolean = false,
+        splitCompleted: Boolean = true,
+    ) {
         // Split flips re-map every entry: bypass the TTL so the toggle
         // applies immediately instead of on the next cold load. The fetch
         // reads lastSplitCompleted at execution, so entries always match it.
         val force = forceRefresh || splitCompleted != lastSplitCompleted
         lastSplitCompleted = splitCompleted
-        loader.load(userId, force)
+        loader.load(userId, force, forceHydration)
     }
 
     /** Applies an optimistic `+1` (the subclasses' increment ops call this). */
@@ -151,7 +158,11 @@ internal abstract class MediaListStateHolderBase<T : SortableMediaListEntry, S>(
     protected abstract val airingOrder: Comparator<T>
 
     /** Fetches the whole list (both lists are full `MediaListCollection`s). */
-    protected abstract suspend fun fetchList(userId: Int, splitCompleted: Boolean): NetworkResult<List<T>>
+    protected abstract suspend fun fetchList(
+        userId: Int,
+        splitCompleted: Boolean,
+        forceHydration: Boolean,
+    ): NetworkResult<List<T>>
 
     /** The persisted list already mapped for [splitCompleted], or null. */
     protected abstract suspend fun loadCachedList(userId: Int, splitCompleted: Boolean): List<T>?

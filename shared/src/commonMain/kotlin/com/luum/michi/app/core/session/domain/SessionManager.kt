@@ -45,6 +45,10 @@ internal class SessionManager(
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
+    /** The provider whose last login callback failed; cleared on a new login or success. */
+    private val _lastLoginError = MutableStateFlow<ProviderId?>(null)
+    val lastLoginError: StateFlow<ProviderId?> = _lastLoginError.asStateFlow()
+
     private val mutex = Mutex()
     private var generation = 0
 
@@ -138,6 +142,11 @@ internal class SessionManager(
         }
     }
 
+    /** Clears a previous login failure (called when the user starts a login). */
+    fun clearLoginError() {
+        _lastLoginError.value = null
+    }
+
     suspend fun onOAuthCallback(uri: String) {
         val handled = providers.firstNotNullOfOrNull { provider ->
             provider.handleCallback(uri)?.let { provider to it }
@@ -147,8 +156,12 @@ internal class SessionManager(
         when (result) {
             // A failed callback leaves the current state alone: a guest stays
             // a guest (a cancelled MAL login must not trap them on Error).
-            is NetworkResult.Failure -> return
+            is NetworkResult.Failure -> {
+                _lastLoginError.value = provider.id
+                return
+            }
             is NetworkResult.Success -> {
+                _lastLoginError.value = null
                 val token = result.value
                 val gen = mutex.withLock {
                     val g = ++generation

@@ -7,11 +7,15 @@ import com.luum.michi.app.profile.repository.ProfileDiskCache
 import com.luum.michi.app.profile.domain.ProfileRepository
 import com.luum.michi.app.mediaList.repository.anime.AnimeListRepositoryImpl
 import com.luum.michi.app.mediaList.domain.anime.AnimeListRepository
+import com.luum.michi.app.mediaDetail.repository.mal.ProviderAwareMediaDetailRepository
 import com.luum.michi.app.mediaList.repository.ProviderRoutingAnimeListRepository
 import com.luum.michi.app.mediaList.repository.ProviderRoutingMangaListRepository
+import com.luum.michi.app.mediaList.repository.ProviderRoutingMediaListEntryRepository
 import com.luum.michi.app.mediaList.repository.mal.MalAnimeListRepository
+import com.luum.michi.app.mediaList.repository.mal.MalHydrationStore
 import com.luum.michi.app.mediaList.repository.mal.MalListLoader
 import com.luum.michi.app.mediaList.repository.mal.MalMangaListRepository
+import com.luum.michi.app.mediaList.repository.mal.MalMediaListEntryRepository
 import com.luum.michi.app.calendar.repository.CalendarRepositoryImpl
 import com.luum.michi.app.calendar.domain.CalendarRepository
 import com.luum.michi.app.mediaDetail.repository.character.CharacterDetailRepositoryImpl
@@ -23,6 +27,7 @@ import com.luum.michi.app.core.auth.domain.TokenStorage
 import com.luum.michi.app.core.auth.repository.AniListAuthProvider
 import com.luum.michi.app.core.mal.domain.MalOAuthConfig
 import com.luum.michi.app.core.mal.repository.MalAuthProvider
+import com.luum.michi.app.core.mal.repository.MalEntryClient
 import com.luum.michi.app.core.mal.repository.MalHttp
 import com.luum.michi.app.core.mal.repository.SettingsStorePendingMalAuthStore
 import com.luum.michi.app.core.media.domain.ProviderId
@@ -99,10 +104,7 @@ class MichiDependencies internal constructor(
     internal val fileStore: FileStore,
     /** Network metering for AUTO image quality; platform impls override it. */
     internal val connectivity: Connectivity = AlwaysUnmeteredConnectivity(),
-    /**
-     * Debug builds log GraphQL timing and (until 11.4b) register the MAL
-     * login; platform entries pass the real flag.
-     */
+    /** Debug builds log GraphQL timing and MAL's unmatched-id counts. */
     internal val isDebug: Boolean = false,
 ) {
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -139,10 +141,9 @@ class MichiDependencies internal constructor(
 
     /**
      * Login services exposed to the sign-in modal. AniList is always present;
-     * MAL is debug-only until 11.4c, and needs `malClientId`.
+     * MAL is appended when `malClientId` is configured (release included).
      */
     internal val authProviders: List<AuthProvider> = buildAuthProviders(
-        isDebug = isDebug,
         isMalConfigured = MalOAuthConfig.isConfigured,
         aniList = { AniListAuthProvider(oAuthBrowser, viewerRepository) },
         mal = {
@@ -165,18 +166,27 @@ class MichiDependencies internal constructor(
     /** The viewer profile's disk cache, wiped with the lists on logout/401. */
     private val profileCache: ProfileDiskCache = ProfileDiskCache(fileStore)
 
-    /** MAL ids -> AniList ids, persisted for 11.4c's writes. */
+    /** MAL ids -> AniList ids, persisted for writes and incremental lists. */
     private val mediaIdBridge: MediaIdBridgeImpl =
         MediaIdBridgeImpl(graphQLClient, fileStore)
+
+    /** Shared MAL entry read/write gateway (raw dates + 401 handling). */
+    private val malEntryClient: MalEntryClient = MalEntryClient(
+        http = malHttp,
+        bridge = mediaIdBridge,
+        tokenProvider = { sessionManager.validToken(ProviderId.Mal) },
+        onUnauthorized = { token -> sessionManager.onUnauthorized(token) },
+    )
 
     private val malListLoader: MalListLoader = MalListLoader(
         http = malHttp,
         tokenProvider = { sessionManager.validToken(ProviderId.Mal) },
         bridge = mediaIdBridge,
         cache = mediaListCache,
+        hydrationStore = MalHydrationStore(fileStore),
         onUnauthorized = { token -> sessionManager.onUnauthorized(token) },
-        onUnmatched = { type, count ->
-            if (isDebug) println("[Michi] MAL ${type.name} list: $count unmatched")
+        onUnmatched = { type, ids ->
+            if (isDebug) println("[Michi] MAL ${type.name} list: ${ids.size} unmatched $ids")
         },
     )
 
@@ -221,8 +231,15 @@ class MichiDependencies internal constructor(
     internal val calendarRepository: CalendarRepository =
         CalendarRepositoryImpl(graphQLClient)
 
-    internal val mediaDetailRepository: MediaDetailRepository =
+    private val aniListMediaDetailRepository: MediaDetailRepository =
         MediaDetailRepositoryImpl(graphQLClient)
+
+    internal val mediaDetailRepository: MediaDetailRepository =
+        ProviderAwareMediaDetailRepository(
+            activeProvider = { sessionManager.activeProvider() },
+            aniList = aniListMediaDetailRepository,
+            malEntries = malEntryClient,
+        )
 
     internal val animeThemesRepository: AnimeThemesRepository =
         AnimeThemesRepositoryImpl(httpClient)
@@ -230,8 +247,18 @@ class MichiDependencies internal constructor(
     internal val favouriteRepository: FavouriteRepository =
         FavouriteRepositoryImpl(graphQLClient)
 
-    internal val mediaListEntryRepository: MediaListEntryRepository =
+    private val aniListMediaListEntryRepository: MediaListEntryRepository =
         MediaListEntryRepositoryImpl(graphQLClient, favouriteRepository)
+
+    private val malMediaListEntryRepository: MediaListEntryRepository =
+        MalMediaListEntryRepository(mediaIdBridge, malEntryClient)
+
+    internal val mediaListEntryRepository: MediaListEntryRepository =
+        ProviderRoutingMediaListEntryRepository(
+            activeProvider = { sessionManager.activeProvider() },
+            aniList = aniListMediaListEntryRepository,
+            mal = malMediaListEntryRepository,
+        )
 
     internal val notificationsRepository: NotificationsRepository =
         NotificationsRepositoryImpl(graphQLClient)
@@ -303,16 +330,14 @@ class MichiDependencies internal constructor(
 }
 
 /**
- * AniList is always registered; MAL is appended only in debug builds that have
- * a `malClientId`. In release the list is exactly `[AniList]` (11.4c removes
- * the debug gate).
+ * AniList is always registered; MAL is appended when a `malClientId` exists.
+ * Without the optional MAL configuration the list stays exactly `[AniList]`.
  */
 internal fun buildAuthProviders(
-    isDebug: Boolean,
     isMalConfigured: Boolean,
     aniList: () -> AuthProvider,
     mal: () -> AuthProvider,
 ): List<AuthProvider> = buildList {
     add(aniList())
-    if (isDebug && isMalConfigured) add(mal())
+    if (isMalConfigured) add(mal())
 }

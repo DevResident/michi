@@ -34,8 +34,12 @@ internal class AnimeListStateHolder(
 
     override val airingOrder: Comparator<AnimeListEntry> = compareBy { it.nextAiringAt }
 
-    override suspend fun fetchList(userId: Int, splitCompleted: Boolean): NetworkResult<List<AnimeListEntry>> =
-        repository.loadList(userId, splitCompleted)
+    override suspend fun fetchList(
+        userId: Int,
+        splitCompleted: Boolean,
+        forceHydration: Boolean,
+    ): NetworkResult<List<AnimeListEntry>> =
+        repository.loadList(userId, splitCompleted, forceHydration)
 
     override suspend fun loadCachedList(userId: Int, splitCompleted: Boolean): List<AnimeListEntry>? =
         repository.loadCachedList(userId, splitCompleted)

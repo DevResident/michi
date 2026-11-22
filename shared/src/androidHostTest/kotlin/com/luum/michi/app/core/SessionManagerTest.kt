@@ -210,6 +210,59 @@ class SessionManagerTest {
     }
 
     @Test
+    fun aLoginFailureIsExposedUntilClearedOrSucceeded() = runBlocking {
+        val storage = InMemoryTokenStorage()
+        val provider = TestAuthProvider(
+            callbackResult = { NetworkResult.Failure(NetworkError.NoConnection) },
+        )
+        val (manager, _, _) = manager(storage, provider = provider)
+
+        manager.onOAuthCallback("michi://oauth/callback?code=abc")
+        assertEquals(provider.id, manager.lastLoginError.value)
+
+        manager.clearLoginError()
+        assertNull(manager.lastLoginError.value)
+
+        manager.onOAuthCallback("michi://oauth/callback?code=abc")
+        assertEquals(provider.id, manager.lastLoginError.value)
+    }
+
+    @Test
+    fun aSuccessfulLoginClearsThePreviousError() = runBlocking {
+        val storage = InMemoryTokenStorage()
+        var fail = true
+        val provider = TestAuthProvider(
+            callbackResult = {
+                if (fail) {
+                    NetworkResult.Failure(NetworkError.NoConnection)
+                } else {
+                    NetworkResult.Success(freshToken())
+                }
+            },
+        )
+        val (manager, _, _) = manager(storage, provider = provider)
+
+        manager.onOAuthCallback("michi://oauth/callback?code=abc")
+        assertEquals(provider.id, manager.lastLoginError.value)
+
+        fail = false
+        manager.onOAuthCallback("michi://oauth/callback?code=abc")
+        assertNull(manager.lastLoginError.value)
+        assertTrue(manager.state.value is SessionState.Authenticated)
+    }
+
+    @Test
+    fun aCancelledLoginDoesNotSetAnError() = runBlocking {
+        val storage = InMemoryTokenStorage()
+        val provider = TestAuthProvider(callbackResult = { null })
+        val (manager, _, _) = manager(storage, provider = provider)
+
+        manager.onOAuthCallback("michi://oauth/callback?error=access_denied")
+
+        assertNull(manager.lastLoginError.value)
+    }
+
+    @Test
     fun logoutClearsTokenAndCache() {
         val storage = InMemoryTokenStorage()
         runBlocking { storage.save(freshToken()) }

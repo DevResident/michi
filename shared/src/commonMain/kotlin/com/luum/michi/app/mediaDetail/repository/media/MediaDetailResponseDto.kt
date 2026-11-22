@@ -38,6 +38,7 @@ internal data class MediaDetailResponseDto(
 @Serializable
 internal data class MediaDetailDto(
     val id: Int,
+    val idMal: Int? = null,
     val type: String? = null,
     val title: MediaTitleDto? = null,
     val description: String? = null,

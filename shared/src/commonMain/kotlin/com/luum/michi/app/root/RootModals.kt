@@ -51,6 +51,7 @@ internal fun RootModals(
     settingsState: SettingsState,
     capabilities: ProviderCapabilities,
     authServices: List<AuthService>,
+    loginErrorMessage: String? = null,
     isAuthConfigured: Boolean,
     mediaListEntryRepository: MediaListEntryRepository,
     mediaDetailRepository: MediaDetailRepository,
@@ -70,6 +71,7 @@ internal fun RootModals(
     if (state.isOpen(RootOverlay.SignIn)) {
         AuthModal(
             services = authServices,
+            loginErrorMessage = loginErrorMessage,
             isConfigured = isAuthConfigured,
             configMissingLabel = strings.authConfigurationMissing,
             language = settingsState.language,

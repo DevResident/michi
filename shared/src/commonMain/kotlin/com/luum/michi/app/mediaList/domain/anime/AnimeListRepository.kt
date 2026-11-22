@@ -9,7 +9,11 @@ internal interface AnimeListRepository {
      * status and flattened into UI entries. A successful fetch is persisted so a
      * later cold start can show it before the network.
      */
-    suspend fun loadList(userId: Int, splitCompleted: Boolean = true): NetworkResult<List<AnimeListEntry>>
+    suspend fun loadList(
+        userId: Int,
+        splitCompleted: Boolean = true,
+        forceHydration: Boolean = false,
+    ): NetworkResult<List<AnimeListEntry>>
 
     /**
      * The last persisted anime list for [userId], already mapped with

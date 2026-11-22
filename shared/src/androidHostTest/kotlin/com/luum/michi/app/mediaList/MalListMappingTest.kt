@@ -1,9 +1,9 @@
 package com.luum.michi.app.mediaList
 
+import com.luum.michi.app.core.mal.domain.malStatusToMediaListStatus
+import com.luum.michi.app.core.mal.repository.parseMalFuzzyDate
+import com.luum.michi.app.core.mal.repository.parseMalUpdatedAt
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
-import com.luum.michi.app.mediaList.repository.mal.malListStatusToMediaListStatus
-import com.luum.michi.app.mediaList.repository.mal.parseMalFuzzyDate
-import com.luum.michi.app.mediaList.repository.mal.parseMalUpdatedAt
 import com.luum.michi.app.mediaList.repository.toComparableInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,22 +13,22 @@ class MalListMappingTest {
 
     @Test
     fun statusesCollapseOntoAniListSections() {
-        assertEquals(MediaListStatus.CURRENT, malListStatusToMediaListStatus("watching"))
-        assertEquals(MediaListStatus.CURRENT, malListStatusToMediaListStatus("reading"))
-        assertEquals(MediaListStatus.COMPLETED, malListStatusToMediaListStatus("completed"))
-        assertEquals(MediaListStatus.PAUSED, malListStatusToMediaListStatus("on_hold"))
-        assertEquals(MediaListStatus.DROPPED, malListStatusToMediaListStatus("dropped"))
-        assertEquals(MediaListStatus.PLANNING, malListStatusToMediaListStatus("plan_to_watch"))
-        assertEquals(MediaListStatus.PLANNING, malListStatusToMediaListStatus("plan_to_read"))
-        assertEquals(MediaListStatus.CURRENT, malListStatusToMediaListStatus(null))
-        assertEquals(MediaListStatus.CURRENT, malListStatusToMediaListStatus("unknown"))
+        assertEquals(MediaListStatus.CURRENT, malStatusToMediaListStatus("watching"))
+        assertEquals(MediaListStatus.CURRENT, malStatusToMediaListStatus("reading"))
+        assertEquals(MediaListStatus.COMPLETED, malStatusToMediaListStatus("completed"))
+        assertEquals(MediaListStatus.PAUSED, malStatusToMediaListStatus("on_hold"))
+        assertEquals(MediaListStatus.DROPPED, malStatusToMediaListStatus("dropped"))
+        assertEquals(MediaListStatus.PLANNING, malStatusToMediaListStatus("plan_to_watch"))
+        assertEquals(MediaListStatus.PLANNING, malStatusToMediaListStatus("plan_to_read"))
+        assertEquals(MediaListStatus.CURRENT, malStatusToMediaListStatus(null))
+        assertEquals(MediaListStatus.CURRENT, malStatusToMediaListStatus("unknown"))
     }
 
     @Test
     fun rewatchFlagsDoNotCreateAnotherStatus() {
         // The flag is not an input to the mapping: watching/reading stays CURRENT.
-        assertEquals(MediaListStatus.CURRENT, malListStatusToMediaListStatus("watching"))
-        assertEquals(MediaListStatus.CURRENT, malListStatusToMediaListStatus("reading"))
+        assertEquals(MediaListStatus.CURRENT, malStatusToMediaListStatus("watching"))
+        assertEquals(MediaListStatus.CURRENT, malStatusToMediaListStatus("reading"))
     }
 
     @Test

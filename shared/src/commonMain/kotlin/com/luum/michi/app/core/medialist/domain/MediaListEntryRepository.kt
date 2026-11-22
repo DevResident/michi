@@ -34,5 +34,9 @@ internal interface MediaListEntryRepository {
 
     suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit>
 
-    suspend fun deleteEntry(entryId: Int): NetworkResult<Unit>
+    /**
+     * Deletes one entry. AniList uses [entryId] (its MediaListEntry id); MAL
+     * resolves [mediaRef] to its own media id because it has no entry id.
+     */
+    suspend fun deleteEntry(entryId: Int, mediaRef: EntityRef): NetworkResult<Unit>
 }

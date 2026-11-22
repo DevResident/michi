@@ -24,6 +24,7 @@ private const val MediaDetailQuery = """
 query MediaDetail(${'$'}id: Int!) {
   Media(id: ${'$'}id) {
     id
+    idMal
     type
     title { romaji english native userPreferred }
     description(asHtml: true)
@@ -118,6 +119,7 @@ private const val MediaEntryEditorQuery = """
 query MediaEntryEditor(${'$'}id: Int!) {
   Media(id: ${'$'}id) {
     id
+    idMal
     type
     title { romaji english native userPreferred }
     episodes

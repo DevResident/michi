@@ -18,8 +18,8 @@ import com.luum.michi.app.core.session.domain.Viewer
 
 /**
  * MyAnimeList implementation of [AuthProvider]: authorization-code grant with
- * PKCE (`plain`), refresh and viewer lookup. Only registered in debug builds
- * until MAL lists land in 11.4b.
+ * PKCE (`plain`), refresh and viewer lookup. Registered whenever `malClientId`
+ * is configured; the list reads/writes live in the MAL repositories.
  */
 internal class MalAuthProvider(
     private val browser: OAuthBrowser,

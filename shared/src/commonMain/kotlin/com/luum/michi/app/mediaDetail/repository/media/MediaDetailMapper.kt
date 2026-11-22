@@ -37,6 +37,7 @@ internal fun MediaDetailDto.toDomain(strings: LanguageStrings): MediaDetail {
     return MediaDetail(
         id = id,
         type = parseType(type),
+        idMal = idMal,
         title = title.bestTitle(),
         cover = coverImage?.toCoverSizes(),
         bannerUrl = bannerImage,
@@ -269,6 +270,7 @@ private fun MediaViewerListEntryDto.toViewerEntry(): MediaListViewerEntry = Medi
 internal fun MediaDetailDto.toEditorData(): MediaEntryEditorData = MediaEntryEditorData(
     title = title.bestTitle(),
     type = parseType(type),
+    idMal = idMal,
     episodes = episodes?.takeIf { it > 0 },
     chapters = chapters?.takeIf { it > 0 },
     volumes = volumes?.takeIf { it > 0 },

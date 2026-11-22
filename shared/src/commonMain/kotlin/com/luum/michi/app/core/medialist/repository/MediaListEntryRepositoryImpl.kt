@@ -235,7 +235,7 @@ internal class MediaListEntryRepositoryImpl(
         )
     }
 
-    override suspend fun deleteEntry(entryId: Int): NetworkResult<Unit> {
+    override suspend fun deleteEntry(entryId: Int, mediaRef: EntityRef): NetworkResult<Unit> {
         val variables = buildMap<String, JsonElement> {
             put("id", JsonPrimitive(entryId))
         }

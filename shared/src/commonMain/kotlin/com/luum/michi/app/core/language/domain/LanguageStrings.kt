@@ -138,6 +138,7 @@ interface LanguageStrings {
     val mediaDetailEndedLabel: String
     val mediaDetailLoadingLabel: String
     val mediaDetailErrorLabel: String
+    val entryNotOnProvider: String
     val editEntryAction: String
     val cancelAction: String
     val mediaDetailEditorDeleteAction: String
@@ -320,6 +321,7 @@ interface LanguageStrings {
     val authGuestPrompt: String
     val authLoginAction: String
     val authLoginMalAction: String
+    val authLoginFailed: String
     val authContinueAsGuestAction: String
     val authConfigurationMissing: String
     val authLoadingLabel: String

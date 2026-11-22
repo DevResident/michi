@@ -17,6 +17,18 @@ class NetworkErrorStringsTest {
     }
 
     @Test
+    fun aMissingProviderEntryUsesItsOwnMessage() {
+        assertEquals(
+            EnglishStrings.entryNotOnProvider,
+            EnglishStrings.networkErrorMessage(NetworkError.EntryNotOnProvider),
+        )
+        assertEquals(
+            SpanishStrings.entryNotOnProvider,
+            SpanishStrings.networkErrorMessage(NetworkError.EntryNotOnProvider),
+        )
+    }
+
+    @Test
     fun otherErrorsKeepTheirLabels() {
         assertEquals(
             EnglishStrings.errorServerLabel,

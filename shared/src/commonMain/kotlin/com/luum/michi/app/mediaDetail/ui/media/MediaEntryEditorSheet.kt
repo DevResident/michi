@@ -372,7 +372,7 @@ private fun EditorBody(
                 onSet = { editor.updatePriority(it) },
                 onDecrement = { editor.decrementPriority() },
                 onIncrement = { editor.incrementPriority() },
-                incrementEnabled = editor.priority < 5,
+                incrementEnabled = editor.priority < editor.maxPriority,
             )
         }
         if (capabilities.privateEntries || capabilities.hiddenFromStatusLists) {

@@ -36,6 +36,7 @@ import com.luum.michi.app.ui.TestTags
 @Composable
 internal fun AuthModal(
     services: List<AuthService>,
+    loginErrorMessage: String? = null,
     isConfigured: Boolean,
     configMissingLabel: String,
     language: AppLanguage,
@@ -76,6 +77,16 @@ internal fun AuthModal(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(modifier = Modifier.height(24.dp))
+        if (loginErrorMessage != null) {
+            Text(
+                text = loginErrorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         AuthServiceButtons(
             services = services,
             isConfigured = isConfigured,

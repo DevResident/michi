@@ -40,8 +40,12 @@ internal class MangaListStateHolder(
     // AniList exposes no next-chapter date for manga: degrade to list order.
     override val airingOrder: Comparator<MangaListEntry> = compareBy { it.originalIndex }
 
-    override suspend fun fetchList(userId: Int, splitCompleted: Boolean): NetworkResult<List<MangaListEntry>> =
-        repository.loadList(userId, splitCompleted)
+    override suspend fun fetchList(
+        userId: Int,
+        splitCompleted: Boolean,
+        forceHydration: Boolean,
+    ): NetworkResult<List<MangaListEntry>> =
+        repository.loadList(userId, splitCompleted, forceHydration)
 
     override suspend fun loadCachedList(userId: Int, splitCompleted: Boolean): List<MangaListEntry>? =
         repository.loadCachedList(userId, splitCompleted)

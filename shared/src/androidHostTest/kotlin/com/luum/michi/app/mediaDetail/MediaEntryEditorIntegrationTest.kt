@@ -142,6 +142,21 @@ class MediaEntryEditorIntegrationTest {
     }
 
     @Test
+    fun malPriorityStopsAtTwo() {
+        val editor = editorWired(
+            FakeGraphQL(emptyList()),
+            viewerEntry = null,
+            capabilities = ProviderCapabilities.Mal,
+        )
+
+        repeat(5) { editor.incrementPriority() }
+        assertEquals(2, editor.priority)
+        assertEquals(2, editor.maxPriority)
+        editor.updatePriority(9)
+        assertEquals(2, editor.priority)
+    }
+
+    @Test
     fun loadDefaultsPlanningForNewEntry() {
         val editor = editorWired(FakeGraphQL(listOf(buildJsonObject {})), viewerEntry = null)
 

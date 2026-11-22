@@ -33,6 +33,7 @@ class ProviderCapabilitiesTest {
         assertTrue(caps.profileDetails)
         assertTrue(caps.profileStatistics)
         assertTrue(caps.remoteSettings)
+        assertEquals(5, caps.maxPriority)
     }
 
     @Test
@@ -53,6 +54,7 @@ class ProviderCapabilitiesTest {
         assertFalse(caps.profileDetails)
         assertFalse(caps.profileStatistics)
         assertFalse(caps.remoteSettings)
+        assertEquals(2, caps.maxPriority)
     }
 
     @Test

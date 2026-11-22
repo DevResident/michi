@@ -18,7 +18,9 @@ internal class ProviderRoutingAnimeListRepository(
     override suspend fun loadList(
         userId: Int,
         splitCompleted: Boolean,
-    ): NetworkResult<List<AnimeListEntry>> = target().loadList(userId, splitCompleted)
+        forceHydration: Boolean,
+    ): NetworkResult<List<AnimeListEntry>> =
+        target().loadList(userId, splitCompleted, forceHydration)
 
     override suspend fun loadCachedList(
         userId: Int,

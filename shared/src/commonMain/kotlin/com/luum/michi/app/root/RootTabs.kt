@@ -175,6 +175,7 @@ internal fun RootTabContent(
                 holders.anime.load(
                     viewerId,
                     forceRefresh = true,
+                    forceHydration = true,
                     splitCompleted = settingsState.splitCompletedAnime,
                 )
             },
@@ -198,6 +199,7 @@ internal fun RootTabContent(
                 holders.manga.load(
                     viewerId,
                     forceRefresh = true,
+                    forceHydration = true,
                     splitCompleted = settingsState.splitCompletedManga,
                 )
             },

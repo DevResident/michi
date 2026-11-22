@@ -32,7 +32,7 @@ import kotlin.time.TimeSource
  */
 internal class MediaListLoader<T>(
     private val scope: CoroutineScope,
-    private val fetch: suspend (userId: Int) -> NetworkResult<List<T>>,
+    private val fetch: suspend (userId: Int, forceHydration: Boolean) -> NetworkResult<List<T>>,
     /** Last saved list for the user, already mapped for the current split. */
     private val hydrate: suspend (userId: Int) -> List<T>? = { null },
 ) {
@@ -67,7 +67,11 @@ internal class MediaListLoader<T>(
     /** True once the network has confirmed the entries (never from disk alone). */
     val isConfirmed: Boolean get() = confirmedState
 
-    fun load(userId: Int, forceRefresh: Boolean = false) {
+    fun load(
+        userId: Int,
+        forceRefresh: Boolean = false,
+        forceHydration: Boolean = false,
+    ) {
         val mark = lastLoaded
         if (!forceRefresh && lastUserId == userId && mark != null
             && mark.elapsedNow() < AniListNetworkPolicy.CACHE_TTL && entriesBacking.isNotEmpty()
@@ -93,7 +97,7 @@ internal class MediaListLoader<T>(
             },
         ) { isCurrent ->
             hydrateIfNeeded(userId, isCurrent)
-            when (val result = fetch(userId)) {
+            when (val result = fetch(userId, forceHydration)) {
                 is NetworkResult.Success -> if (isCurrent()) {
                     entriesBacking.clear()
                     entriesBacking.addAll(result.value)

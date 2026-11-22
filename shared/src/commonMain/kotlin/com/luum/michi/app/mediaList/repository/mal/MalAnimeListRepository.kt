@@ -14,8 +14,9 @@ internal class MalAnimeListRepository(
     override suspend fun loadList(
         userId: Int,
         splitCompleted: Boolean,
+        forceHydration: Boolean,
     ): NetworkResult<List<AnimeListEntry>> =
-        loader.load(MediaType.ANIME, userId).map { entries ->
+        loader.load(MediaType.ANIME, userId, forceHydration).map { entries ->
             entries.mapIndexed { index, entry -> entry.toAnimeListEntry(index, splitCompleted) }
         }
 

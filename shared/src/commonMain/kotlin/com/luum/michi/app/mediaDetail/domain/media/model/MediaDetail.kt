@@ -29,6 +29,8 @@ internal data class StudioRef(val id: Int, val name: String)
 internal data class MediaDetail(
     val id: Int,
     val type: MediaDetailType,
+    /** AniList's MyAnimeList mapping; null = this work has no MAL record. */
+    val idMal: Int? = null,
     val title: String,
     val cover: CoverSizes?,
     val bannerUrl: String?,

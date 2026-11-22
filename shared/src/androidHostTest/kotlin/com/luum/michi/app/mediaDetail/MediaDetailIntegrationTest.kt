@@ -306,7 +306,7 @@ private object NoopEntryRepository : MediaListEntryRepository {
     override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =
         NetworkResult.Failure(NetworkError.Unknown(null))
 
-    override suspend fun deleteEntry(entryId: Int): NetworkResult<Unit> =
+    override suspend fun deleteEntry(entryId: Int, mediaRef: EntityRef): NetworkResult<Unit> =
         NetworkResult.Failure(NetworkError.Unknown(null))
 }
 

@@ -9,7 +9,11 @@ internal interface MangaListRepository {
      * status and flattened into UI entries. A successful fetch is persisted so a
      * later cold start can show it before the network.
      */
-    suspend fun loadList(userId: Int, splitCompleted: Boolean = true): NetworkResult<List<MangaListEntry>>
+    suspend fun loadList(
+        userId: Int,
+        splitCompleted: Boolean = true,
+        forceHydration: Boolean = false,
+    ): NetworkResult<List<MangaListEntry>>
 
     /**
      * The last persisted manga list for [userId], already mapped with

@@ -46,6 +46,7 @@ private object SettingsPrefKeys {
     const val TitleLanguage = "title_language"
     const val StaffNameLanguage = "staff_name_language"
     const val DisplayAdultContent = "display_adult_content"
+    const val DisplayAdultContentLocal = "display_adult_content_local"
     const val ScoreFormat = "score_format"
     const val ListSort = "list_sort"
     const val SplitCompletedAnime = "split_completed_anime"
@@ -70,6 +71,12 @@ internal class SettingsState(
     private val store: SettingsStore,
     private val scope: CoroutineScope,
     val canSync: Boolean = true,
+    /**
+     * An authenticated provider without remote settings (MAL) uses a local 18+
+     * preference instead of the AniList-synced one. Guests neither show nor
+     * use it.
+     */
+    val useLocalAdultContent: Boolean = false,
 ) {
     // ── Synced pref factories: the public setter schedules the AniList save. ──
     private fun syncedBoolean(key: String, default: Boolean) =
@@ -104,9 +111,24 @@ internal class SettingsState(
         syncedEnum(SettingsPrefKeys.StaffNameLanguage, StaffNameLanguage.ROMAJI_WESTERN, StaffNameLanguage.entries)
     var staffNameLanguage: StaffNameLanguage by staffNameLanguagePref
 
-    private val displayAdultContentPref =
+    private val displayAdultContentSyncedPref =
         syncedBoolean(SettingsPrefKeys.DisplayAdultContent, false)
-    var displayAdultContent: Boolean by displayAdultContentPref
+    private val displayAdultContentLocalPref =
+        localBoolean(SettingsPrefKeys.DisplayAdultContentLocal, false)
+
+    /** The effective 18+ gate: synced for AniList, local for MAL, off for guests. */
+    var displayAdultContent: Boolean
+        get() = when {
+            canSync -> displayAdultContentSyncedPref.current()
+            useLocalAdultContent -> displayAdultContentLocalPref.current()
+            else -> false
+        }
+        set(value) {
+            when {
+                canSync -> displayAdultContentSyncedPref.update(value)
+                useLocalAdultContent -> displayAdultContentLocalPref.update(value)
+            }
+        }
 
     private val scoreFormatPref =
         syncedEnum(SettingsPrefKeys.ScoreFormat, ScoreFormat.POINT_10_DECIMAL, ScoreFormat.entries)
@@ -234,7 +256,8 @@ internal class SettingsState(
     private val allPrefs: List<StoredPref<*>> = listOf(
         titleLanguagePref,
         staffNameLanguagePref,
-        displayAdultContentPref,
+        displayAdultContentSyncedPref,
+        displayAdultContentLocalPref,
         scoreFormatPref,
         listSortPref,
         splitCompletedAnimePref,
@@ -259,7 +282,7 @@ internal class SettingsState(
     private val syncedPrefs: List<StoredPref<*>> = listOf(
         titleLanguagePref,
         staffNameLanguagePref,
-        displayAdultContentPref,
+        displayAdultContentSyncedPref,
         scoreFormatPref,
         listSortPref,
         splitCompletedAnimePref,
@@ -352,7 +375,7 @@ internal class SettingsState(
     fun seedFrom(viewer: Viewer) {
         val title = parseTitleLanguage(viewer.titleLanguage)
         titleLanguagePref.setSilently(title)
-        displayAdultContentPref.setSilently(viewer.displayAdultContent)
+        displayAdultContentSyncedPref.setSilently(viewer.displayAdultContent)
         scoreFormatPref.setSilently(parseScoreFormat(viewer.scoreFormat))
         lastSyncedTitleLanguage = title
     }
@@ -388,7 +411,7 @@ internal class SettingsState(
     private fun applyLoaded(data: SettingsData, before: SettingsData? = null) {
         titleLanguagePref.applyLoaded(data.titleLanguage, before?.titleLanguage)
         staffNameLanguagePref.applyLoaded(data.staffNameLanguage, before?.staffNameLanguage)
-        displayAdultContentPref.applyLoaded(data.displayAdultContent, before?.displayAdultContent)
+        displayAdultContentSyncedPref.applyLoaded(data.displayAdultContent, before?.displayAdultContent)
         scoreFormatPref.applyLoaded(data.scoreFormat, before?.scoreFormat)
         listSortPref.applyLoaded(data.listSort, before?.listSort)
         splitCompletedAnimePref.applyLoaded(data.splitCompletedAnime, before?.splitCompletedAnime)
@@ -453,6 +476,7 @@ internal fun rememberSettingsState(
     store: SettingsStore,
     scope: CoroutineScope,
     canSync: Boolean,
-): SettingsState = remember(canSync) {
-    SettingsState(repository, store, scope, canSync)
+    useLocalAdultContent: Boolean = false,
+): SettingsState = remember(canSync, useLocalAdultContent) {
+    SettingsState(repository, store, scope, canSync, useLocalAdultContent)
 }
