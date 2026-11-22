@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
@@ -221,14 +223,16 @@ internal fun <T : SortableMediaListEntry, S> MediaListScreenScaffold(
                                     }
                                 },
                                 titleTrailing = {
-                                    // MAL-only: no AniList detail or editor, so
-                                    // the badge takes the pencil's place.
-                                    if (isMalOnly) {
-                                        MalOnlyBadge(
-                                            label = strings.malOnlyBadgeLabel,
-                                            description = strings.malOnlyBadgeDescription,
-                                        )
-                                    } else {
+                                    // MAL-only: no AniList detail, so the tag
+                                    // says why the card opens MAL; the editor
+                                    // still works (it talks to MAL directly).
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (isMalOnly) {
+                                            MalOnlyBadge(
+                                                label = strings.malOnlyBadgeLabel,
+                                                description = strings.malOnlyBadgeDescription,
+                                            )
+                                        }
                                         IconButton(onClick = { onEditEntry(entry.id) }) {
                                             Icon(
                                                 imageVector = AppIcons.Edit,

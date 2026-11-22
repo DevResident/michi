@@ -2,6 +2,7 @@ package com.luum.michi.app.mediaList
 
 import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
+import com.luum.michi.app.core.mal.domain.malOnlyMediaId
 import com.luum.michi.app.core.mal.repository.MalEntryClient
 import com.luum.michi.app.core.mal.repository.MalHttp
 import com.luum.michi.app.core.media.domain.EntityRef
@@ -568,30 +569,37 @@ class MalMediaListEntryRepositoryTest {
     }
 
     @Test
-    fun aMalOnlyIdNeverReachesTheBridgeOrMal() = runBlocking {
-        var requests = 0
+    fun aMalOnlyEntryWritesStraightToItsMalRecordWithoutTheBridge() = runBlocking {
+        val paths = mutableListOf<Pair<HttpMethod, String>>()
         val harness = Harness(
-            engine = MockEngine {
-                requests++
-                error("a MAL-only entry must not send anything")
+            engine = MockEngine { request ->
+                paths += request.method to request.url.encodedPath
+                if (request.method == HttpMethod.Delete) {
+                    respond("", HttpStatusCode.OK)
+                } else {
+                    respond(statusBody(status = "reading", chapters = 4), HttpStatusCode.OK)
+                }
             },
         )
-        val malOnly = aniListRef(-29317)
+        val manga = aniListRef(malOnlyMediaId(29317, MediaType.MANGA))
 
-        val saved = harness.repository.save(ref = malOnly)
         val progress = harness.repository.saveProgress(
-            mediaRef = malOnly,
-            progress = 3,
+            mediaRef = manga,
+            progress = 4,
             status = null,
             progressVolumes = null,
         )
-        val deleted = harness.repository.deleteEntry(entryId = 1, mediaRef = malOnly)
+        val deleted = harness.repository.deleteEntry(entryId = 1, mediaRef = manga)
 
-        for (result in listOf(saved, progress, deleted)) {
-            assertTrue(result is NetworkResult.Failure)
-            assertEquals(NetworkError.EntryNotOnProvider, result.error)
-        }
-        assertEquals(0, harness.bridge.resolveCalls)
-        assertEquals(0, requests)
+        assertTrue(progress is NetworkResult.Success)
+        assertTrue(deleted is NetworkResult.Success)
+        assertEquals(
+            listOf(
+                HttpMethod.Patch to "/v2/manga/29317/my_list_status",
+                HttpMethod.Delete to "/v2/manga/29317/my_list_status",
+            ),
+            paths,
+        )
+        assertEquals(0, harness.bridge.resolveCalls, "the synthetic id names its MAL record")
     }
 }

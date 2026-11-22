@@ -2,6 +2,7 @@ package com.luum.michi.app.mediaList.repository.mal
 
 import com.luum.michi.app.core.mal.domain.MalEntryUpdate
 import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
+import com.luum.michi.app.core.mal.domain.malRefOfMalOnly
 import com.luum.michi.app.core.mal.domain.toMalStatus
 import com.luum.michi.app.core.mal.repository.MalEntryClient
 import com.luum.michi.app.core.mal.repository.formatMalDate
@@ -23,7 +24,8 @@ import kotlin.math.roundToInt
  * Writes the viewer's MAL list: the editor keeps AniList media ids, so every
  * write first resolves the MAL id through [MediaIdBridge]. The PATCH is
  * partial; unsupported AniList fields are simply never sent. A MAL-only
- * synthetic id is refused before any lookup: those entries are read-only.
+ * synthetic id already names its MAL record, so it skips the bridge (and
+ * AniList) entirely.
  */
 internal class MalMediaListEntryRepository(
     private val bridge: MediaIdBridge,
@@ -46,8 +48,7 @@ internal class MalMediaListEntryRepository(
         completedAtMillis: Long?,
     ): NetworkResult<MediaListViewerEntry> {
         val aniListId = mediaRef.requireAniListId()
-        if (isMalOnlyMediaId(aniListId)) return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
-        val ref = when (val resolved = bridge.resolveMal(aniListId)) {
+        val ref = when (val resolved = malRefFor(aniListId)) {
             is NetworkResult.Failure -> return resolved
             is NetworkResult.Success -> resolved.value
                 ?: return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
@@ -81,8 +82,7 @@ internal class MalMediaListEntryRepository(
         progressVolumes: Int?,
     ): NetworkResult<Unit> {
         val aniListId = mediaRef.requireAniListId()
-        if (isMalOnlyMediaId(aniListId)) return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
-        val ref = when (val resolved = bridge.resolveMal(aniListId)) {
+        val ref = when (val resolved = malRefFor(aniListId)) {
             is NetworkResult.Failure -> return resolved
             is NetworkResult.Success -> resolved.value
                 ?: return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
@@ -116,12 +116,19 @@ internal class MalMediaListEntryRepository(
 
     override suspend fun deleteEntry(entryId: Int, mediaRef: EntityRef): NetworkResult<Unit> {
         val aniListId = mediaRef.requireAniListId()
-        if (isMalOnlyMediaId(aniListId)) return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
-        val ref: MalRef = when (val resolved = bridge.resolveMal(aniListId)) {
+        val ref: MalRef = when (val resolved = malRefFor(aniListId)) {
             is NetworkResult.Failure -> return resolved
             // The work is not on MAL, so there is nothing to delete.
             is NetworkResult.Success -> resolved.value ?: return NetworkResult.Success(Unit)
         }
         return client.delete(aniListId, ref)
     }
+
+    /** A MAL-only synthetic id names its MAL record itself; anything else goes through the bridge. */
+    private suspend fun malRefFor(listId: Int): NetworkResult<MalRef?> =
+        if (isMalOnlyMediaId(listId)) {
+            NetworkResult.Success(malRefOfMalOnly(listId))
+        } else {
+            bridge.resolveMal(listId)
+        }
 }

@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.luum.michi.app.core.mal.domain.isMalOnlyAniListRef
-import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
 import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.DetailListKind
@@ -316,14 +315,12 @@ internal class State(
     }
 
     fun openEditor(id: Int) {
-        if (isMalOnlyMediaId(id)) return
         editorMediaId = id
         editorInitialStatus = null
         editorInitialProgress = null
     }
 
     fun openEditorForCompletion(id: Int, progress: Int) {
-        if (isMalOnlyMediaId(id)) return
         editorMediaId = id
         editorInitialStatus = MediaListStatus.COMPLETED
         editorInitialProgress = progress

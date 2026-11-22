@@ -15,7 +15,7 @@ import com.luum.michi.app.ui.components.flatBorder
 
 /**
  * Small "MAL" tag on a MAL-only list card (a work AniList does not have):
- * it sits where the edit pencil would be, since that card has no editor.
+ * it sits before the edit pencil and explains why the card opens MAL.
  */
 @Composable
 internal fun MalOnlyBadge(
@@ -28,7 +28,7 @@ internal fun MalOnlyBadge(
         color = MaterialTheme.colorScheme.surface,
         border = flatBorder(),
         modifier = modifier
-            .padding(top = 8.dp, end = 4.dp)
+            .padding(start = 4.dp)
             .semantics { contentDescription = description },
     ) {
         Text(

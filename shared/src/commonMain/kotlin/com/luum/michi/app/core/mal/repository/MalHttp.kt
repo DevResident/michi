@@ -13,6 +13,7 @@ import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.AniListNetworkPolicy
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
+import com.luum.michi.app.core.network.domain.map
 import com.luum.michi.app.core.network.repository.AniListRateLimiter
 import com.luum.michi.app.core.network.repository.throwableToNetworkError
 import com.luum.michi.app.core.session.domain.Viewer
@@ -141,7 +142,11 @@ internal class MalHttp(
         loadList(token, path = "mangalist", isManga = true)
 
     /** The viewer's entry, or null when the media exists but is not in the list. */
-    suspend fun fetchEntry(token: AuthToken, ref: MalRef): NetworkResult<MalEntryStatus?> = withRetry(
+    suspend fun fetchEntry(token: AuthToken, ref: MalRef): NetworkResult<MalEntryStatus?> =
+        fetchWorkEntry(token, ref).map { it.status }
+
+    /** The work's title and totals with the viewer's entry: what a MAL-only editor needs. */
+    suspend fun fetchWorkEntry(token: AuthToken, ref: MalRef): NetworkResult<MalWorkEntry> = withRetry(
         request = {
             httpClient.get(entryUrl(ref, includeStatus = true)) {
                 header("Authorization", token.authorizationHeaderValue)
@@ -154,7 +159,15 @@ internal class MalHttp(
                 !response.status.isSuccess() -> NetworkResult.Failure(httpError(response, body))
                 else -> {
                     val dto = MalJson.decodeFromString<MalMediaEntryResponseDto>(body)
-                    NetworkResult.Success(dto.myListStatus?.toEntryStatus(ref.type))
+                    NetworkResult.Success(
+                        MalWorkEntry(
+                            title = dto.title,
+                            episodes = dto.numEpisodes?.takeIf { it > 0 },
+                            chapters = dto.numChapters?.takeIf { it > 0 },
+                            volumes = dto.numVolumes?.takeIf { it > 0 },
+                            status = dto.myListStatus?.toEntryStatus(ref.type),
+                        ),
+                    )
                 }
             }
         },
@@ -205,9 +218,9 @@ internal class MalHttp(
         val path = if (ref.type == MediaType.MANGA) "manga" else "anime"
         if (!includeStatus) return "${MalOAuthConfig.ApiBaseUrl}/$path/${ref.malId}/my_list_status"
         val fields = if (ref.type == MediaType.MANGA) {
-            "my_list_status{$MalMangaStatusFields},num_chapters,num_volumes"
+            "my_list_status{$MalMangaStatusFields},num_chapters,num_volumes,title"
         } else {
-            "my_list_status{$MalAnimeStatusFields},num_episodes"
+            "my_list_status{$MalAnimeStatusFields},num_episodes,title"
         }
         return URLBuilder("${MalOAuthConfig.ApiBaseUrl}/$path/${ref.malId}").apply {
             parameters.append("fields", fields)
@@ -427,6 +440,15 @@ internal class MalHttp(
         }
 }
 
+/** One MAL work as the entry GET returns it; counts MAL sends as 0 are null. */
+internal data class MalWorkEntry(
+    val title: String?,
+    val episodes: Int?,
+    val chapters: Int?,
+    val volumes: Int?,
+    val status: MalEntryStatus?,
+)
+
 private data class MalListPage(
     val entries: List<MalListEntry>,
     val next: String?,
@@ -519,6 +541,7 @@ private fun MalListNodeDto.toInfo(): MalNodeInfo = MalNodeInfo(
 
 @Serializable
 private data class MalMediaEntryResponseDto(
+    val title: String? = null,
     @SerialName("my_list_status") val myListStatus: MalListStatusDto? = null,
     @SerialName("num_episodes") val numEpisodes: Int? = null,
     @SerialName("num_chapters") val numChapters: Int? = null,

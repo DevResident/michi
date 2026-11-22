@@ -1,6 +1,5 @@
 package com.luum.michi.app.mediaList.ui.manga.components
 
-import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -61,8 +60,6 @@ internal fun ColumnScope.MangaListEntryContent(
         } else {
             Spacer(modifier = Modifier)
         }
-        // MAL-only entries are read-only: no +1 at all.
-        val isMalOnly = isMalOnlyMediaId(entry.id)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -77,7 +74,7 @@ internal fun ColumnScope.MangaListEntryContent(
                 ProgressGroup(
                     progress = entry.volumesProgressLabel(),
                     action = strings.listsIncrementVolumeAction,
-                    showAction = entry.status == MangaListSection.CURRENT && !isMalOnly,
+                    showAction = entry.status == MangaListSection.CURRENT,
                     enabled = entry.canIncrementVolumes() && canEdit,
                     onIncrement = onIncrementVolumes,
                 )
@@ -85,7 +82,7 @@ internal fun ColumnScope.MangaListEntryContent(
                 ProgressGroup(
                     progress = entry.chaptersProgressLabel(),
                     action = strings.listsIncrementChapterAction,
-                    showAction = entry.status == MangaListSection.CURRENT && !isMalOnly,
+                    showAction = entry.status == MangaListSection.CURRENT,
                     enabled = entry.canIncrementChapters() && canEdit,
                     onIncrement = onIncrementChapters,
                 )

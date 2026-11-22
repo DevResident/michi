@@ -4,6 +4,7 @@ import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.language.domain.EnglishStrings
 import com.luum.michi.app.core.language.domain.LanguageStrings
+import com.luum.michi.app.core.mal.domain.malOnlyMediaId
 import com.luum.michi.app.core.mal.repository.MalEntryClient
 import com.luum.michi.app.core.mal.repository.MalHttp
 import com.luum.michi.app.core.media.domain.MalRef
@@ -55,13 +56,20 @@ private class FakeAniListDetail(
     private val detail: MediaDetail,
     private val editor: MediaEntryEditorData = editorData(detail),
 ) : MediaDetailRepository {
+    val askedIds = mutableListOf<Int>()
+
     override suspend fun loadDetail(
         mediaId: Int,
         strings: LanguageStrings,
-    ): NetworkResult<MediaDetail> = NetworkResult.Success(detail)
+    ): NetworkResult<MediaDetail> {
+        askedIds += mediaId
+        return NetworkResult.Success(detail)
+    }
 
-    override suspend fun loadEditorData(mediaId: Int): NetworkResult<MediaEntryEditorData> =
-        NetworkResult.Success(editor)
+    override suspend fun loadEditorData(mediaId: Int): NetworkResult<MediaEntryEditorData> {
+        askedIds += mediaId
+        return NetworkResult.Success(editor)
+    }
 
     override suspend fun loadCharactersPage(
         mediaId: Int,
@@ -175,9 +183,10 @@ private class Harness(
         tokenProvider = { token() },
         onUnauthorized = { unauthorized = it },
     )
+    val aniList = FakeAniListDetail(detail, editor)
     val repository = ProviderAwareMediaDetailRepository(
         activeProvider = { active },
-        aniList = FakeAniListDetail(detail, editor),
+        aniList = aniList,
         malEntries = client,
     )
 }
@@ -327,5 +336,62 @@ class ProviderAwareMediaDetailRepositoryTest {
             ),
             editor.value.viewerEntry?.completedAtMillis,
         )
+    }
+
+    @Test
+    fun aMalOnlyEditorReadsEverythingFromMalAndNeverAsksAniList() = runBlocking {
+        var path: String? = null
+        val harness = Harness(
+            MockEngine { request ->
+                path = request.url.encodedPath
+                respond(
+                    buildJsonObject {
+                        put("title", "Re:Zero - Hyouketsu no Kizuna")
+                        put("num_episodes", 1)
+                        put(
+                            "my_list_status",
+                            buildJsonObject {
+                                put("status", "completed")
+                                put("score", 8)
+                                put("num_episodes_watched", 1)
+                                put("priority", 0)
+                                put("num_times_rewatched", 0)
+                                put("comments", "")
+                            },
+                        )
+                    }.toString(),
+                    HttpStatusCode.OK,
+                )
+            },
+        )
+        val malOnly = malOnlyMediaId(38414, MediaType.ANIME)
+
+        val editor = harness.repository.loadEditorData(malOnly)
+        val detail = harness.repository.loadDetail(malOnly, EnglishStrings)
+
+        assertIs<NetworkResult.Success<MediaEntryEditorData>>(editor)
+        assertEquals("Re:Zero - Hyouketsu no Kizuna", editor.value.title)
+        assertEquals(MediaDetailType.ANIME, editor.value.type)
+        assertEquals(38414, editor.value.idMal)
+        assertEquals(1, editor.value.episodes)
+        assertEquals(malOnly, editor.value.viewerEntry?.id)
+        assertEquals(MediaListStatus.COMPLETED, editor.value.viewerEntry?.status)
+        assertEquals("/v2/anime/38414", path)
+
+        assertIs<NetworkResult.Failure>(detail)
+        assertEquals(NetworkError.EntryNotOnProvider, detail.error)
+        assertTrue(harness.aniList.askedIds.isEmpty(), "AniList must never see a synthetic id")
+    }
+
+    @Test
+    fun aMalOnlyEditorOutsideAMalSessionFailsWithoutAnyRequest() = runBlocking {
+        val harness = Harness(MockEngine { error("no request expected") })
+        harness.active = ProviderId.AniList
+
+        val editor = harness.repository.loadEditorData(malOnlyMediaId(7, MediaType.MANGA))
+
+        assertIs<NetworkResult.Failure>(editor)
+        assertEquals(NetworkError.EntryNotOnProvider, editor.error)
+        assertTrue(harness.aniList.askedIds.isEmpty())
     }
 }

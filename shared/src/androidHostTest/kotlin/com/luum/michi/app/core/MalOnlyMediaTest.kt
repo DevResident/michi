@@ -6,6 +6,8 @@ import com.luum.michi.app.core.mal.domain.malIdOfMalOnly
 import com.luum.michi.app.core.mal.domain.malMediaTypeToFormat
 import com.luum.michi.app.core.mal.domain.malOnlyMediaId
 import com.luum.michi.app.core.mal.domain.malPageUrl
+import com.luum.michi.app.core.mal.domain.malRefOfMalOnly
+import com.luum.michi.app.core.media.domain.MalRef
 import com.luum.michi.app.core.mal.domain.malWorkStatusToMediaStatus
 import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.media.domain.MediaType
@@ -21,10 +23,16 @@ class MalOnlyMediaTest {
 
     @Test
     fun syntheticIdsRoundTripAndNeverLookLikeAniListIds() {
-        val id = malOnlyMediaId(38414)
+        val id = malOnlyMediaId(38414, MediaType.ANIME)
         assertEquals(-38414, id)
         assertTrue(isMalOnlyMediaId(id))
         assertEquals(38414, malIdOfMalOnly(id))
+        assertEquals(MalRef(38414, MediaType.ANIME), malRefOfMalOnly(id))
+
+        val manga = malOnlyMediaId(38414, MediaType.MANGA)
+        assertTrue(isMalOnlyMediaId(manga))
+        assertTrue(manga != id, "the same MAL id in both catalogs stays two entries")
+        assertEquals(MalRef(38414, MediaType.MANGA), malRefOfMalOnly(manga))
         assertFalse(isMalOnlyMediaId(1))
         assertTrue(isMalOnlyMediaId(0), "0 is not a valid AniList id either")
     }

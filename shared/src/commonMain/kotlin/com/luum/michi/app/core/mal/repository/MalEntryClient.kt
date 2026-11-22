@@ -80,6 +80,28 @@ internal class MalEntryClient(
         }
     }
 
+    /**
+     * A MAL-only work (no AniList media): title, totals and the viewer's entry
+     * straight from MAL, keyed by its synthetic id. No bridge, no AniList.
+     */
+    suspend fun readWork(listId: Int, ref: MalRef): NetworkResult<MalWorkEntry> {
+        val token = tokenProvider() ?: return NetworkResult.Failure(NetworkError.Unauthorized(null))
+        return when (val result = http.fetchWorkEntry(token, ref)) {
+            is NetworkResult.Success -> {
+                remember(listId, ref.type, result.value.status)
+                result
+            }
+            is NetworkResult.Failure -> {
+                if (result.error is NetworkError.Unauthorized) onUnauthorized(token)
+                if (result.error is NetworkError.NotFound) {
+                    NetworkResult.Failure(NetworkError.EntryNotOnProvider)
+                } else {
+                    result
+                }
+            }
+        }
+    }
+
     suspend fun save(
         aniListId: Int,
         ref: MalRef,

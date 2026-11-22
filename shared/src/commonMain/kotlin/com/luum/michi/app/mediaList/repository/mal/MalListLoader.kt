@@ -154,7 +154,7 @@ private fun MalListEntry.toDto(media: MediaListMediaDto): MediaListEntryDto = Me
 private fun MalListEntry.malOnlyMedia(type: MediaType): MediaListMediaDto {
     val title = node.title?.takeIf { it.isNotBlank() } ?: "MAL #$malId"
     return MediaListMediaDto(
-        id = malOnlyMediaId(malId),
+        id = malOnlyMediaId(malId, type),
         idMal = malId,
         format = malMediaTypeToFormat(node.mediaType),
         status = malWorkStatusToMediaStatus(node.status),

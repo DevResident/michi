@@ -1,6 +1,8 @@
 package com.luum.michi.app.mediaDetail.repository.mal
 
 import com.luum.michi.app.core.language.domain.LanguageStrings
+import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
+import com.luum.michi.app.core.mal.domain.malRefOfMalOnly
 import com.luum.michi.app.core.mal.repository.MalEntryClient
 import com.luum.michi.app.core.mal.repository.toViewerEntry
 import com.luum.michi.app.core.media.domain.MediaType
@@ -26,7 +28,8 @@ import com.luum.michi.app.mediaDetail.domain.media.model.toMediaType
  * A MAL entry failure never hides the AniList detail: the detail simply paints
  * without an entry. The editor, which needs the entry, propagates the error
  * (`EntryNotOnProvider` when the title has no MAL record). A 401 closes the MAL
- * session through [MalEntryClient].
+ * session through [MalEntryClient]. A MAL-only synthetic id never reaches
+ * AniList: its editor data comes from MAL alone.
  */
 internal class ProviderAwareMediaDetailRepository(
     private val activeProvider: () -> ProviderId,
@@ -38,6 +41,8 @@ internal class ProviderAwareMediaDetailRepository(
         mediaId: Int,
         strings: LanguageStrings,
     ): NetworkResult<MediaDetail> {
+        // A MAL-only work has no AniList detail; never ask AniList about it.
+        if (isMalOnlyMediaId(mediaId)) return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
         val result = aniList.loadDetail(mediaId, strings)
         if (activeProvider() != ProviderId.Mal) return result
         val detail = (result as? NetworkResult.Success)?.value ?: return result
@@ -54,6 +59,7 @@ internal class ProviderAwareMediaDetailRepository(
     }
 
     override suspend fun loadEditorData(mediaId: Int): NetworkResult<MediaEntryEditorData> {
+        if (isMalOnlyMediaId(mediaId)) return loadMalOnlyEditorData(mediaId)
         val result = aniList.loadEditorData(mediaId)
         if (activeProvider() != ProviderId.Mal) return result
         val data = (result as? NetworkResult.Success)?.value ?: return result
@@ -77,20 +83,48 @@ internal class ProviderAwareMediaDetailRepository(
         }
     }
 
+    /**
+     * The editor of a MAL-only work (no AniList media): everything comes from
+     * MAL by the record the synthetic id encodes. Only a MAL session has them.
+     */
+    private suspend fun loadMalOnlyEditorData(mediaId: Int): NetworkResult<MediaEntryEditorData> {
+        if (activeProvider() != ProviderId.Mal) return entryNotOnProvider()
+        val ref = malRefOfMalOnly(mediaId)
+        val isManga = ref.type == MediaType.MANGA
+        return malEntries.readWork(mediaId, ref).map { work ->
+            MediaEntryEditorData(
+                title = work.title?.takeIf { it.isNotBlank() } ?: "MAL #${ref.malId}",
+                type = if (isManga) MediaDetailType.MANGA else MediaDetailType.ANIME,
+                idMal = ref.malId,
+                episodes = if (isManga) null else work.episodes,
+                chapters = if (isManga) work.chapters else null,
+                volumes = if (isManga) work.volumes else null,
+                isFavourite = false,
+                viewerEntry = work.status?.toViewerEntry(mediaId, isManga),
+            )
+        }
+    }
+
     override suspend fun loadCharactersPage(
         mediaId: Int,
         page: Int,
-    ): NetworkResult<Page<MediaCharacterEntry>> = aniList.loadCharactersPage(mediaId, page)
+    ): NetworkResult<Page<MediaCharacterEntry>> =
+        if (isMalOnlyMediaId(mediaId)) NetworkResult.Failure(NetworkError.EntryNotOnProvider)
+        else aniList.loadCharactersPage(mediaId, page)
 
     override suspend fun loadStaffPage(
         mediaId: Int,
         page: Int,
-    ): NetworkResult<Page<MediaStaffEntry>> = aniList.loadStaffPage(mediaId, page)
+    ): NetworkResult<Page<MediaStaffEntry>> =
+        if (isMalOnlyMediaId(mediaId)) NetworkResult.Failure(NetworkError.EntryNotOnProvider)
+        else aniList.loadStaffPage(mediaId, page)
 
     override suspend fun loadRecommendations(
         mediaId: Int,
         page: Int,
-    ): NetworkResult<Page<MediaRecommendationEntry>> = aniList.loadRecommendations(mediaId, page)
+    ): NetworkResult<Page<MediaRecommendationEntry>> =
+        if (isMalOnlyMediaId(mediaId)) NetworkResult.Failure(NetworkError.EntryNotOnProvider)
+        else aniList.loadRecommendations(mediaId, page)
 
     private fun entryNotOnProvider(): NetworkResult<MediaEntryEditorData> =
         NetworkResult.Failure(NetworkError.EntryNotOnProvider)

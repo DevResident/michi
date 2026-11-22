@@ -5,6 +5,7 @@ import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
 import com.luum.michi.app.core.mal.domain.malIdOfMalOnly
+import com.luum.michi.app.core.mal.domain.malOnlyMediaId
 import com.luum.michi.app.core.mal.repository.MalHttp
 import com.luum.michi.app.core.media.domain.MediaFormat
 import com.luum.michi.app.core.media.domain.MediaSeason
@@ -492,7 +493,8 @@ class MalListRepositoryTest {
 
         assertTrue(result is NetworkResult.Success)
         val entry = result.value.single()
-        assertEquals(-555, entry.id)
+        assertEquals(malOnlyMediaId(555, MediaType.MANGA), entry.id)
+        assertEquals(555, malIdOfMalOnly(entry.id))
         assertEquals(MediaFormat.NOVEL, entry.format)
         assertEquals(MangaListSection.CURRENT, entry.status)
         assertEquals(null, entry.totalChapters, "MAL's 0 means unknown")

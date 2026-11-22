@@ -1,6 +1,5 @@
 package com.luum.michi.app.mediaList.ui.anime.components
 
-import com.luum.michi.app.core.mal.domain.isMalOnlyMediaId
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -86,8 +85,7 @@ internal fun ColumnScope.AnimeListEntryContent(
             ProgressGroup(
                 progress = entry.progressLabel(),
                 action = strings.listsIncrementEpisodeAction,
-                // MAL-only entries are read-only: no +1 at all.
-                showAction = entry.status == AnimeListSection.WATCHING && !isMalOnlyMediaId(entry.id),
+                showAction = entry.status == AnimeListSection.WATCHING,
                 enabled = entry.canIncrement() && canEdit,
                 onIncrement = onIncrement,
             )

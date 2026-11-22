@@ -29,14 +29,12 @@ class StateEditorTest {
     }
 
     @Test
-    fun aMalOnlySyntheticIdOpensNoEditor() {
+    fun aMalOnlyEntryOpensTheEditorWithItsSyntheticId() {
         val state = State()
 
         state.openEditor(-29317)
-        assertFalse(state.isEditorOpen)
 
-        state.openEditorForCompletion(id = -29317, progress = 1)
-        assertFalse(state.isEditorOpen)
-        assertNull(state.editorMediaId)
+        assertTrue(state.isEditorOpen, "MAL-only entries are edited straight on MAL")
+        assertEquals(-29317, state.editorMediaId)
     }
 }
