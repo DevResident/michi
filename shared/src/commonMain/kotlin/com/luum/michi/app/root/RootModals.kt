@@ -52,6 +52,7 @@ internal fun RootModals(
     capabilities: ProviderCapabilities,
     authServices: List<AuthService>,
     loginErrorMessage: String? = null,
+    onSignInDismissed: () -> Unit = {},
     isAuthConfigured: Boolean,
     mediaListEntryRepository: MediaListEntryRepository,
     mediaDetailRepository: MediaDetailRepository,
@@ -77,7 +78,11 @@ internal fun RootModals(
             language = settingsState.language,
             onLanguageChange = { settingsState.language = it },
             guestLabel = strings.authContinueAsGuestAction,
-            onDismiss = { state.close(RootOverlay.SignIn) },
+            onDismiss = {
+                state.close(RootOverlay.SignIn)
+                // A failed login's notice must not greet the next manual open.
+                onSignInDismissed()
+            },
         )
     }
     val editorId = state.editorMediaId
@@ -109,12 +114,12 @@ internal fun RootModals(
             scoreStep = scoreStep,
             onSaved = {
                 state.closeEditor()
-                refreshLists(holders, viewerId, settingsState)
+                refreshLists(holders, viewerId, settingsState, isManga = editor.isManga)
                 holders.mediaDetail.onEntryChanged(editorId)
             },
             onDeleted = {
                 state.closeEditor()
-                refreshLists(holders, viewerId, settingsState)
+                refreshLists(holders, viewerId, settingsState, isManga = editor.isManga)
                 holders.mediaDetail.onEntryChanged(editorId)
             },
             onDismiss = { state.closeEditor() },
@@ -171,13 +176,21 @@ internal fun RootModals(
     }
 }
 
-// Editor save/delete land here: both lists re-fetch so the edited
-// entry (possibly moved sections) shows the truth. Rare action,
-// two queries, zero staleness.
-private fun refreshLists(holders: RootHolders, viewerId: Int?, settingsState: SettingsState) {
+// Editor save/delete land here: the edited entry's list re-fetches so the
+// entry (possibly moved sections) shows the truth. Only that list: with MAL a
+// reload is every page of the list, so the other one is left alone.
+private fun refreshLists(
+    holders: RootHolders,
+    viewerId: Int?,
+    settingsState: SettingsState,
+    isManga: Boolean,
+) {
     val id = viewerId ?: return
-    holders.anime?.load(id, forceRefresh = true, splitCompleted = settingsState.splitCompletedAnime)
-    holders.manga?.load(id, forceRefresh = true, splitCompleted = settingsState.splitCompletedManga)
+    if (isManga) {
+        holders.manga?.load(id, forceRefresh = true, splitCompleted = settingsState.splitCompletedManga)
+    } else {
+        holders.anime?.load(id, forceRefresh = true, splitCompleted = settingsState.splitCompletedAnime)
+    }
     // A saved/edited entry changes the calendar's user status/score.
     holders.calendar.invalidateEntries()
 }

@@ -136,7 +136,12 @@ internal class MediaIdBridgeImpl(
 
     override suspend fun rememberMalRef(aniListId: Int, ref: MalRef) {
         locks.getValue(ref.type).withLock {
-            writeMap(ref.type, readMap(ref.type) + (ref.malId to aniListId))
+            val map = readMap(ref.type)
+            val existing = map[ref.malId]
+            // Two AniList media can share an idMal; the lower id wins, as in
+            // hydration, so the map does not flip between them.
+            if (existing != null && existing <= aniListId) return@withLock
+            writeMap(ref.type, map + (ref.malId to aniListId))
         }
     }
 
@@ -209,7 +214,9 @@ internal class MediaIdBridgeImpl(
     }
 
     private companion object {
-        const val BatchSize = 50
+        // Half the page size: several AniList media can share one idMal, and a
+        // single page must still hold every match of the batch.
+        const val BatchSize = 25
     }
 }
 

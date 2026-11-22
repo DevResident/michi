@@ -71,7 +71,9 @@ internal class MalListLoader(
         }
 
         val reused = if (fullHydration) emptyMap() else reusedMedia(type, userId, entries)
-        val missing = entries.map { it.malId }.filterNot { it in reused }
+        // Known to have no AniList media: only a full hydration asks again.
+        val knownUnmatched = if (fullHydration) emptySet() else hydrationStore?.unmatched(type).orEmpty()
+        val missing = entries.map { it.malId }.filterNot { it in reused || it in knownUnmatched }
         val hydrated = if (missing.isEmpty()) {
             emptyMap()
         } else {
@@ -87,6 +89,7 @@ internal class MalListLoader(
             media[entry.malId]?.let { entry.toDto(it) }
         }
         if (unmatchedIds.isNotEmpty()) onUnmatched(type, unmatchedIds)
+        hydrationStore?.saveUnmatched(type, unmatchedIds.toSet())
 
         cache?.write(userId, type, matched, ProviderId.Mal)
         if (fullHydration) hydrationStore?.markFull(type, nowSeconds)

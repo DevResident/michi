@@ -304,7 +304,8 @@ internal class MalHttp(
     private fun isAllowedPagingUrl(url: String): Boolean = try {
         val parsed = URLBuilder(url).build()
         parsed.protocol.name.equals("https", ignoreCase = true) &&
-            parsed.host.equals("api.myanimelist.net", ignoreCase = true)
+            parsed.host.equals("api.myanimelist.net", ignoreCase = true) &&
+            parsed.port == 443
     } catch (_: Throwable) {
         false
     }

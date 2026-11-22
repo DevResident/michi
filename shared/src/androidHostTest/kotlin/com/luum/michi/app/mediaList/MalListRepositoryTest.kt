@@ -458,6 +458,44 @@ class MalListRepositoryTest {
     }
 
     @Test
+    fun anUnmatchedIdIsNotAskedAgainUntilTheNextFullHydration() = runBlocking {
+        val store = InMemoryFileStore()
+        val hydrationStore = MalHydrationStore(store)
+        var now = 1_000L
+        val entries = listOf(
+            MalEntryJson(malId = 101, status = "watching"),
+            MalEntryJson(malId = 999, status = "watching"),
+        )
+        val engine = MockEngine { respond(malPage(entries), HttpStatusCode.OK) }
+        val stack = Stack(
+            engine = engine,
+            bridgePages = listOf(
+                bridgePage(media(1001, 101, "Show 1")),
+                bridgePage(media(1001, 101, "Show 1")),
+            ),
+            store = store,
+            hydrationStore = hydrationStore,
+            now = { now },
+        )
+        val repository = MalAnimeListRepository(stack.loader)
+
+        repository.loadList(1)
+        val second = repository.loadList(1)
+        assertTrue(second is NetworkResult.Success)
+        assertEquals(1, second.value.size)
+        assertEquals(1, stack.graphQL.calls, "999 is known to be missing on AniList")
+
+        now += 24L * 60L * 60L
+        repository.loadList(1)
+        assertEquals(2, stack.graphQL.calls)
+        assertEquals(
+            listOf(101, 999),
+            (stack.graphQL.requests[1].variables?.get("ids") as JsonArray)
+                .map { it.jsonPrimitive.content.toInt() },
+        )
+    }
+
+    @Test
     fun aFullHydrationRunsAgainAfterTwentyFourHours() = runBlocking {
         val store = InMemoryFileStore()
         val hydrationStore = MalHydrationStore(store)

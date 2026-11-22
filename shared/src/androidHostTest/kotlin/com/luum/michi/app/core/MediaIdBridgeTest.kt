@@ -54,17 +54,17 @@ class MediaIdBridgeTest {
     ): MediaIdBridgeImpl = MediaIdBridgeImpl(graphQL, store)
 
     @Test
-    fun batchesIntoFifties() = runBlocking {
+    fun batchesHalfAPageSoSharedIdMalsFit() = runBlocking {
         val graphQL = FakeGraphQL(
-            pages = listOf(page(), page(), page()),
+            pages = List(5) { page() },
         )
         val ids = (1..120).toList()
 
         val result = bridge(graphQL).hydrateByMalIds(ids, MediaType.ANIME)
 
         assertTrue(result is NetworkResult.Success)
-        assertEquals(3, graphQL.calls)
-        assertEquals(listOf(50, 50, 20), graphQL.requests.map { askedIds(it).size })
+        assertEquals(5, graphQL.calls)
+        assertEquals(listOf(25, 25, 25, 25, 20), graphQL.requests.map { askedIds(it).size })
         assertEquals("ANIME", graphQL.requests.first().variables!!["type"]!!.jsonPrimitive.content)
     }
 
@@ -192,6 +192,19 @@ class MediaIdBridgeTest {
 
         assertEquals(mapOf(7 to 100), bridge.cachedIdMap(MediaType.MANGA))
         assertEquals(emptyMap(), bridge.cachedIdMap(MediaType.ANIME))
+    }
+
+    @Test
+    fun rememberMalRefKeepsTheLowerAniListIdForASharedIdMal() = runBlocking {
+        val store = InMemoryFileStore()
+        val bridge = bridge(FakeGraphQL(emptyList()), store)
+
+        bridge.rememberMalRef(50, MalRef(malId = 7, type = MediaType.ANIME))
+        bridge.rememberMalRef(100, MalRef(malId = 7, type = MediaType.ANIME))
+        assertEquals(mapOf(7 to 50), bridge.cachedIdMap(MediaType.ANIME))
+
+        bridge.rememberMalRef(20, MalRef(malId = 7, type = MediaType.ANIME))
+        assertEquals(mapOf(7 to 20), bridge.cachedIdMap(MediaType.ANIME))
     }
 
     private fun decodeMap(raw: String?): Map<Int, Int> {
