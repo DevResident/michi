@@ -11,11 +11,12 @@ import com.luum.michi.app.core.auth.domain.OAuthBrowser
  *
  * `SFSafariViewController` would give a slightly better UX (in-app browser),
  * but it requires a `UIViewController` reference to present on. Plain
- * `openURL` works without that coupling.
+ * `open(_:options:completionHandler:)` works without that coupling; the
+ * deprecated `openURL(_:)` is forced to return false by iOS and opens nothing.
  */
 internal class SafariOAuthLauncher : OAuthBrowser {
     override fun open(url: String) {
         val nsUrl = NSURL.URLWithString(url) ?: return
-        UIApplication.sharedApplication.openURL(nsUrl)
+        UIApplication.sharedApplication.openURL(nsUrl, options = emptyMap<Any?, Any?>(), completionHandler = null)
     }
 }
