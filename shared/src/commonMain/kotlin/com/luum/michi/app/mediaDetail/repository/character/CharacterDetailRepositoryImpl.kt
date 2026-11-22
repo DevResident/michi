@@ -38,7 +38,7 @@ private const val CharacterDetailQuery = """
 query CharacterDetail(${'$'}id: Int!, ${'$'}page: Int!, ${'$'}perPage: Int!, ${'$'}voiceLanguage: StaffLanguage) {
   Character(id: ${'$'}id) {
     id
-    name { userPreferred native alternative }
+    name { userPreferred full first last native alternative }
     image { large medium }
     description(asHtml: true)
     gender
@@ -53,7 +53,7 @@ query CharacterDetail(${'$'}id: Int!, ${'$'}page: Int!, ${'$'}perPage: Int!, ${'
         characterRole
         voiceActors(language: ${'$'}voiceLanguage, sort: [RELEVANCE, LANGUAGE]) {
           id
-          name { userPreferred }
+          name { userPreferred full first last native }
           image { large medium }
           languageV2
         }
@@ -78,7 +78,7 @@ query CharacterMediaPage(${'$'}id: Int!, ${'$'}page: Int!, ${'$'}perPage: Int!, 
         characterRole
         voiceActors(language: ${'$'}voiceLanguage, sort: [RELEVANCE, LANGUAGE]) {
           id
-          name { userPreferred }
+          name { userPreferred full first last native }
           image { large medium }
           languageV2
         }
@@ -171,7 +171,7 @@ private fun CharacterMediaEdgeDto.toItem(): CharacterMediaItem? {
         cover = node.coverImage?.toCoverSizes(),
         paletteHex = node.coverImage?.color,
         role = normalizeCharacterRole(characterRole),
-        voiceActorName = va?.name?.userPreferred,
+        voiceActorName = va?.name?.bestName,
         voiceActorImage = va?.image?.let { personCoverSizes(it.large, it.medium) },
         voiceActorLanguage = va?.languageV2,
         voiceActorId = va?.id,

@@ -37,8 +37,8 @@ query Notifications(${'$'}page: Int, ${'$'}reset: Boolean, ${'$'}withCount: Bool
       ... on ThreadCommentLikeNotification { id type commentId thread { id title } user { id name avatar { large medium } } createdAt }
       ... on ThreadLikeNotification { id type threadId thread { id title } user { id name avatar { large medium } } createdAt }
       ... on MediaSubmissionUpdateNotification { id type status notes submittedTitle media { id title { userPreferred romaji english native } coverImage { extraLarge large medium color } } createdAt }
-      ... on StaffSubmissionUpdateNotification { id type status notes staff { id name { full userPreferred } image { large medium } } createdAt }
-      ... on CharacterSubmissionUpdateNotification { id type status notes character { id name { full userPreferred } image { large medium } } createdAt }
+      ... on StaffSubmissionUpdateNotification { id type status notes staff { id name { full first last native userPreferred } image { large medium } } createdAt }
+      ... on CharacterSubmissionUpdateNotification { id type status notes character { id name { full first last native userPreferred } image { large medium } } createdAt }
     }
   }
 }

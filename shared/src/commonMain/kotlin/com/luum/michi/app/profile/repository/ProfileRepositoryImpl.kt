@@ -37,7 +37,7 @@ private const val MediaFavoriteNodeFields = """
 /** Shared node fields for character favourites. Single source of truth for both profile queries. */
 private const val CharacterFavoriteNodeFields = """
   id
-  name { full userPreferred }
+  name { full first last native userPreferred }
   image { large medium }
   media(sort: [POPULARITY_DESC], perPage: 1) { nodes { id title { romaji english native userPreferred } } }
 """
@@ -45,7 +45,7 @@ private const val CharacterFavoriteNodeFields = """
 /** Shared node fields for staff favourites. Single source of truth for both profile queries. */
 private const val StaffFavoriteNodeFields = """
   id
-  name { full userPreferred }
+  name { full first last native userPreferred }
   image { large medium }
   primaryOccupations
 """

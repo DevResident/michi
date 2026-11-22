@@ -169,9 +169,20 @@ internal fun SettingsScreen(
                             onClick = { openSheet = SettingsSheet.StartSection },
                         )
                     }
-                    // MAL has no synced AniList settings, so 18+ becomes a
-                    // local app preference (guests keep it off with no toggle).
+                    // MAL has no synced AniList settings, so 18+ and the
+                    // title/staff-name languages become local app preferences
+                    // (guests keep the defaults with no rows).
                     if (settingsState.useLocalAdultContent) {
+                        SettingsRow(
+                            label = strings.settingsTitleLanguageTitle,
+                            value = settingsState.titleLanguage.label(strings),
+                            onClick = { openSheet = SettingsSheet.TitleLanguage },
+                        )
+                        SettingsRow(
+                            label = strings.settingsStaffNameTitle,
+                            value = settingsState.staffNameLanguage.label(strings),
+                            onClick = { openSheet = SettingsSheet.StaffNameLanguage },
+                        )
                         ToggleRow(
                             title = strings.settingsAdultContentTitle,
                             subtitle = strings.settingsAdultContentSubtitle,

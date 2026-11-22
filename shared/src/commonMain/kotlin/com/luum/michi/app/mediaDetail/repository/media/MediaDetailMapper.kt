@@ -198,7 +198,7 @@ private fun MediaCharacterEdgeDto.toEntry(page: Int, index: Int): MediaCharacter
 
 private fun MediaVoiceActorDto.toEntry(): MediaVoiceActor = MediaVoiceActor(
     staffId = id,
-    name = name?.userPreferred.orEmpty(),
+    name = name?.bestName.orEmpty(),
     image = image?.toCoverSizes(),
     language = languageV2?.takeIf { it.isNotBlank() },
 )

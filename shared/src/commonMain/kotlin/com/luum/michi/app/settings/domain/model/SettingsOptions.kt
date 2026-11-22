@@ -1,5 +1,7 @@
 package com.luum.michi.app.settings.domain.model
 
+import com.luum.michi.app.core.media.domain.NamePick
+import com.luum.michi.app.core.media.domain.TitlePick
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.medialist.domain.UserListOrder
 import com.luum.michi.app.core.medialist.domain.UserListSort
@@ -13,6 +15,13 @@ internal fun ThemeMode.label(strings: LanguageStrings): String = when (this) {
 }
 
 internal enum class TitleLanguage { ROMAJI, ENGLISH, NATIVE }
+
+/** The app-side title pick for this language (MAL sessions apply it locally). */
+internal fun TitleLanguage.toTitlePick(): TitlePick = when (this) {
+    TitleLanguage.ROMAJI -> TitlePick.ROMAJI
+    TitleLanguage.ENGLISH -> TitlePick.ENGLISH
+    TitleLanguage.NATIVE -> TitlePick.NATIVE
+}
 
 /** Parses AniList's raw `UserTitleLanguage` value (`Viewer.options.titleLanguage`). */
 internal fun parseTitleLanguage(raw: String?): TitleLanguage = when (raw) {
@@ -28,6 +37,13 @@ internal fun TitleLanguage.label(strings: LanguageStrings): String = when (this)
 }
 
 internal enum class StaffNameLanguage { ROMAJI_WESTERN, ROMAJI, NATIVE }
+
+/** The app-side name pick for this language (MAL sessions apply it locally). */
+internal fun StaffNameLanguage.toNamePick(): NamePick = when (this) {
+    StaffNameLanguage.ROMAJI_WESTERN -> NamePick.ROMAJI_WESTERN
+    StaffNameLanguage.ROMAJI -> NamePick.ROMAJI
+    StaffNameLanguage.NATIVE -> NamePick.NATIVE
+}
 
 internal fun StaffNameLanguage.label(strings: LanguageStrings): String = when (this) {
     StaffNameLanguage.ROMAJI_WESTERN -> strings.settingsStaffNameWestern

@@ -47,6 +47,8 @@ private object SettingsPrefKeys {
     const val StaffNameLanguage = "staff_name_language"
     const val DisplayAdultContent = "display_adult_content"
     const val DisplayAdultContentLocal = "display_adult_content_local"
+    const val TitleLanguageLocal = "title_language_local"
+    const val StaffNameLanguageLocal = "staff_name_language_local"
     const val ScoreFormat = "score_format"
     const val ListSort = "list_sort"
     const val SplitCompletedAnime = "split_completed_anime"
@@ -72,9 +74,10 @@ internal class SettingsState(
     private val scope: CoroutineScope,
     val canSync: Boolean = true,
     /**
-     * An authenticated provider without remote settings (MAL) uses a local 18+
-     * preference instead of the AniList-synced one. Guests neither show nor
-     * use it.
+     * An authenticated provider without remote settings (MAL) keeps 18+ and
+     * the title/staff-name languages as local preferences instead of the
+     * AniList-synced ones (the app applies the languages itself, see
+     * LocalDisplayNames). Guests neither show nor use them.
      */
     val useLocalAdultContent: Boolean = false,
 ) {
@@ -105,11 +108,40 @@ internal class SettingsState(
     //    load/save; public setters persist locally and schedule the save. ──
     private val titleLanguagePref =
         syncedEnum(SettingsPrefKeys.TitleLanguage, TitleLanguage.ROMAJI, TitleLanguage.entries)
-    var titleLanguage: TitleLanguage by titleLanguagePref
+    private val titleLanguageLocalPref =
+        localEnum(SettingsPrefKeys.TitleLanguageLocal, TitleLanguage.ROMAJI, TitleLanguage.entries)
+
+    /** Synced for AniList; local for MAL, where a change re-localizes at once. */
+    var titleLanguage: TitleLanguage
+        get() = if (useLocalAdultContent) titleLanguageLocalPref.current() else titleLanguagePref.current()
+        set(value) {
+            if (useLocalAdultContent) {
+                if (value == titleLanguageLocalPref.current()) return
+                titleLanguageLocalPref.update(value)
+                // No server round-trip to wait for: the local change is final.
+                syncedGeneration += 1
+            } else {
+                titleLanguagePref.update(value)
+            }
+        }
 
     private val staffNameLanguagePref =
         syncedEnum(SettingsPrefKeys.StaffNameLanguage, StaffNameLanguage.ROMAJI_WESTERN, StaffNameLanguage.entries)
-    var staffNameLanguage: StaffNameLanguage by staffNameLanguagePref
+    private val staffNameLanguageLocalPref =
+        localEnum(SettingsPrefKeys.StaffNameLanguageLocal, StaffNameLanguage.ROMAJI_WESTERN, StaffNameLanguage.entries)
+
+    /** Synced for AniList; local for MAL, where a change re-localizes at once. */
+    var staffNameLanguage: StaffNameLanguage
+        get() = if (useLocalAdultContent) staffNameLanguageLocalPref.current() else staffNameLanguagePref.current()
+        set(value) {
+            if (useLocalAdultContent) {
+                if (value == staffNameLanguageLocalPref.current()) return
+                staffNameLanguageLocalPref.update(value)
+                syncedGeneration += 1
+            } else {
+                staffNameLanguagePref.update(value)
+            }
+        }
 
     private val displayAdultContentSyncedPref =
         syncedBoolean(SettingsPrefKeys.DisplayAdultContent, false)
@@ -255,7 +287,9 @@ internal class SettingsState(
     /** Every pref (hydrated together); synced ones also reset together. */
     private val allPrefs: List<StoredPref<*>> = listOf(
         titleLanguagePref,
+        titleLanguageLocalPref,
         staffNameLanguagePref,
+        staffNameLanguageLocalPref,
         displayAdultContentSyncedPref,
         displayAdultContentLocalPref,
         scoreFormatPref,
@@ -313,7 +347,8 @@ internal class SettingsState(
      * Bumps after an `UpdateUser` confirms a change to a setting that alters how
      * server content is localized (title language, staff name language). Root
      * reloads lists/dashboard/details/calendar off this counter — never off the
-     * value change itself, which happens before the save lands.
+     * value change itself, which happens before the save lands. With MAL the
+     * languages are local, so the change itself bumps it.
      */
     var syncedGeneration: Int by mutableStateOf(0)
         private set
@@ -383,25 +418,28 @@ internal class SettingsState(
     /**
      * Drops the synced prefs back to defaults and writes those defaults to the
      * store, so a guest never inherits the previous account's 18+ gate. The
-     * local MAL 18+ value is account data too, so it resets with them: the next
-     * person to sign in on this phone starts with 18+ off. Other local prefs
+     * local MAL 18+ value and title/staff-name languages are account data too,
+     * so they reset with them: the next person to sign in on this phone starts
+     * with the defaults. Other local prefs
      * (start tab, image quality, persist list sort) are untouched. Called only
      * on a user → guest transition, never on a cold start as a guest.
      */
     fun clearSynced() {
         syncedPrefs.forEach { it.reset() }
         displayAdultContentLocalPref.reset()
+        titleLanguageLocalPref.reset()
+        staffNameLanguageLocalPref.reset()
         // reset() restored the defaults, so the state is the new baseline.
-        lastSyncedTitleLanguage = titleLanguage
-        lastSyncedStaffNameLanguage = staffNameLanguage
+        lastSyncedTitleLanguage = titleLanguagePref.current()
+        lastSyncedStaffNameLanguage = staffNameLanguagePref.current()
     }
 
     private fun hydrateFromStore() {
         allPrefs.forEach { it.hydrate() }
         // The hydrated values are the baseline until the server confirms: without
         // this, the first save would look like a change and force a false reload.
-        lastSyncedTitleLanguage = titleLanguage
-        lastSyncedStaffNameLanguage = staffNameLanguage
+        lastSyncedTitleLanguage = titleLanguagePref.current()
+        lastSyncedStaffNameLanguage = staffNameLanguagePref.current()
     }
 
     /**
@@ -431,8 +469,8 @@ internal class SettingsState(
     }
 
     private fun currentData(): SettingsData = SettingsData(
-        titleLanguage = titleLanguage,
-        staffNameLanguage = staffNameLanguage,
+        titleLanguage = titleLanguagePref.current(),
+        staffNameLanguage = staffNameLanguagePref.current(),
         scoreFormat = scoreFormat,
         displayAdultContent = displayAdultContent,
         listSort = listSort,

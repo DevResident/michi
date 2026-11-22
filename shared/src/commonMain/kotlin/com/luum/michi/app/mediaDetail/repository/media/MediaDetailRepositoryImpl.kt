@@ -76,11 +76,11 @@ query MediaDetail(${'$'}id: Int!) {
         role
         voiceActors(language: JAPANESE, sort: [RELEVANCE, ID]) {
           id
-          name { userPreferred }
+          name { userPreferred full first last native }
           image { large medium }
           languageV2
         }
-        node { id name { full native userPreferred } image { large medium } }
+        node { id name { full first last native userPreferred } image { large medium } }
       }
     }
     staff(page: 1, perPage: $RailPageSize, sort: [RELEVANCE]) {
@@ -88,7 +88,7 @@ query MediaDetail(${'$'}id: Int!) {
       edges {
         id
         role
-        node { id name { full native userPreferred } image { large medium } }
+        node { id name { full first last native userPreferred } image { large medium } }
       }
     }
     recommendations(page: 1, perPage: $RailPageSize, sort: [RATING_DESC]) {
@@ -142,11 +142,11 @@ query MediaCharactersPage(${'$'}id: Int!, ${'$'}page: Int!) {
         role
         voiceActors(language: JAPANESE, sort: [RELEVANCE, ID]) {
           id
-          name { userPreferred }
+          name { userPreferred full first last native }
           image { large medium }
           languageV2
         }
-        node { id name { full native userPreferred } image { large medium } }
+        node { id name { full first last native userPreferred } image { large medium } }
       }
     }
   }
@@ -162,7 +162,7 @@ query MediaStaffPage(${'$'}id: Int!, ${'$'}page: Int!) {
       edges {
         id
         role
-        node { id name { full native userPreferred } image { large medium } }
+        node { id name { full first last native userPreferred } image { large medium } }
       }
     }
   }

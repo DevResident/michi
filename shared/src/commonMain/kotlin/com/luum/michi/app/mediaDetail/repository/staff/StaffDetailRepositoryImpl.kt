@@ -39,7 +39,7 @@ private const val StaffDetailQuery = """
 query StaffDetail(${'$'}id: Int!, ${'$'}page: Int!, ${'$'}charPage: Int!, ${'$'}perPage: Int!) {
   Staff(id: ${'$'}id) {
     id
-    name { userPreferred native alternative }
+    name { userPreferred full first last native alternative }
     image { large medium }
     description(asHtml: true)
     primaryOccupations
@@ -67,7 +67,7 @@ query StaffDetail(${'$'}id: Int!, ${'$'}page: Int!, ${'$'}charPage: Int!, ${'$'}
       pageInfo { hasNextPage currentPage }
       edges {
         node { id title { userPreferred romaji english native } }
-        characters { id name { userPreferred native } image { large medium } }
+        characters { id name { userPreferred full first last native } image { large medium } }
       }
     }
   }
@@ -101,7 +101,7 @@ query StaffCharacterPage(${'$'}id: Int!, ${'$'}page: Int!, ${'$'}perPage: Int!) 
       pageInfo { hasNextPage currentPage }
       edges {
         node { id title { userPreferred romaji english native } }
-        characters { id name { userPreferred native } image { large medium } }
+        characters { id name { userPreferred full first last native } image { large medium } }
       }
     }
   }

@@ -93,7 +93,7 @@ query CharacterSearch(${'$'}search: String, ${'$'}sort: [CharacterSort], ${'$'}p
     pageInfo { hasNextPage currentPage }
     characters(search: ${'$'}search, sort: ${'$'}sort) {
       id
-      name { userPreferred full first last }
+      name { userPreferred full first last native }
       image { large medium }
     }
   }
@@ -106,7 +106,7 @@ query StaffSearch(${'$'}search: String, ${'$'}sort: [StaffSort], ${'$'}page: Int
     pageInfo { hasNextPage currentPage }
     staff(search: ${'$'}search, sort: ${'$'}sort) {
       id
-      name { userPreferred full first last }
+      name { userPreferred full first last native }
       image { large medium }
     }
   }

@@ -1,5 +1,7 @@
 package com.luum.michi.app.core.media.repository
 
+import com.luum.michi.app.core.media.domain.LocalDisplayNames
+import com.luum.michi.app.core.media.domain.TitlePick
 import com.luum.michi.app.core.media.repository.dto.MediaTitleDto
 
 /**
@@ -10,10 +12,7 @@ import com.luum.michi.app.core.media.repository.dto.MediaTitleDto
  * dashboard, favorites and search at once. (Enum-label casing lives in
  * `core/media/domain` next to [com.luum.michi.app.core.media.domain.MediaFormat], usable from any layer.)
  */
-internal fun MediaTitleDto?.bestTitle(): String {
-    if (this == null) return ""
-    return userPreferred ?: english ?: romaji ?: native ?: ""
-}
+internal fun MediaTitleDto?.bestTitle(): String = bestTitleOrNull() ?: ""
 
 /**
  * Nullable twin of [bestTitle]: a null title stays null so a caller can fall
@@ -22,7 +21,21 @@ internal fun MediaTitleDto?.bestTitle(): String {
  */
 internal fun MediaTitleDto?.bestTitleOrNull(): String? {
     if (this == null) return null
+    LocalDisplayNames.title?.let { pick -> pickedTitle(pick)?.let { return it } }
     return userPreferred ?: english ?: romaji ?: native
+}
+
+/**
+ * The title in a local [pick] (MAL sessions, see [LocalDisplayNames]), falling
+ * back through the other variants when AniList has no title in that language.
+ */
+internal fun MediaTitleDto.pickedTitle(pick: TitlePick): String? {
+    fun String?.ok() = this?.takeIf { it.isNotBlank() }
+    return when (pick) {
+        TitlePick.ROMAJI -> romaji.ok() ?: userPreferred.ok() ?: english.ok() ?: native.ok()
+        TitlePick.ENGLISH -> english.ok() ?: romaji.ok() ?: userPreferred.ok() ?: native.ok()
+        TitlePick.NATIVE -> native.ok() ?: romaji.ok() ?: userPreferred.ok() ?: english.ok()
+    }
 }
 
 /**

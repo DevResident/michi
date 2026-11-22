@@ -1,5 +1,8 @@
 package com.luum.michi.app
 
+import com.luum.michi.app.core.media.domain.LocalDisplayNames
+import com.luum.michi.app.settings.domain.model.toNamePick
+import com.luum.michi.app.settings.domain.model.toTitlePick
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -94,6 +97,16 @@ fun App(
     )
 
     val strings = getLanguageStrings(settingsState.language)
+
+    // MAL reads AniList anonymously (userPreferred is always romaji), so the
+    // app applies the local title/staff-name languages itself. With AniList
+    // (or as a guest) AniList's userPreferred already follows the account.
+    // Assigned during composition (idempotent, not state) so it already holds
+    // when the first list or detail is mapped in an effect.
+    val localTitlePick = if (settingsState.useLocalAdultContent) settingsState.titleLanguage.toTitlePick() else null
+    val localNamePick = if (settingsState.useLocalAdultContent) settingsState.staffNameLanguage.toNamePick() else null
+    LocalDisplayNames.title = localTitlePick
+    LocalDisplayNames.name = localNamePick
 
     // Keep Android's per-app night mode in sync with the user's choice: the
     // next cold start's splash/window background then uses the same mode.
