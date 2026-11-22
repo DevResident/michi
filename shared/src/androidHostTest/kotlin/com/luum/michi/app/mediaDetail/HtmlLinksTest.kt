@@ -259,4 +259,13 @@ class HtmlLinksTest {
 
         assertEquals("I <3 cats >_<", content.text)
     }
+
+    @Test
+    fun anchorTextSpanningLinesIsStillOneLink() {
+        // The anchor regex must match across the line break (what
+        // DOT_MATCHES_ALL used to do), so the link is still collected.
+        val content = "Voice actor.<br><a href=\"https://twitter.com/x\">Twit\nter</a>".toHtmlContent()
+
+        assertEquals("https://twitter.com/x", content.links.single().url)
+    }
 }

@@ -16,9 +16,11 @@ internal data class HtmlContent(
     val spoilers: List<IntRange>,
 )
 
+// `[\s\S]` instead of DOT_MATCHES_ALL: that option is JVM-only and breaks the
+// common (metadata) compilation; this matches anchor text across lines everywhere.
 private val AnchorRegex = Regex(
-    """<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""",
-    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    """<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)</a>""",
+    RegexOption.IGNORE_CASE,
 )
 private val BreakRegex = Regex("<br\\s*/?>", RegexOption.IGNORE_CASE)
 // The spoiler markers are not part of a URL; stop the match before them.
