@@ -1,15 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
-    <!-- The AniList token never leaves the device. Everything else
-         (notably michi_settings.xml) keeps the default backup behavior. -->
+    <!-- Provider tokens (access and refresh) never leave the device. Each
+         provider has its own prefs file (see tokenPrefsName); list every one
+         here, because these rules do not accept wildcards.
+         DataExtractionRulesTest fails if a provider file is missing.
+         Everything else (notably michi_settings.xml) keeps the default backup
+         behavior. -->
     <cloud-backup>
         <exclude
             domain="sharedpref"
             path="michi_anilist_auth.xml" />
+        <exclude
+            domain="sharedpref"
+            path="michi_auth_mal.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude
             domain="sharedpref"
             path="michi_anilist_auth.xml" />
+        <exclude
+            domain="sharedpref"
+            path="michi_auth_mal.xml" />
     </device-transfer>
 </data-extraction-rules>
