@@ -1,3 +1,5 @@
+import michi.versioning.MichiVersioningExtension
+import org.gradle.api.GradleException
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 import java.util.Properties
@@ -7,6 +9,8 @@ plugins {
     alias(libs.plugins.baselineprofile)
     alias(libs.plugins.composeCompiler)
 }
+
+val michiVersion = rootProject.extensions.getByType(MichiVersioningExtension::class.java)
 
 kotlin {
     compilerOptions {
@@ -32,6 +36,53 @@ val keystoreProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+val localStoreFile = (keystoreProperties["storeFile"] as? String)?.takeIf { it.isNotBlank() }
+val envStoreFile = providers.environmentVariable("MICHI_KEYSTORE_FILE")
+    .orNull
+    ?.takeIf { it.isNotBlank() }
+val useLocalKeystore = localStoreFile != null
+
+val signingStoreFile = when {
+    localStoreFile != null -> file(localStoreFile)
+    envStoreFile != null -> file(envStoreFile)
+    else -> null
+}
+val signingStorePassword = if (useLocalKeystore) {
+    (keystoreProperties["storePassword"] as? String)?.takeIf { it.isNotBlank() }
+} else {
+    providers.environmentVariable("MICHI_KEYSTORE_PASSWORD").orNull?.takeIf { it.isNotBlank() }
+}
+val signingKeyAlias = if (useLocalKeystore) {
+    (keystoreProperties["keyAlias"] as? String)?.takeIf { it.isNotBlank() }
+} else {
+    providers.environmentVariable("MICHI_KEY_ALIAS").orNull?.takeIf { it.isNotBlank() }
+}
+val signingKeyPassword = if (useLocalKeystore) {
+    (keystoreProperties["keyPassword"] as? String)?.takeIf { it.isNotBlank() }
+} else {
+    providers.environmentVariable("MICHI_KEY_PASSWORD").orNull?.takeIf { it.isNotBlank() }
+}
+
+if (signingStoreFile != null) {
+    if (!signingStoreFile.exists()) {
+        throw GradleException(
+            "Release keystore not found at ${signingStoreFile.absolutePath}. " +
+                "Set storeFile in keystore.properties or MICHI_KEYSTORE_FILE.",
+        )
+    }
+    val missing = buildList {
+        if (signingStorePassword == null) add("storePassword / MICHI_KEYSTORE_PASSWORD")
+        if (signingKeyAlias == null) add("keyAlias / MICHI_KEY_ALIAS")
+        if (signingKeyPassword == null) add("keyPassword / MICHI_KEY_PASSWORD")
+    }
+    if (missing.isNotEmpty()) {
+        throw GradleException(
+            "Incomplete release signing configuration; missing: ${missing.joinToString()}. " +
+                "Fill keystore.properties or set the MICHI_KEYSTORE_* environment variables.",
+        )
+    }
+}
+
 android {
     namespace = "com.luum.michi.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -40,8 +91,8 @@ android {
         applicationId = "com.luum.michi.app"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = (project.findProperty("michiVersionCode") as? String)?.toInt() ?: 1
-        versionName = (project.findProperty("michiVersionName") as? String) ?: "1.0"
+        versionCode = michiVersion.versionCode.get()
+        versionName = michiVersion.versionName.get()
     }
     packaging {
         resources {
@@ -50,11 +101,11 @@ android {
     }
     signingConfigs {
         create("release") {
-            if (keystoreProperties.containsKey("storeFile")) {
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
+            if (signingStoreFile != null) {
+                storeFile = signingStoreFile
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
             }
         }
     }

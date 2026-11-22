@@ -10,4 +10,5 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform) apply false
 
     id("co.touchlab.skie") version "0.10.14"
+    id("michi.versioning")
 }

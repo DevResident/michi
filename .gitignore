@@ -35,6 +35,8 @@ captures
 .cxx
 
 # --- Xcode Project Configurations ---
+# Generated from the latest vX.Y.Z git tag by :writeIosVersionConfig
+iosApp/Configuration/Version.xcconfig
 # Ignore all files inside Xcode projects by default...
 *.xcodeproj/*
 # ...but keep the main project structure and configuration files tracked
