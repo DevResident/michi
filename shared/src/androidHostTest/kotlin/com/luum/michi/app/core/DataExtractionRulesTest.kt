@@ -1,5 +1,6 @@
 package com.luum.michi.app.core
 
+import com.luum.michi.app.core.auth.repository.linkedTokenPrefsName
 import com.luum.michi.app.core.auth.repository.tokenPrefsName
 import com.luum.michi.app.core.media.domain.ProviderId
 import java.io.File
@@ -31,8 +32,10 @@ class DataExtractionRulesTest {
                 .map { it.getAttribute("path") }
                 .toSet()
             for (provider in providers) {
-                val file = "${tokenPrefsName(provider)}.xml"
-                assertTrue(file in excluded, "$file is not excluded in <$section>")
+                for (name in listOf(tokenPrefsName(provider), linkedTokenPrefsName(provider))) {
+                    val file = "$name.xml"
+                    assertTrue(file in excluded, "$file is not excluded in <$section>")
+                }
             }
         }
     }

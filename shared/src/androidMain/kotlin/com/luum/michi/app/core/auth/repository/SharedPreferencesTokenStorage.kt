@@ -25,6 +25,14 @@ internal fun tokenPrefsName(provider: ProviderId): String =
     if (provider == ProviderId.AniList) "michi_anilist_auth" else "michi_auth_${provider.value}"
 
 /**
+ * The linked account never shares the session's token file: logout/401/provider
+ * switching wipe the session namespace, and a linked provider can never be the
+ * active one. Its own file keeps that separation explicit.
+ */
+internal fun linkedTokenPrefsName(provider: ProviderId): String =
+    "michi_link_${provider.value}"
+
+/**
  * Persists one provider's token in `SharedPreferences`. The token is stored in
  * plain text — sufficient for an API that allows the user to revoke tokens at
  * any time. Upgrade to `EncryptedSharedPreferences` for defense in depth.
@@ -33,9 +41,13 @@ internal class SharedPreferencesTokenStorage internal constructor(
     private val prefs: SharedPreferences,
 ) : TokenStorage {
 
-    constructor(context: Context, provider: ProviderId) : this(
+    constructor(
+        context: Context,
+        provider: ProviderId,
+        prefsName: String = tokenPrefsName(provider),
+    ) : this(
         context.applicationContext.getSharedPreferences(
-            tokenPrefsName(provider),
+            prefsName,
             Context.MODE_PRIVATE,
         ),
     )

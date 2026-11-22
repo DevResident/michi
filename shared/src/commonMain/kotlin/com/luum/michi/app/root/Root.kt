@@ -24,6 +24,7 @@ import com.luum.michi.app.core.auth.domain.effectiveScoreFormat
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.favourite.domain.FavouriteRepository
 import com.luum.michi.app.core.media.domain.aniListRef
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.medialist.domain.parseScoreFormat
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.SortPersistence
@@ -52,6 +53,7 @@ import com.luum.michi.app.root.state.resolveStartDestination
 import com.luum.michi.app.root.state.startDestinationChoice
 import com.luum.michi.app.settings.ui.AboutScreen
 import com.luum.michi.app.settings.ui.SettingsScreen
+import com.luum.michi.app.settings.ui.state.LinkedAccountUiState
 import com.luum.michi.app.settings.ui.state.SettingsState
 import com.luum.michi.app.ui.components.SearchScrim
 import com.luum.michi.app.ui.components.ToolbarSearch
@@ -98,6 +100,16 @@ internal fun Root(
     loginErrorMessage: String? = null,
     onSignInDismissed: () -> Unit = {},
     isAuthConfigured: Boolean,
+    linkedAccount: LinkedAccountUiState = LinkedAccountUiState(
+        account = null,
+        linkableProviders = emptyList(),
+        labels = emptyMap(),
+        lostAccessProvider = null,
+        error = null,
+    ),
+    onLinkAccount: (ProviderId) -> Unit = {},
+    onUnlinkAccount: () -> Unit = {},
+    onDismissLostAccess: () -> Unit = {},
     autoOpenSignIn: Boolean = false,
     onAutoSignInShown: () -> Unit = {},
     deepLinkDestination: DetailDestination? = null,
@@ -260,8 +272,12 @@ internal fun Root(
                                     settingsState = settingsState,
                                     startDestination = startChoice,
                                     viewer = viewer,
+                                    linkedAccount = linkedAccount,
                                     onLogin = { state.open(RootOverlay.SignIn) },
                                     onLogout = onLogout,
+                                    onLinkAccount = onLinkAccount,
+                                    onUnlinkAccount = onUnlinkAccount,
+                                    onDismissLostAccess = onDismissLostAccess,
                                     onOpenAbout = { state.openSettingsAbout() },
                                     bottomPadding = padding.calculateBottomPadding(),
                                 )

@@ -319,6 +319,14 @@ interface LanguageStrings {
     val settingsSignOutTitle: String
     val settingsSignOutConfirmAction: String
     val settingsSignOutConfirmMessage: String
+    val settingsLinkedAccountTitle: String
+    fun settingsLinkedLinkAction(provider: String): String
+    val settingsLinkedUnlinkTitle: String
+    fun settingsLinkedUnlinkConfirmMessage(provider: String): String
+    fun settingsLinkedLostAccess(provider: String): String
+    val settingsLinkedRelinkAction: String
+    val settingsLinkedDismissAction: String
+    val settingsLinkedLinkFailed: String
     val backButton: String
     val authWelcomeTitle: String
     val authModalSubtitle: String

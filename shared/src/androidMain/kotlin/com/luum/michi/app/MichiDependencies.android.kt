@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import com.luum.michi.app.core.auth.repository.ChromeCustomTabsOAuthLauncher
 import com.luum.michi.app.core.auth.repository.SharedPreferencesTokenStorage
+import com.luum.michi.app.core.auth.repository.linkedTokenPrefsName
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.repository.AndroidUrlOpener
 import com.luum.michi.app.core.platform.repository.AndroidShareLauncher
@@ -22,6 +23,18 @@ fun createMichiDependencies(context: Context): MichiDependencies = MichiDependen
             SharedPreferencesTokenStorage(context.applicationContext, ProviderId.AniList),
         ProviderId.Mal to
             SharedPreferencesTokenStorage(context.applicationContext, ProviderId.Mal),
+    ),
+    linkedTokenStorages = mapOf(
+        ProviderId.AniList to SharedPreferencesTokenStorage(
+            context.applicationContext,
+            ProviderId.AniList,
+            linkedTokenPrefsName(ProviderId.AniList),
+        ),
+        ProviderId.Mal to SharedPreferencesTokenStorage(
+            context.applicationContext,
+            ProviderId.Mal,
+            linkedTokenPrefsName(ProviderId.Mal),
+        ),
     ),
     oAuthBrowser = ChromeCustomTabsOAuthLauncher(context.applicationContext),
     urlOpener = AndroidUrlOpener(context.applicationContext),

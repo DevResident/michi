@@ -3,17 +3,15 @@ package com.luum.michi.app.core.session.domain
 import com.luum.michi.app.core.auth.domain.AuthProvider
 import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.TokenStorage
+import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 
 /**
  * Coordinates the active provider's token with the current `Viewer`.
@@ -43,6 +41,11 @@ internal class SessionManager(
     private val activeProviderStore: ActiveProviderStore,
     private val cachedViewerStore: CachedViewerStore,
     private val onClearUserData: suspend () -> Unit = {},
+    private val pendingLinkStore: PendingLinkStore? = null,
+    private val linkedAccounts: LinkedAccountManager? = null,
+    private val onSessionClosed: suspend () -> Unit = {},
+    private val onSessionAuthenticated: suspend (ProviderId) -> Unit = {},
+    private val refresher: TokenRefreshCoordinator = TokenRefreshCoordinator(),
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -54,10 +57,6 @@ internal class SessionManager(
     private val mutex = Mutex()
     private var generation = 0
 
-    /** One refresh at a time, shared by every concurrent caller. */
-    private val refreshMutex = Mutex()
-    private var refreshInFlight: RefreshEntry? = null
-
     private data class BootstrapEntry(
         val generation: Int,
         val providerId: ProviderId,
@@ -65,25 +64,6 @@ internal class SessionManager(
         val token: AuthToken,
         val cached: Viewer?,
     )
-
-    private data class RefreshEntry(
-        val providerId: ProviderId,
-        val deferred: CompletableDeferred<RefreshOutcome>,
-    )
-
-    private sealed interface RefreshOutcome {
-        data class Token(val value: AuthToken) : RefreshOutcome
-        data object Unsupported : RefreshOutcome
-        data class NetworkFailure(val error: NetworkError) : RefreshOutcome
-        data object Closed : RefreshOutcome
-        data object Superseded : RefreshOutcome
-    }
-
-    private sealed interface SaveResult {
-        data class Saved(val token: AuthToken) : SaveResult
-        data object Superseded : SaveResult
-        data object Closed : SaveResult
-    }
 
     suspend fun bootstrap() {
         val entry = mutex.withLock {
@@ -94,9 +74,13 @@ internal class SessionManager(
             if (provider == null || stored == null) {
                 clearUserData()
                 _state.value = SessionState.Anonymous
-                return
+                return@withLock null
             }
             BootstrapEntry(gen, providerId, provider, stored, cachedViewerStore.load())
+        } ?: run {
+            // A link without a principal is orphaned: privacy wipe.
+            onSessionClosed()
+            return
         }
 
         val token = resolveBootstrapToken(entry) ?: return
@@ -130,7 +114,16 @@ internal class SessionManager(
             return null
         }
 
-        return when (val outcome = refreshSingleFlight(providerId, authProvider, token)) {
+        return when (
+            val outcome = refresher.refresh(
+                key = providerId,
+                token = token,
+                loadStored = { storage.load() },
+                refresh = { authProvider.refresh(token) },
+                save = { new -> saveRefreshed(providerId, token, new) },
+                onInvalidGrant = { onUnauthorized(it) },
+            )
+        ) {
             is RefreshOutcome.Token -> outcome.value
             RefreshOutcome.Unsupported -> if (token.isExpired) {
                 onUnauthorized(token)
@@ -150,23 +143,50 @@ internal class SessionManager(
     }
 
     suspend fun onOAuthCallback(uri: String) {
+        val pending = pendingLinkStore?.load()
         val handled = providers.firstNotNullOfOrNull { provider ->
             provider.handleCallback(uri)?.let { provider to it }
-        } ?: return
+        } ?: run {
+            // A cancelled/unknown callback while a link was in progress: the
+            // attempt is over, but the current session must stay untouched.
+            pendingLinkStore?.clear()
+            return
+        }
 
         val (provider, result) = handled
         when (result) {
             // A failed callback leaves the current state alone: a guest stays
             // a guest (a cancelled MAL login must not trap them on Error).
             is NetworkResult.Failure -> {
-                _lastLoginError.value = provider.id
+                if (pending != null && pending.provider == provider.id) {
+                    pendingLinkStore.clear()
+                    linkedAccounts?.onLinkFailed(result.error)
+                } else {
+                    _lastLoginError.value = provider.id
+                }
                 return
             }
             is NetworkResult.Success -> {
                 _lastLoginError.value = null
                 val token = result.value
+                if (pending != null &&
+                    pending.isValid(currentEpochSeconds()) &&
+                    pending.provider == provider.id &&
+                    _state.value is SessionState.Authenticated &&
+                    activeProviderId() != provider.id
+                ) {
+                    pendingLinkStore.clear()
+                    linkedAccounts?.link(provider, token)
+                    return
+                }
+                pendingLinkStore?.clear()
+
+                var switchedProvider = false
                 val gen = mutex.withLock {
                     val g = ++generation
+                    val previousProvider = activeProviderId()
+                    val hadSession = _state.value is SessionState.Authenticated ||
+                        tokenStorages.any { it.value.load() != null }
                     var clearedAnotherSession = false
                     tokenStorages.forEach { (id, storage) ->
                         if (id != provider.id && storage.load() != null) {
@@ -180,21 +200,28 @@ internal class SessionManager(
                     // The routers follow the new provider right away; never let
                     // the UI keep the previous account's viewer meanwhile.
                     if (_state.value is SessionState.Authenticated) _state.value = SessionState.Loading
+                    switchedProvider = hadSession && previousProvider != provider.id
                     g
                 }
+                // A new principal invalidates every copy of the old one.
+                if (switchedProvider) onSessionClosed()
+                onSessionAuthenticated(provider.id)
                 refreshViewer(gen, provider, token, keepCachedOnNetworkError = false)
             }
         }
     }
 
-    suspend fun logout() = mutex.withLock {
-        generation++
-        // Only one session should ever exist; clearing every provider is the
-        // safest privacy wipe.
-        tokenStorages.values.forEach { it.clear() }
-        activeProviderStore.clear()
-        clearUserData()
-        _state.value = SessionState.Anonymous
+    suspend fun logout() {
+        mutex.withLock {
+            generation++
+            // Only one session should ever exist; clearing every provider is the
+            // safest privacy wipe.
+            tokenStorages.values.forEach { it.clear() }
+            activeProviderStore.clear()
+            clearUserData()
+            _state.value = SessionState.Anonymous
+        }
+        onSessionClosed()
     }
 
     /**
@@ -202,11 +229,15 @@ internal class SessionManager(
      * [token] is still the active one, so a stale 401 can never close a newer
      * session.
      */
-    suspend fun onUnauthorized(token: AuthToken) = mutex.withLock {
-        val providerId = activeProviderId()
-        val storage = tokenStorages[providerId] ?: return@withLock
-        if (storage.load()?.accessToken != token.accessToken) return@withLock
-        closeSessionLocked(providerId)
+    suspend fun onUnauthorized(token: AuthToken) {
+        val closed = mutex.withLock {
+            val providerId = activeProviderId()
+            val storage = tokenStorages[providerId] ?: return@withLock false
+            if (storage.load()?.accessToken != token.accessToken) return@withLock false
+            closeSessionLocked(providerId)
+            true
+        }
+        if (closed) onSessionClosed()
     }
 
     private suspend fun resolveBootstrapToken(entry: BootstrapEntry): AuthToken? {
@@ -217,7 +248,16 @@ internal class SessionManager(
             return null
         }
 
-        return when (val outcome = refreshSingleFlight(entry.providerId, entry.provider, entry.token)) {
+        return when (
+            val outcome = refresher.refresh(
+                key = entry.providerId,
+                token = entry.token,
+                loadStored = { tokenStorages[entry.providerId]?.load() },
+                refresh = { entry.provider.refresh(entry.token) },
+                save = { new -> saveRefreshed(entry.providerId, entry.token, new) },
+                onInvalidGrant = { onUnauthorized(it) },
+            )
+        ) {
             is RefreshOutcome.Token -> outcome.value
             RefreshOutcome.Closed -> null
             RefreshOutcome.Unsupported -> {
@@ -239,82 +279,17 @@ internal class SessionManager(
         }
     }
 
-    private suspend fun refreshSingleFlight(
-        providerId: ProviderId,
-        provider: AuthProvider,
-        token: AuthToken,
-    ): RefreshOutcome {
-        val (entry, leader) = refreshMutex.withLock {
-            val current = refreshInFlight
-            if (current != null && current.providerId == providerId) {
-                current to false
-            } else {
-                RefreshEntry(providerId, CompletableDeferred()).also {
-                    refreshInFlight = it
-                } to true
-            }
-        }
-        if (!leader) return entry.deferred.await()
-
-        // The refresh outlives a cancelled caller: if MAL rotates the refresh
-        // token, losing the response before saveRefreshed would close the session.
-        return withContext(NonCancellable) { leadRefresh(entry, providerId, provider, token) }
-    }
-
-    private suspend fun leadRefresh(
-        entry: RefreshEntry,
-        providerId: ProviderId,
-        provider: AuthProvider,
-        token: AuthToken,
-    ): RefreshOutcome {
-        var outcome: RefreshOutcome = RefreshOutcome.Closed
-        try {
-            // Another leader may have finished between our load() and here:
-            // never spend the old refresh token a second time.
-            val stored = tokenStorages[providerId]?.load()
-            if (stored != null && stored.accessToken != token.accessToken) {
-                outcome = RefreshOutcome.Superseded
-                return outcome
-            }
-            outcome = when (val result = provider.refresh(token)) {
-                null -> RefreshOutcome.Unsupported
-                is NetworkResult.Success -> {
-                    val merged = result.value.copy(
-                        refreshToken = result.value.refreshToken ?: token.refreshToken,
-                    )
-                    when (val saved = saveRefreshed(providerId, token, merged)) {
-                        is SaveResult.Saved -> RefreshOutcome.Token(saved.token)
-                        SaveResult.Superseded -> RefreshOutcome.Superseded
-                        SaveResult.Closed -> RefreshOutcome.Closed
-                    }
-                }
-                is NetworkResult.Failure -> if (isInvalidGrant(result.error)) {
-                    onUnauthorized(token)
-                    RefreshOutcome.Closed
-                } else {
-                    RefreshOutcome.NetworkFailure(result.error)
-                }
-            }
-        } finally {
-            refreshMutex.withLock {
-                if (refreshInFlight === entry) refreshInFlight = null
-            }
-            entry.deferred.complete(outcome)
-        }
-        return outcome
-    }
-
     private suspend fun saveRefreshed(
         providerId: ProviderId,
         old: AuthToken,
         new: AuthToken,
-    ): SaveResult = mutex.withLock {
-        if (providerId != activeProviderId()) return@withLock SaveResult.Closed
-        val storage = tokenStorages[providerId] ?: return@withLock SaveResult.Closed
-        val current = storage.load() ?: return@withLock SaveResult.Closed
-        if (current.accessToken != old.accessToken) return@withLock SaveResult.Superseded
+    ): RefreshSaveResult = mutex.withLock {
+        if (providerId != activeProviderId()) return@withLock RefreshSaveResult.Closed
+        val storage = tokenStorages[providerId] ?: return@withLock RefreshSaveResult.Closed
+        val current = storage.load() ?: return@withLock RefreshSaveResult.Closed
+        if (current.accessToken != old.accessToken) return@withLock RefreshSaveResult.Superseded
         storage.save(new)
-        SaveResult.Saved(new)
+        RefreshSaveResult.Saved(new)
     }
 
     private suspend fun refreshViewer(
@@ -324,22 +299,30 @@ internal class SessionManager(
         keepCachedOnNetworkError: Boolean,
     ) {
         val result = provider.fetchViewer(token)
-        mutex.withLock {
-            if (gen != generation) return@withLock
+        val closed = mutex.withLock {
+            if (gen != generation) return@withLock false
             when (result) {
                 is NetworkResult.Success -> {
                     val viewer = result.value.copy(provider = provider.id)
                     cachedViewerStore.save(viewer)
                     _state.value = SessionState.Authenticated(viewer)
+                    false
                 }
                 is NetworkResult.Failure -> when (result.error) {
-                    is NetworkError.Unauthorized -> closeSessionLocked(provider.id)
-                    else -> if (!keepCachedOnNetworkError) {
-                        _state.value = SessionState.Error(result.error)
+                    is NetworkError.Unauthorized -> {
+                        closeSessionLocked(provider.id)
+                        true
+                    }
+                    else -> {
+                        if (!keepCachedOnNetworkError) {
+                            _state.value = SessionState.Error(result.error)
+                        }
+                        false
                     }
                 }
             }
         }
+        if (closed) onSessionClosed()
     }
 
     /** Mutex held: drop one provider's session and every user-scoped cache. */
@@ -374,15 +357,6 @@ internal class SessionManager(
         } else {
             providers.firstOrNull()?.id ?: ProviderId.AniList
         }
-    }
-
-    private fun isInvalidGrant(error: NetworkError): Boolean = when (error) {
-        is NetworkError.Unauthorized -> true
-        is NetworkError.Http -> error.body?.contains("invalid_grant", ignoreCase = true) == true
-        is NetworkError.GraphQL -> error.messages.any {
-            it.contains("invalid_grant", ignoreCase = true)
-        }
-        else -> false
     }
 
     private companion object {

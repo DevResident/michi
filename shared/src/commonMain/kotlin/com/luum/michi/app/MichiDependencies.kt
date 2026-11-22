@@ -21,9 +21,11 @@ import com.luum.michi.app.calendar.domain.CalendarRepository
 import com.luum.michi.app.mediaDetail.repository.character.CharacterDetailRepositoryImpl
 import com.luum.michi.app.mediaDetail.domain.character.CharacterDetailRepository
 import com.luum.michi.app.core.auth.domain.AuthProvider
+import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.domain.OAuthBrowser
 import com.luum.michi.app.core.auth.domain.ProviderCapabilities
 import com.luum.michi.app.core.auth.domain.TokenStorage
+import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.auth.repository.AniListAuthProvider
 import com.luum.michi.app.core.mal.domain.MalOAuthConfig
 import com.luum.michi.app.core.mal.repository.MalAuthProvider
@@ -38,15 +40,23 @@ import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.parseAniListDestination
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.network.domain.AniListGraphQLClient
+import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.domain.NetworkThrottle
 import com.luum.michi.app.core.network.repository.AniListRateLimiter
 import com.luum.michi.app.core.network.repository.KtorAniListGraphQLClient
 import com.luum.michi.app.core.network.repository.createAniListHttpClient
 import com.luum.michi.app.core.session.domain.AniListViewerRepository
-import com.luum.michi.app.core.session.repository.AniListViewerRepositoryImpl
+import com.luum.michi.app.core.session.domain.LinkedAccountManager
+import com.luum.michi.app.core.session.domain.PendingLink
+import com.luum.michi.app.core.session.domain.PendingLinkStore
 import com.luum.michi.app.core.session.domain.SessionManager
+import com.luum.michi.app.core.session.domain.SessionState
+import com.luum.michi.app.core.session.domain.Viewer
+import com.luum.michi.app.core.session.repository.AniListViewerRepositoryImpl
 import com.luum.michi.app.core.session.repository.SettingsStoreActiveProviderStore
 import com.luum.michi.app.core.session.repository.SettingsStoreCachedViewerStore
+import com.luum.michi.app.core.session.repository.SettingsStoreLinkedAccountStore
+import com.luum.michi.app.core.session.repository.SettingsStorePendingLinkStore
 import com.luum.michi.app.core.storage.domain.SettingsStore
 import com.luum.michi.app.core.storage.domain.FileStore
 import com.luum.michi.app.mediaList.repository.MediaListDiskCache
@@ -96,6 +106,7 @@ import com.luum.michi.app.mediaDetail.repository.ExternalLinkCatalogRepositoryIm
  */
 class MichiDependencies internal constructor(
     private val tokenStorages: Map<ProviderId, TokenStorage>,
+    private val linkedTokenStorages: Map<ProviderId, TokenStorage>,
     private val oAuthBrowser: OAuthBrowser,
     internal val urlOpener: UrlOpener,
     internal val shareLauncher: ShareLauncher,
@@ -155,6 +166,45 @@ class MichiDependencies internal constructor(
         },
     )
 
+    private val pendingLinkStore: PendingLinkStore =
+        SettingsStorePendingLinkStore(settingsStore)
+
+    /**
+     * The one linked account and its separate token namespace. Its viewer
+     * fetch uses an explicit-token client so linking never touches the session
+     * client; later mirror clients are built on the linked manager below.
+     */
+    internal val linkedAccountManager: LinkedAccountManager = LinkedAccountManager(
+        providers = authProviders,
+        tokenStorages = linkedTokenStorages,
+        store = SettingsStoreLinkedAccountStore(settingsStore),
+        viewerFetchers = mapOf(
+            ProviderId.AniList to { token -> fetchLinkedAniListViewer(token) },
+            ProviderId.Mal to { token -> malHttp.fetchViewer(token) },
+        ),
+    )
+
+    /** A second GraphQL client for the linked AniList account, same limiter. */
+    internal val linkedAniListGraphQLClient: AniListGraphQLClient = KtorAniListGraphQLClient(
+        httpClient = httpClient,
+        tokenProvider = { linkedAccountManager.validToken(ProviderId.AniList) },
+        debugLogging = isDebug,
+        rateLimiter = rateLimiter,
+        onUnauthorized = { token ->
+            scope.launch { linkedAccountManager.onUnauthorized(token) }
+        },
+    )
+
+    private suspend fun fetchLinkedAniListViewer(token: AuthToken): NetworkResult<Viewer> =
+        AniListViewerRepositoryImpl(
+            KtorAniListGraphQLClient(
+                httpClient = httpClient,
+                tokenProvider = { token },
+                debugLogging = isDebug,
+                rateLimiter = rateLimiter,
+            ),
+        ).fetchViewer()
+
     /** The active account's capabilities; AniList when the provider is unknown. */
     internal fun capabilitiesFor(provider: ProviderId): ProviderCapabilities =
         authProviders.firstOrNull { it.id == provider }?.capabilities
@@ -176,6 +226,14 @@ class MichiDependencies internal constructor(
         bridge = mediaIdBridge,
         tokenProvider = { sessionManager.validToken(ProviderId.Mal) },
         onUnauthorized = { token -> sessionManager.onUnauthorized(token) },
+    )
+
+    /** The same MAL gateway bound to the linked token; 401 unlinks, never closes the session. */
+    internal val linkedMalEntryClient: MalEntryClient = MalEntryClient(
+        http = malHttp,
+        bridge = mediaIdBridge,
+        tokenProvider = { linkedAccountManager.validToken(ProviderId.Mal) },
+        onUnauthorized = { token -> linkedAccountManager.onUnauthorized(token) },
     )
 
     private val malListLoader: MalListLoader = MalListLoader(
@@ -288,25 +346,64 @@ class MichiDependencies internal constructor(
                 profileCache.clear()
                 malEntryClient.clear()
             },
+            pendingLinkStore = pendingLinkStore,
+            linkedAccounts = linkedAccountManager,
+            // Any session closure (logout, 401, invalid_grant, provider switch)
+            // invalidates the copies of that principal.
+            onSessionClosed = { linkedAccountManager.unlink() },
+            onSessionAuthenticated = { provider ->
+                linkedAccountManager.onSessionProviderAuthenticated(provider)
+            },
         )
 
     /**
      * Bootstraps the app: clears the removed dashboard disk cache, then checks
-     * the persisted token and fetches the viewer if present.
+     * the persisted token and fetches the viewer if present. The linked account
+     * is restored only after the session decides whether a principal exists.
      * Called once at app start by the platform entry.
      */
     fun bootstrap() {
         clearLegacyDashboardCache(settingsStore)
-        scope.launch { sessionManager.bootstrap() }
+        scope.launch {
+            sessionManager.bootstrap()
+            linkedAccountManager.bootstrap()
+        }
     }
 
     /**
      * Called by the platform when an OAuth deep link fires. The provider that
-     * recognizes the URI stores the token and refreshes the session; an
-     * unknown URI is a no-op.
+     * recognizes the URI stores the token and refreshes the session; a pending
+     * link routes it to the linked account instead.
      */
     fun onOAuthCallback(uri: String) {
         scope.launch { sessionManager.onOAuthCallback(uri) }
+    }
+
+    /** Starts linking another provider from Settings; no session change. */
+    internal fun beginLink(providerId: ProviderId) {
+        scope.launch {
+            val provider = authProviders.firstOrNull {
+                it.id == providerId && it.isConfigured
+            } ?: return@launch
+            if (sessionManager.state.value !is SessionState.Authenticated) return@launch
+            if (sessionManager.activeProvider() == providerId) return@launch
+            linkedAccountManager.clearLinkError()
+            pendingLinkStore.save(
+                PendingLink(
+                    provider = providerId,
+                    createdAtEpochSeconds = currentEpochSeconds(),
+                ),
+            )
+            provider.open()
+        }
+    }
+
+    internal fun unlinkAccount() {
+        scope.launch { linkedAccountManager.unlink() }
+    }
+
+    internal fun dismissLostAccess() {
+        linkedAccountManager.dismissLostAccess()
     }
 
     /**

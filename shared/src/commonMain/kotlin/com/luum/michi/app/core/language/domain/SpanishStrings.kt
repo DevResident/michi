@@ -328,6 +328,16 @@ object SpanishStrings : LanguageStrings {
     override val settingsSignOutConfirmAction = "Cerrar sesión"
     override val settingsSignOutConfirmMessage =
         "Cerrarás sesión en este dispositivo. Tus listas están a salvo en AniList."
+    override val settingsLinkedAccountTitle = "Cuenta vinculada"
+    override fun settingsLinkedLinkAction(provider: String): String = "Vincular $provider"
+    override val settingsLinkedUnlinkTitle = "Desvincular"
+    override fun settingsLinkedUnlinkConfirmMessage(provider: String): String =
+        "¿Dejar de copiar cambios en $provider? No se borra nada allí y tu sesión sigue abierta."
+    override fun settingsLinkedLostAccess(provider: String): String =
+        "Se perdió el acceso a $provider. Vuelve a vincular."
+    override val settingsLinkedRelinkAction = "Vincular de nuevo"
+    override val settingsLinkedDismissAction = "Descartar"
+    override val settingsLinkedLinkFailed = "No se pudo vincular la cuenta."
     override val backButton = "Volver"
     override val authWelcomeTitle = "Bienvenido a Michi"
     override val authModalSubtitle = "Tu cliente para anime, manga, listas y favoritos."

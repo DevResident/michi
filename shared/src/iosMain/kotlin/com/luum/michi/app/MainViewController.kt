@@ -3,6 +3,7 @@ package com.luum.michi.app
 import androidx.compose.ui.window.ComposeUIViewController
 import com.luum.michi.app.core.auth.repository.NSUserDefaultsTokenStorage
 import com.luum.michi.app.core.auth.repository.SafariOAuthLauncher
+import com.luum.michi.app.core.auth.repository.linkedTokenKeyPrefix
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.repository.IosUrlOpener
 import com.luum.michi.app.core.platform.repository.IosShareLauncher
@@ -43,6 +44,16 @@ private object IosMichiDependencies {
             tokenStorages = mapOf(
                 ProviderId.AniList to NSUserDefaultsTokenStorage(ProviderId.AniList),
                 ProviderId.Mal to NSUserDefaultsTokenStorage(ProviderId.Mal),
+            ),
+            linkedTokenStorages = mapOf(
+                ProviderId.AniList to NSUserDefaultsTokenStorage(
+                    ProviderId.AniList,
+                    keyPrefix = linkedTokenKeyPrefix(ProviderId.AniList),
+                ),
+                ProviderId.Mal to NSUserDefaultsTokenStorage(
+                    ProviderId.Mal,
+                    keyPrefix = linkedTokenKeyPrefix(ProviderId.Mal),
+                ),
             ),
             oAuthBrowser = SafariOAuthLauncher(),
             urlOpener = IosUrlOpener(),

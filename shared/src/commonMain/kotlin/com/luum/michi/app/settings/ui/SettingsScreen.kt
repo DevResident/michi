@@ -33,6 +33,7 @@ import com.luum.michi.app.MichiBuildConfig
 import com.luum.michi.app.core.language.domain.AppLanguage
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.model.ImageQuality
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.label
@@ -43,6 +44,7 @@ import com.luum.michi.app.settings.domain.model.StartTabOption
 import com.luum.michi.app.settings.domain.model.TitleLanguage
 import com.luum.michi.app.settings.domain.model.label
 import com.luum.michi.app.core.session.domain.Viewer
+import com.luum.michi.app.settings.ui.state.LinkedAccountUiState
 import com.luum.michi.app.settings.ui.state.SettingsState
 import com.luum.michi.app.ui.components.ModalSheet
 import com.luum.michi.app.ui.components.OptionGroup
@@ -78,8 +80,12 @@ internal fun SettingsScreen(
     settingsState: SettingsState,
     startDestination: StartDestinationChoice = StartDestinationChoice(),
     viewer: Viewer?,
+    linkedAccount: LinkedAccountUiState? = null,
     onLogin: () -> Unit,
     onLogout: () -> Unit,
+    onLinkAccount: (ProviderId) -> Unit = {},
+    onUnlinkAccount: () -> Unit = {},
+    onDismissLostAccess: () -> Unit = {},
     onOpenAbout: () -> Unit,
     bottomPadding: Dp,
     strings: LanguageStrings = Strings.current,
@@ -87,6 +93,7 @@ internal fun SettingsScreen(
 ) {
     var openSheet: SettingsSheet? by remember { mutableStateOf(null) }
     var signOutConfirmSheet by remember { mutableStateOf(false) }
+    var unlinkConfirmSheet by remember { mutableStateOf(false) }
 
     val listContent: @Composable () -> Unit = {
         LazyColumn(
@@ -108,6 +115,17 @@ internal fun SettingsScreen(
                     onSignIn = onLogin,
                     onAccountSettings = { openSheet = SettingsSheet.Account },
                 )
+            }
+            if (viewer != null && linkedAccount != null && !linkedAccount.isEmpty) {
+                item {
+                    SettingsLinkedAccountCard(
+                        state = linkedAccount,
+                        strings = strings,
+                        onLink = onLinkAccount,
+                        onUnlink = { unlinkConfirmSheet = true },
+                        onDismissLostAccess = onDismissLostAccess,
+                    )
+                }
             }
             item {
                 OptionGroup(title = strings.settingsGeneralSection) {
@@ -532,9 +550,36 @@ internal fun SettingsScreen(
             )
         }
     }
+
+    if (unlinkConfirmSheet && linkedAccount?.account != null) {
+        val account = linkedAccount.account
+        val label = linkedAccount.label(account.provider)
+        ModalSheet(
+            title = strings.settingsLinkedUnlinkTitle,
+            dismissLabel = strings.dismissAction,
+            onDismiss = { unlinkConfirmSheet = false },
+            footer = {
+                AppButton(
+                    label = strings.settingsLinkedUnlinkTitle,
+                    onClick = {
+                        unlinkConfirmSheet = false
+                        onUnlinkAccount()
+                    },
+                    emphasis = ButtonEmphasis.Secondary,
+                    containerColor = null,
+                    contentColor = MaterialTheme.colorScheme.error,
+                )
+            },
+        ) {
+            Text(
+                text = strings.settingsLinkedUnlinkConfirmMessage(label),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
-/** Mode group first: the frequent change sits on top, no scroll needed. */
 @Composable
 private fun ThemeModeSection(
     themeType: ThemeType,
@@ -575,6 +620,91 @@ private fun ThemePaletteSection(
             )
         },
     )
+}
+
+/** Linked-account card, under the session card. Guests never see it. */
+@Composable
+private fun SettingsLinkedAccountCard(
+    state: LinkedAccountUiState,
+    strings: LanguageStrings,
+    onLink: (ProviderId) -> Unit,
+    onUnlink: () -> Unit,
+    onDismissLostAccess: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OptionGroup(
+        title = strings.settingsLinkedAccountTitle,
+        modifier = modifier,
+    ) {
+        val account = state.account
+        if (account != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Avatar(
+                    imageUrl = account.viewer.avatarUrl,
+                    initials = initialsFor(account.viewer.name),
+                    size = AvatarSize.Row,
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = account.viewer.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            SettingsRow(
+                label = strings.settingsLinkedUnlinkTitle,
+                value = "",
+                onClick = onUnlink,
+                divider = false,
+                valueColor = MaterialTheme.colorScheme.error,
+            )
+        } else {
+            state.linkableProviders
+                .filter { it != state.lostAccessProvider }
+                .forEachIndexed { index, provider ->
+                    val visibleCount = state.linkableProviders.count { it != state.lostAccessProvider }
+                    SettingsRow(
+                        label = strings.settingsLinkedLinkAction(state.label(provider)),
+                        value = "",
+                        onClick = { onLink(provider) },
+                        divider = index < visibleCount - 1 ||
+                            state.lostAccessProvider != null || state.error != null,
+                    )
+                }
+        }
+
+        state.lostAccessProvider?.let { provider ->
+            SettingsRow(
+                label = strings.settingsLinkedLostAccess(state.label(provider)),
+                value = strings.settingsLinkedDismissAction,
+                onClick = onDismissLostAccess,
+                valueColor = LocalWarning.current,
+                divider = !state.labels.containsKey(provider),
+            )
+            if (state.labels.containsKey(provider)) {
+                SettingsRow(
+                    label = strings.settingsLinkedRelinkAction,
+                    value = "",
+                    onClick = { onLink(provider) },
+                    divider = false,
+                )
+            }
+        }
+
+        state.error?.let { error ->
+            Text(
+                text = strings.settingsLinkedLinkFailed + " " + strings.networkErrorMessage(error),
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalWarning.current,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+        }
+    }
 }
 
 /** Session card, first in Settings (identity before prefs). Plain [OptionGroup]:

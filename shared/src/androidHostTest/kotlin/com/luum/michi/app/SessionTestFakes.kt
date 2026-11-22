@@ -11,7 +11,13 @@ import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.domain.map
 import com.luum.michi.app.core.session.domain.ActiveProviderStore
 import com.luum.michi.app.core.session.domain.CachedViewerStore
+import com.luum.michi.app.core.session.domain.LinkedAccount
+import com.luum.michi.app.core.session.domain.LinkedAccountManager
+import com.luum.michi.app.core.session.domain.LinkedAccountStore
+import com.luum.michi.app.core.session.domain.PendingLink
+import com.luum.michi.app.core.session.domain.PendingLinkStore
 import com.luum.michi.app.core.session.domain.SessionManager
+import com.luum.michi.app.core.session.domain.TokenRefreshCoordinator
 import com.luum.michi.app.core.session.domain.Viewer
 import kotlinx.coroutines.CompletableDeferred
 
@@ -120,18 +126,88 @@ internal class InMemoryCachedViewerStore(initial: Viewer? = null) : CachedViewer
     }
 }
 
+internal class InMemoryPendingLinkStore(
+    var pending: PendingLink? = null,
+) : PendingLinkStore {
+    override fun load(): PendingLink? = pending
+
+    override fun save(pending: PendingLink) {
+        this.pending = pending
+    }
+
+    override fun clear() {
+        pending = null
+    }
+}
+
+internal class InMemoryLinkedAccountStore(
+    var account: LinkedAccount? = null,
+    var lostAccess: ProviderId? = null,
+    var autoCopy: Boolean = false,
+) : LinkedAccountStore {
+    override fun load(): LinkedAccount? = account
+
+    override fun save(account: LinkedAccount) {
+        this.account = account
+    }
+
+    override fun clear() {
+        account = null
+    }
+
+    override fun loadLostAccess(): ProviderId? = lostAccess
+
+    override fun saveLostAccess(provider: ProviderId) {
+        lostAccess = provider
+    }
+
+    override fun clearLostAccess() {
+        lostAccess = null
+    }
+
+    override fun loadAutoCopy(): Boolean = autoCopy
+
+    override fun saveAutoCopy(enabled: Boolean) {
+        autoCopy = enabled
+    }
+}
+
+internal fun testLinkedAccountManager(
+    providers: List<AuthProvider> = listOf(TestAuthProvider()),
+    tokenStorages: Map<ProviderId, com.luum.michi.app.core.auth.domain.TokenStorage>,
+    store: InMemoryLinkedAccountStore = InMemoryLinkedAccountStore(),
+    viewerFetchers: Map<ProviderId, suspend (com.luum.michi.app.core.auth.domain.AuthToken) -> NetworkResult<Viewer>> =
+        emptyMap(),
+    onUnlinked: suspend () -> Unit = {},
+): LinkedAccountManager = LinkedAccountManager(
+    providers = providers,
+    tokenStorages = tokenStorages,
+    store = store,
+    viewerFetchers = viewerFetchers,
+    refresher = TokenRefreshCoordinator(),
+    onUnlinked = onUnlinked,
+)
+
 internal fun testSessionManager(
     providers: List<AuthProvider>,
     tokenStorages: Map<ProviderId, TokenStorage>,
     activeProviderStore: ActiveProviderStore = InMemoryActiveProviderStore(),
     cachedViewerStore: CachedViewerStore = InMemoryCachedViewerStore(),
     onClearUserData: suspend () -> Unit = {},
+    pendingLinkStore: PendingLinkStore? = null,
+    linkedAccounts: LinkedAccountManager? = null,
+    onSessionClosed: suspend () -> Unit = {},
+    onSessionAuthenticated: suspend (ProviderId) -> Unit = {},
 ): SessionManager = SessionManager(
     providers = providers,
     tokenStorages = tokenStorages,
     activeProviderStore = activeProviderStore,
     cachedViewerStore = cachedViewerStore,
     onClearUserData = onClearUserData,
+    pendingLinkStore = pendingLinkStore,
+    linkedAccounts = linkedAccounts,
+    onSessionClosed = onSessionClosed,
+    onSessionAuthenticated = onSessionAuthenticated,
 )
 
 internal fun testSessionManager(
@@ -140,10 +216,18 @@ internal fun testSessionManager(
     activeProviderStore: ActiveProviderStore = InMemoryActiveProviderStore(),
     cachedViewerStore: CachedViewerStore = InMemoryCachedViewerStore(),
     onClearUserData: suspend () -> Unit = {},
+    pendingLinkStore: PendingLinkStore? = null,
+    linkedAccounts: LinkedAccountManager? = null,
+    onSessionClosed: suspend () -> Unit = {},
+    onSessionAuthenticated: suspend (ProviderId) -> Unit = {},
 ): SessionManager = testSessionManager(
     providers = listOf(provider),
     tokenStorages = mapOf(provider.id to storage),
     activeProviderStore = activeProviderStore,
     cachedViewerStore = cachedViewerStore,
     onClearUserData = onClearUserData,
+    pendingLinkStore = pendingLinkStore,
+    linkedAccounts = linkedAccounts,
+    onSessionClosed = onSessionClosed,
+    onSessionAuthenticated = onSessionAuthenticated,
 )

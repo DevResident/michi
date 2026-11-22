@@ -326,6 +326,16 @@ object EnglishStrings : LanguageStrings {
     override val settingsSignOutConfirmAction = "Sign out"
     override val settingsSignOutConfirmMessage =
         "You will sign out on this device. Your lists stay safe on AniList."
+    override val settingsLinkedAccountTitle = "Linked account"
+    override fun settingsLinkedLinkAction(provider: String): String = "Link $provider"
+    override val settingsLinkedUnlinkTitle = "Unlink"
+    override fun settingsLinkedUnlinkConfirmMessage(provider: String): String =
+        "Stop copying changes to $provider? Nothing is deleted there and your session stays signed in."
+    override fun settingsLinkedLostAccess(provider: String): String =
+        "Lost access to $provider. Link it again."
+    override val settingsLinkedRelinkAction = "Link again"
+    override val settingsLinkedDismissAction = "Dismiss"
+    override val settingsLinkedLinkFailed = "Could not link the account."
     override val backButton = "Back"
     override val authWelcomeTitle = "Welcome to Michi"
     override val authModalSubtitle = "Your client for anime, manga, lists, and favorites."

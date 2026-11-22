@@ -25,4 +25,10 @@ internal object SettingsStoreKeys {
     const val CachedViewer = "cached_viewer"
     /** Which auth provider currently owns the session (AniList by default). */
     const val ActiveProvider = "active_auth_provider"
+    /** The one linked account's viewer identity (a separate token lives in its own storage). */
+    const val LinkedAccount = "linked_account"
+    /** A linked token died (401/invalid_grant); shown until dismissed or relinked. */
+    const val LinkedLostAccess = "linked_lost_access"
+    /** Whether automatic copies run (default on when a link is created). */
+    const val LinkedAutoCopy = "linked_auto_copy"
 }

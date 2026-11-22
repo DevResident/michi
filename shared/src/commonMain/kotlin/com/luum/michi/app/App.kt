@@ -43,6 +43,7 @@ import com.luum.michi.app.core.storage.domain.SettingsStoreKeys
 import com.luum.michi.app.core.medialist.repository.StoreSortPersistence
 import com.luum.michi.app.root.AuthService
 import com.luum.michi.app.root.Root
+import com.luum.michi.app.settings.ui.state.LinkedAccountUiState
 import com.luum.michi.app.settings.ui.state.rememberSettingsState
 import com.luum.michi.app.ui.components.MessagePanel
 import com.luum.michi.app.ui.components.tabFadeSpec
@@ -72,6 +73,9 @@ fun App(
     val store = dependencies.settingsStore
     val session by dependencies.sessionManager.state.collectAsState()
     val lastLoginError by dependencies.sessionManager.lastLoginError.collectAsState()
+    val linkedAccount by dependencies.linkedAccountManager.linked.collectAsState()
+    val linkedLostAccess by dependencies.linkedAccountManager.lostAccess.collectAsState()
+    val linkError by dependencies.linkedAccountManager.linkError.collectAsState()
     val deepLinkDestination by dependencies.pendingDeepLink.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -143,6 +147,22 @@ fun App(
             ?.let { strings.authLoginFailed.replace("%s", it) }
     }
     val isAuthConfigured = dependencies.authProviders.any { it.isConfigured }
+    val authenticatedProvider = (session as? SessionState.Authenticated)?.provider
+    val linkedAccountUiState = LinkedAccountUiState(
+        account = linkedAccount.takeIf { authenticatedProvider != null },
+        linkableProviders = if (authenticatedProvider == null) {
+            emptyList()
+        } else {
+            dependencies.authProviders
+                .filter { it.isConfigured && it.id != authenticatedProvider }
+                .map { it.id }
+        },
+        labels = dependencies.authProviders
+            .filter { it.isConfigured }
+            .associate { it.id to it.label },
+        lostAccessProvider = linkedLostAccess.takeIf { authenticatedProvider != null },
+        error = linkError.takeIf { authenticatedProvider != null },
+    )
     // Sort memory backing (Settings persist toggle, per tab): store-owned,
     // session-independent — Root hydrates holders from it, holders save
     // into it. Local-only, like theme/language.
@@ -262,6 +282,10 @@ fun App(
                             loginErrorMessage = loginErrorMessage,
                             onSignInDismissed = { dependencies.sessionManager.clearLoginError() },
                             isAuthConfigured = isAuthConfigured,
+                            linkedAccount = linkedAccountUiState,
+                            onLinkAccount = { dependencies.beginLink(it) },
+                            onUnlinkAccount = { dependencies.unlinkAccount() },
+                            onDismissLostAccess = { dependencies.dismissLostAccess() },
                             autoOpenSignIn = autoOpenSignIn,
                             onAutoSignInShown = {
                                 store.putBoolean(SettingsStoreKeys.SeenSignIn, true)

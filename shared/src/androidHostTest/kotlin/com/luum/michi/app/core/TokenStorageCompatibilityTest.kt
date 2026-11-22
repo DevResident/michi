@@ -3,6 +3,7 @@ package com.luum.michi.app.core
 import android.content.SharedPreferences
 import com.luum.michi.app.core.auth.domain.AuthToken
 import com.luum.michi.app.core.auth.repository.SharedPreferencesTokenStorage
+import com.luum.michi.app.core.auth.repository.linkedTokenPrefsName
 import com.luum.michi.app.core.auth.repository.tokenPrefsName
 import com.luum.michi.app.core.media.domain.ProviderId
 import kotlinx.coroutines.runBlocking
@@ -118,6 +119,9 @@ class TokenStorageCompatibilityTest {
         assertEquals("michi_anilist_auth", tokenPrefsName(ProviderId.AniList))
         assertEquals("michi_auth_mal", tokenPrefsName(ProviderId.Mal))
         assertEquals("michi_auth_other", tokenPrefsName(ProviderId("other")))
+        assertEquals("michi_link_anilist", linkedTokenPrefsName(ProviderId.AniList))
+        assertEquals("michi_link_mal", linkedTokenPrefsName(ProviderId.Mal))
+        assertEquals("michi_link_other", linkedTokenPrefsName(ProviderId("other")))
     }
 
     @Test
