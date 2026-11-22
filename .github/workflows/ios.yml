@@ -29,6 +29,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The shared build derives its version with git describe; without
+          # full history and tags it would fall back to 0.0.0-unknown.
+          fetch-depth: 0
 
       - name: Show toolchains
         run: |

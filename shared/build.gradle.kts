@@ -1,4 +1,5 @@
-    import org.gradle.api.DefaultTask
+import michi.versioning.MichiVersioningExtension
+import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
@@ -16,6 +17,8 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
 }
+
+val michiVersion = rootProject.extensions.getByType(MichiVersioningExtension::class.java)
 
 // Pin the generated Res package: without this it falls back to a
 // name-derived default that has already drifted once (stale outputs under
@@ -121,7 +124,7 @@ abstract class GenerateMichiBuildConfigTask : DefaultTask() {
     abstract val appVersion: Property<String>
 
     @get:Input
-    abstract val appVersionCode: Property<String>
+    abstract val appVersionCode: Property<Int>
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -135,8 +138,9 @@ abstract class GenerateMichiBuildConfigTask : DefaultTask() {
             package com.luum.michi.app
 
             /**
-             * Generated at build time from `gradle.properties`
-             * (`michiVersionName` / `michiVersionCode`). Do not edit by hand.
+             * Generated at build time from the latest reachable `vX.Y.Z`
+             * git tag (`michiVersionName` / `michiVersionCode` overrides).
+             * Do not edit by hand.
              */
             internal object MichiBuildConfig {
                 const val Version: String = "${appVersion.get()}"
@@ -148,8 +152,8 @@ abstract class GenerateMichiBuildConfigTask : DefaultTask() {
 }
 
 val generateMichiBuildConfig = tasks.register<GenerateMichiBuildConfigTask>("generateMichiBuildConfig") {
-    appVersion.set((project.findProperty("michiVersionName") as? String) ?: "1.0")
-    appVersionCode.set((project.findProperty("michiVersionCode") as? String) ?: "1")
+    appVersion.set(michiVersion.versionName)
+    appVersionCode.set(michiVersion.versionCode)
     outputDir.set(layout.buildDirectory.dir("generated/source/michiConfig/commonMain/kotlin"))
 }
 

@@ -3,5 +3,10 @@ TEAM_ID=
 PRODUCT_NAME=Michi
 PRODUCT_BUNDLE_IDENTIFIER=com.luum.michi.app.Michi$(TEAM_ID)
 
-CURRENT_PROJECT_VERSION=1
-MARKETING_VERSION=1.0
+// Safe defaults for a clean checkout before :writeIosVersionConfig runs.
+// The generated Version.xcconfig (gitignored) overrides both values.
+MARKETING_VERSION = 0.0.0
+CURRENT_PROJECT_VERSION = 1
+
+// Optional so Xcode does not fail when the file has not been generated yet.
+#include? "Version.xcconfig"
