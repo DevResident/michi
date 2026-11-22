@@ -36,6 +36,7 @@ import com.luum.michi.app.mediaDetail.ui.staff.state.StaffDetailStateHolder
 import com.luum.michi.app.mediaDetail.ui.studio.state.StudioDetailStateHolder
 import com.luum.michi.app.mediaList.domain.anime.AnimeListRepository
 import com.luum.michi.app.mediaList.domain.manga.MangaListRepository
+import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncCoordinator
 import com.luum.michi.app.mediaList.ui.anime.state.AnimeListStateHolder
 import com.luum.michi.app.mediaList.ui.manga.state.MangaListStateHolder
 import com.luum.michi.app.notifications.domain.NotificationsRepository
@@ -52,6 +53,7 @@ import com.luum.michi.app.profile.ui.state.createProfileReviewsStateHolder
 import com.luum.michi.app.profile.ui.state.createProfileStateHolder
 import com.luum.michi.app.root.state.toDashboardMediaType
 import com.luum.michi.app.settings.ui.state.SettingsState
+import com.luum.michi.app.mirror.ui.state.MirrorSyncStateHolder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -81,6 +83,7 @@ internal class RootHolders(
     val profileFollows: ProfileFollowsStateHolder?,
     val profileReviews: ProfileReviewsStateHolder?,
     val notifications: NotificationsStateHolder?,
+    val mirrorSync: MirrorSyncStateHolder?,
     /**
      * Single favourite-change router: applies a change to the detail holder of
      * its target kind (visible page + cached snapshot, no network). Used by the
@@ -149,6 +152,7 @@ internal fun rememberRootHolders(
     favouriteRepository: FavouriteRepository,
     notificationsRepository: NotificationsRepository,
     sortPersistence: SortPersistence,
+    mirrorSyncCoordinator: MirrorSyncCoordinator,
 ): RootHolders {
     // Latest strings for the holders' providers, without keying them on language.
     val currentStrings by rememberUpdatedState(strings)
@@ -290,6 +294,13 @@ internal fun rememberRootHolders(
             null
         }
     }
+
+    // The preview is session-scoped; the actual batch lives in the mirror
+    // controller, so closing the page does not stop it.
+    val mirrorSyncScope = rememberHolderScope(listScope, viewerId)
+    val mirrorSyncHolder = remember(viewerId, mirrorSyncCoordinator, mirrorSyncScope) {
+        viewerId?.let { MirrorSyncStateHolder(mirrorSyncCoordinator) }
+    }
     // Profile data is AniList-only. A provider without profileDetails (MAL)
     // gets null holders, so RootEffects' `?.load` and the screen never ask
     // AniList for a MAL user id.
@@ -344,6 +355,7 @@ internal fun rememberRootHolders(
         profileFollowsHolder,
         profileReviewsHolder,
         notificationsHolder,
+        mirrorSyncHolder,
         favouriteRouter,
     ) {
         RootHolders(
@@ -363,6 +375,7 @@ internal fun rememberRootHolders(
             profileFollows = profileFollowsHolder,
             profileReviews = profileReviewsHolder,
             notifications = notificationsHolder,
+            mirrorSync = mirrorSyncHolder,
             onFavouriteChanged = favouriteRouter,
         )
     }

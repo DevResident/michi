@@ -46,6 +46,8 @@ import com.luum.michi.app.core.medialist.repository.MirrorOutbox
 import com.luum.michi.app.mediaList.repository.mirror.AniListMirrorWriter
 import com.luum.michi.app.mediaList.repository.mirror.MalMirrorWriter
 import com.luum.michi.app.mediaList.repository.mirror.MirrorController
+import com.luum.michi.app.mediaList.repository.mirror.MirrorSnapshotReader
+import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncCoordinator
 import com.luum.michi.app.mediaList.repository.mirror.MirrorWriter
 import com.luum.michi.app.mediaList.repository.mirror.MirroringMediaListEntryRepository
 import com.luum.michi.app.core.network.domain.AniListGraphQLClient
@@ -301,6 +303,27 @@ class MichiDependencies internal constructor(
         },
     )
 
+    internal val mirrorSyncCoordinator: MirrorSyncCoordinator = MirrorSyncCoordinator(
+        snapshots = MirrorSnapshotReader(
+            sessionProvider = { sessionManager.activeProvider() },
+            sessionUserId = {
+                (sessionManager.state.value as? SessionState.Authenticated)?.viewer?.id
+            },
+            sessionScoreFormat = {
+                val viewer = (sessionManager.state.value as? SessionState.Authenticated)?.viewer
+                parseScoreFormat(viewer?.scoreFormat)
+            },
+            sessionAniListClient = graphQLClient,
+            sessionMalLoader = malListLoader,
+            linkedAccounts = linkedAccountManager,
+            linkedAniListClient = linkedAniListGraphQLClient,
+            malHttp = malHttp,
+            bridge = mediaIdBridge,
+        ),
+        linkedAccounts = linkedAccountManager,
+        mirror = mirrorController,
+    )
+
     private val aniListAnimeListRepository: AnimeListRepository =
         AnimeListRepositoryImpl(graphQLClient, mediaListCache)
 
@@ -470,11 +493,7 @@ class MichiDependencies internal constructor(
 
     internal fun setAutoCopy(enabled: Boolean) {
         linkedAccountManager.setAutoCopy(enabled)
-        if (enabled) {
-            mirrorController.resume()
-        } else {
-            mirrorController.pause()
-        }
+        mirrorController.onAutoCopyChanged(enabled)
     }
 
     internal fun retryMirror() {

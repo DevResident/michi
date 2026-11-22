@@ -13,6 +13,7 @@ import com.luum.michi.app.core.medialist.domain.MirrorDate
 import com.luum.michi.app.core.medialist.domain.MirrorEntry
 import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
+import com.luum.michi.app.core.medialist.repository.MirrorBatchItem
 import com.luum.michi.app.core.medialist.repository.MirrorOutbox
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
@@ -26,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -270,6 +272,30 @@ class MirrorControllerTest {
 
         assertEquals(0, outbox.state.value.pending)
         assertNull(outbox.nextDue(now = 0L))
+    }
+
+    @Test
+    fun anExplicitBatchRunsWithAutoCopyOffAndKeepsEachFieldSet() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        val linked = linkedManager(autoCopy = false)
+        val writer = RecordingWriter()
+        val controller = controller(outbox, linked, writer)
+
+        val started = controller.startBatch(
+            listOf(
+                MirrorBatchItem(controllerEntry(), setOf(MirrorField.PROGRESS)),
+                MirrorBatchItem(controllerEntry().copy(aniListId = 11), AllMirrorFields),
+            ),
+        )
+
+        assertTrue(started)
+        controller.drainDue(now = 0L)
+        assertEquals(0, outbox.state.value.pending)
+        assertEquals(2, writer.calls.size)
+        assertEquals(setOf(MirrorField.PROGRESS), writer.calls[0].second)
+        assertEquals(AllMirrorFields, writer.calls[1].second)
+        assertFalse(outbox.state.value.batch?.active == true)
     }
 
     @Test

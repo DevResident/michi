@@ -96,7 +96,7 @@ internal class MalListLoader(
         // A work AniList does not have still shows, built from MAL's own data
         // under a synthetic negative id (see MalOnlyMedia).
         val composed = entries.map { entry ->
-            entry.toDto(media[entry.malId] ?: entry.malOnlyMedia(type))
+            entry.toDto(media[entry.malId] ?: entry.malOnlyMedia(type), type)
         }
         if (unmatchedIds.isNotEmpty()) onUnmatched(type, unmatchedIds)
         hydrationStore?.saveUnmatched(type, unmatchedIds.toSet())
@@ -108,6 +108,13 @@ internal class MalListLoader(
 
     suspend fun cached(type: MediaType, userId: Int): List<MediaListEntryDto>? =
         cache?.read(userId, type, ProviderId.Mal)
+
+    /**
+     * Fresh MAL state for mirror sync: always reads the MAL pages; media
+     * hydration stays incremental (`forceHydration = false`). No cache fallback.
+     */
+    suspend fun refresh(type: MediaType, userId: Int): NetworkResult<List<MediaListEntryDto>> =
+        load(type = type, userId = userId, forceHydration = false)
 
     /** Cached AniList media for the malIds we already know, no network. */
     private suspend fun reusedMedia(
@@ -134,7 +141,7 @@ internal class MalListLoader(
     }
 }
 
-private fun MalListEntry.toDto(media: MediaListMediaDto): MediaListEntryDto = MediaListEntryDto(
+private fun MalListEntry.toDto(media: MediaListMediaDto, type: MediaType): MediaListEntryDto = MediaListEntryDto(
     id = media.id,
     status = malStatusToMediaListStatus(status).toApiValue(),
     score = score,
@@ -144,6 +151,10 @@ private fun MalListEntry.toDto(media: MediaListMediaDto): MediaListEntryDto = Me
     startedAt = parseMalFuzzyDate(startDate),
     completedAt = parseMalFuzzyDate(finishDate),
     priority = priority,
+    notes = comments,
+    repeat = if (type == MediaType.MANGA) numTimesReread else numTimesRewatched,
+    isPrivate = false,
+    isRewatching = if (type == MediaType.MANGA) isRereading else isRewatching,
     media = media,
 )
 

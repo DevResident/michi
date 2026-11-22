@@ -370,6 +370,11 @@ internal class MalHttp(
                 startDate = status.startDate,
                 finishDate = status.finishDate,
                 priority = status.priority,
+                isRewatching = status.isRewatching,
+                isRereading = status.isRereading,
+                numTimesRewatched = status.numTimesRewatched,
+                numTimesReread = status.numTimesReread,
+                comments = status.comments,
                 node = item.node.toInfo(),
             )
         }

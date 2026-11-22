@@ -11,6 +11,7 @@ import com.luum.michi.app.core.medialist.domain.MirrorEntry
 import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.medialist.domain.MirrorSink
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
+import com.luum.michi.app.core.medialist.repository.MirrorBatchItem
 import com.luum.michi.app.core.medialist.repository.MirrorOutbox
 import com.luum.michi.app.core.medialist.repository.MirrorOutboxOperation
 import com.luum.michi.app.core.medialist.repository.MirrorOutboxState
@@ -72,6 +73,37 @@ internal class MirrorController(
     suspend fun retryFailed() {
         outbox.retryFailed()
         resume()
+    }
+
+    /**
+     * Explicit "Sync now": it runs even with automatic copies off. Each item
+     * carries its own field set; Add rows use all fields, Update rows only the
+     * fields the user saw in the preview.
+     */
+    suspend fun startBatch(items: List<MirrorBatchItem>): Boolean {
+        if (items.isEmpty() || !isSessionAuthenticated()) return false
+        val linked = linkedAccounts.linked.value ?: return false
+        val valid = items.filter { item ->
+            val target = if (item.entry.sourceProvider == ProviderId.AniList) {
+                ProviderId.Mal
+            } else {
+                ProviderId.AniList
+            }
+            target == linked.provider && item.fields.isNotEmpty()
+        }
+        if (valid.isEmpty()) return false
+        outbox.beginBatch(valid)
+        resume()
+        return true
+    }
+
+    /** The toggle off pauses automatic work, but never interrupts an explicit batch. */
+    fun onAutoCopyChanged(enabled: Boolean) {
+        if (enabled) {
+            resume()
+        } else if (outbox.state.value.batch?.active != true) {
+            pause()
+        }
     }
 
     /**
@@ -171,7 +203,7 @@ internal class MirrorController(
     private fun isEnabled(): Boolean =
         isSessionAuthenticated() &&
             linkedAccounts.linked.value != null &&
-            linkedAccounts.autoCopy.value
+            (linkedAccounts.autoCopy.value || outbox.state.value.batch?.active == true)
 
     private suspend fun drainOne(operation: MirrorOutboxOperation) {
         if (!isSessionAuthenticated()) {

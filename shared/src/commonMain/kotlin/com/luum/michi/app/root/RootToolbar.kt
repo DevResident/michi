@@ -400,7 +400,11 @@ private fun toolbarTitle(
     tab: TabSection,
     strings: LanguageStrings,
 ): String = if (state.isOpen(RootOverlay.Settings)) {
-    if (state.settingsAboutOpen) strings.settingsAboutTitle else strings.settingsTitle
+    when {
+        state.settingsMirrorOpen -> strings.mirrorSyncTitle
+        state.settingsAboutOpen -> strings.settingsAboutTitle
+        else -> strings.settingsTitle
+    }
 } else if (state.isOpen(RootOverlay.Calendar)) {
     strings.calendarTitle
 } else if (state.isOpen(RootOverlay.Notifications)) {

@@ -1,5 +1,6 @@
 package com.luum.michi.app.settings.ui.state
 
+import com.luum.michi.app.core.medialist.repository.MirrorBatchProgress
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.session.domain.LinkedAccount
@@ -17,6 +18,7 @@ internal data class LinkedAccountUiState(
     val autoCopy: Boolean = false,
     val mirrorPending: Int = 0,
     val mirrorErrors: Int = 0,
+    val mirrorBatch: MirrorBatchProgress? = null,
 ) {
     val isEmpty: Boolean
         get() = account == null && lostAccessProvider == null && linkableProviders.isEmpty() && error == null

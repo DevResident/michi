@@ -9,6 +9,7 @@ import com.luum.michi.app.core.medialist.domain.MirrorEntry
 import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.repository.MirrorOutbox
+import com.luum.michi.app.core.medialist.repository.MirrorBatchItem
 import com.luum.michi.app.core.medialist.repository.MirrorOutboxFileName
 import com.luum.michi.app.mediaList.InMemoryFileStore
 import kotlinx.coroutines.runBlocking
@@ -189,6 +190,34 @@ class MirrorOutboxTest {
         restarted.load()
         assertEquals(1, restarted.state.value.dropped)
         assertNull(restarted.nextDue(now = 0L))
+    }
+
+    @Test
+    fun aBatchTracksEachFieldSetAndItsProgress() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        val first = outboxEntry(progress = 1)
+        val second = outboxEntry(progress = 2).copy(aniListId = 11)
+        outbox.beginBatch(
+            listOf(
+                MirrorBatchItem(first, setOf(MirrorField.PROGRESS)),
+                MirrorBatchItem(second, AllMirrorFields),
+            ),
+        )
+
+        assertEquals(2, outbox.state.value.batch?.total)
+        assertEquals(0, outbox.state.value.batch?.done)
+        assertTrue(outbox.state.value.batch?.active == true)
+
+        val firstDue = assertNotNull(outbox.nextDue(now = 0L))
+        assertEquals(setOf(MirrorField.PROGRESS), firstDue.fields)
+        outbox.markSuccess(firstDue)
+        assertEquals(1, outbox.state.value.batch?.done)
+
+        val secondDue = assertNotNull(outbox.nextDue(now = 0L))
+        outbox.markPermanent(secondDue, "not on target")
+        assertEquals(1, outbox.state.value.batch?.errors)
+        assertFalse(outbox.state.value.batch?.active == true)
     }
 
     @Test

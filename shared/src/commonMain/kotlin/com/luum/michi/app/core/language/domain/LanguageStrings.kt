@@ -333,6 +333,21 @@ interface LanguageStrings {
     fun settingsMirrorPending(count: Int): String
     fun settingsMirrorWithErrors(count: Int): String
     val settingsMirrorRetryTitle: String
+    val mirrorSyncTitle: String
+    val mirrorSyncAddSection: String
+    val mirrorSyncUpdateSection: String
+    val mirrorSyncLinkedOnlySection: String
+    fun mirrorSyncAddCount(count: Int): String
+    fun mirrorSyncUpdateCount(count: Int): String
+    fun mirrorSyncLinkedOnlyCount(count: Int): String
+    fun mirrorSyncNoEquivalent(count: Int): String
+    fun mirrorSyncPrivateOmitted(count: Int): String
+    fun mirrorSyncApply(count: Int): String
+    val mirrorSyncSlowHint: String
+    val mirrorSyncEmptyTitle: String
+    val mirrorSyncEmptyMessage: String
+    val mirrorSyncNewerInLinked: String
+    fun settingsMirrorProgress(done: Int, total: Int): String
     val backButton: String
     val authWelcomeTitle: String
     val authModalSubtitle: String

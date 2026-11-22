@@ -88,6 +88,7 @@ internal fun SettingsScreen(
     onDismissLostAccess: () -> Unit = {},
     onAutoCopyChange: (Boolean) -> Unit = {},
     onRetryMirror: () -> Unit = {},
+    onOpenMirrorSync: () -> Unit = {},
     onOpenAbout: () -> Unit,
     bottomPadding: Dp,
     strings: LanguageStrings = Strings.current,
@@ -128,6 +129,7 @@ internal fun SettingsScreen(
                         onDismissLostAccess = onDismissLostAccess,
                         onAutoCopyChange = onAutoCopyChange,
                         onRetryMirror = onRetryMirror,
+                        onOpenMirrorSync = onOpenMirrorSync,
                     )
                 }
             }
@@ -636,6 +638,7 @@ private fun SettingsLinkedAccountCard(
     onDismissLostAccess: () -> Unit,
     onAutoCopyChange: (Boolean) -> Unit,
     onRetryMirror: () -> Unit,
+    onOpenMirrorSync: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     OptionGroup(
@@ -668,20 +671,33 @@ private fun SettingsLinkedAccountCard(
                 onCheckedChange = onAutoCopyChange,
             )
             val hasErrors = state.mirrorErrors > 0
+            val activeBatch = state.mirrorBatch?.takeIf { it.active }
             SettingsRow(
                 label = strings.settingsMirrorStatusTitle,
                 value = when {
+                    activeBatch != null -> buildString {
+                        append(strings.settingsMirrorProgress(activeBatch.done, activeBatch.total))
+                        if (activeBatch.errors > 0) {
+                            append(" · ")
+                            append(strings.settingsMirrorWithErrors(activeBatch.errors))
+                        }
+                    }
                     hasErrors -> strings.settingsMirrorWithErrors(state.mirrorErrors) +
                         " · " + strings.settingsMirrorRetryTitle
                     state.mirrorPending > 0 -> strings.settingsMirrorPending(state.mirrorPending)
                     else -> strings.settingsMirrorUpToDate
                 },
-                onClick = if (hasErrors) onRetryMirror else null,
-                valueColor = if (hasErrors) {
+                onClick = if (hasErrors && activeBatch == null) onRetryMirror else null,
+                valueColor = if (hasErrors && activeBatch == null) {
                     LocalWarning.current
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
+            )
+            SettingsRow(
+                label = strings.mirrorSyncTitle,
+                value = "",
+                onClick = onOpenMirrorSync,
             )
             SettingsRow(
                 label = strings.settingsLinkedUnlinkTitle,

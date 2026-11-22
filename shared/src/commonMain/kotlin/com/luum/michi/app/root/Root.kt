@@ -42,6 +42,8 @@ import com.luum.michi.app.mediaDetail.domain.staff.StaffDetailRepository
 import com.luum.michi.app.mediaDetail.domain.studio.StudioDetailRepository
 import com.luum.michi.app.mediaList.domain.anime.AnimeListRepository
 import com.luum.michi.app.mediaList.domain.manga.MangaListRepository
+import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncCoordinator
+import com.luum.michi.app.mirror.ui.MirrorSyncScreen
 import com.luum.michi.app.notifications.domain.NotificationsRepository
 import com.luum.michi.app.notifications.ui.NotificationsScreen
 import com.luum.michi.app.profile.domain.ProfileRepository
@@ -93,6 +95,7 @@ internal fun Root(
     profileRepository: ProfileRepository,
     favouriteRepository: FavouriteRepository,
     notificationsRepository: NotificationsRepository,
+    mirrorSyncCoordinator: MirrorSyncCoordinator,
     urlOpener: UrlOpener,
     shareLauncher: ShareLauncher,
     sortPersistence: SortPersistence,
@@ -196,6 +199,7 @@ internal fun Root(
         favouriteRepository = favouriteRepository,
         notificationsRepository = notificationsRepository,
         sortPersistence = sortPersistence,
+        mirrorSyncCoordinator = mirrorSyncCoordinator,
     )
 
     RootEffects(
@@ -261,7 +265,13 @@ internal fun Root(
                 surfaceStates.SaveableStateProvider(surface) {
                     key(surface) {
                         if (state.isOpen(RootOverlay.Settings)) {
-                            if (state.settingsAboutOpen) {
+                            if (state.settingsMirrorOpen && holders.mirrorSync != null) {
+                                MirrorSyncScreen(
+                                    holder = holders.mirrorSync,
+                                    bottomPadding = padding.calculateBottomPadding(),
+                                    onApplied = { state.closeSettingsMirror() },
+                                )
+                            } else if (state.settingsAboutOpen) {
                                 AboutScreen(
                                     bottomPadding = padding.calculateBottomPadding(),
                                     onOpenUrl = { urlOpener.open(it) },
@@ -282,6 +292,7 @@ internal fun Root(
                                     onDismissLostAccess = onDismissLostAccess,
                                     onAutoCopyChange = onAutoCopyChange,
                                     onRetryMirror = onRetryMirror,
+                                    onOpenMirrorSync = { state.openSettingsMirror() },
                                     onOpenAbout = { state.openSettingsAbout() },
                                     bottomPadding = padding.calculateBottomPadding(),
                                 )
@@ -373,6 +384,7 @@ internal fun Root(
 
 /** Which saved surface the content area shows: the slot's tab + the view. */
 private fun surfaceKey(tab: TabSection, state: State): String = when {
+    state.isOpen(RootOverlay.Settings) && state.settingsMirrorOpen -> "${tab.name}:settings-mirror"
     state.isOpen(RootOverlay.Settings) && state.settingsAboutOpen -> "${tab.name}:settings-about"
     state.isOpen(RootOverlay.Settings) -> "${tab.name}:settings"
     state.isDetailOpen -> detailSurfaceKey(tab, state.currentDetailEntryId)

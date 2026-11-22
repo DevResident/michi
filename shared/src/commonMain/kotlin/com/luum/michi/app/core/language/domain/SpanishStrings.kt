@@ -346,6 +346,27 @@ object SpanishStrings : LanguageStrings {
     override fun settingsMirrorWithErrors(count: Int): String =
         if (count == 1) "1 con error" else "$count con error"
     override val settingsMirrorRetryTitle = "Reintentar"
+    override val mirrorSyncTitle = "Sincronizar ahora"
+    override val mirrorSyncAddSection = "Añadir"
+    override val mirrorSyncUpdateSection = "Actualizar"
+    override val mirrorSyncLinkedOnlySection = "Solo en la cuenta vinculada"
+    override fun mirrorSyncAddCount(count: Int): String =
+        if (count == 1) "1 por añadir" else "$count por añadir"
+    override fun mirrorSyncUpdateCount(count: Int): String =
+        if (count == 1) "1 por actualizar" else "$count por actualizar"
+    override fun mirrorSyncLinkedOnlyCount(count: Int): String =
+        if (count == 1) "1 solo en la vinculada" else "$count solo en la vinculada"
+    override fun mirrorSyncNoEquivalent(count: Int): String =
+        if (count == 1) "1 sin equivalente" else "$count sin equivalente"
+    override fun mirrorSyncPrivateOmitted(count: Int): String =
+        if (count == 1) "1 privada sin copiar" else "$count privadas sin copiar"
+    override fun mirrorSyncApply(count: Int): String =
+        if (count == 1) "Aplicar 1 cambio" else "Aplicar $count cambios"
+    override val mirrorSyncSlowHint = "Esto puede tardar unos minutos."
+    override val mirrorSyncEmptyTitle = "No hay nada que sincronizar"
+    override val mirrorSyncEmptyMessage = "Tus listas ya coinciden."
+    override val mirrorSyncNewerInLinked = "Más reciente en la cuenta vinculada"
+    override fun settingsMirrorProgress(done: Int, total: Int): String = "$done/$total"
     override val backButton = "Volver"
     override val authWelcomeTitle = "Bienvenido a Michi"
     override val authModalSubtitle = "Tu cliente para anime, manga, listas y favoritos."

@@ -13,9 +13,8 @@ import kotlinx.serialization.json.JsonPrimitive
 /**
  * One query for both user lists: `$type` decides anime vs manga, and the node
  * requests the union of the fields the two mappers read (episodes + next airing
- * for anime, chapters/volumes/progressVolumes for manga). Fields no mapper or
- * model reads (group name/status, entry notes/private/hiddenFromStatusLists,
- * timeUntilAiring) are left out.
+ * for anime, chapters/volumes/progressVolumes for manga) plus the mirror fields
+ * (`notes`, `repeat`, `private`, `idMal`).
  */
 private const val MediaListCollectionQuery = """
 query MediaListCollection(${'$'}userId: Int!, ${'$'}type: MediaType!) {
@@ -30,9 +29,13 @@ query MediaListCollection(${'$'}userId: Int!, ${'$'}type: MediaType!) {
         progressVolumes
         updatedAt
         priority
+        notes
+        repeat
+        private
         startedAt { year month day }
         completedAt { year month day }
         media {
+          idMal
           $MediaListMediaFields
         }
       }

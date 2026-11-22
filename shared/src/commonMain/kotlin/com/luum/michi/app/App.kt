@@ -167,6 +167,7 @@ fun App(
         autoCopy = linkedAutoCopy,
         mirrorPending = mirrorOutbox.pending,
         mirrorErrors = mirrorOutbox.withErrors,
+        mirrorBatch = mirrorOutbox.batch,
     )
     // Sort memory backing (Settings persist toggle, per tab): store-owned,
     // session-independent — Root hydrates holders from it, holders save
@@ -280,6 +281,7 @@ fun App(
                             profileRepository = dependencies.profileRepository,
                             favouriteRepository = dependencies.favouriteRepository,
                             notificationsRepository = dependencies.notificationsRepository,
+                            mirrorSyncCoordinator = dependencies.mirrorSyncCoordinator,
                             urlOpener = dependencies.urlOpener,
                             shareLauncher = dependencies.shareLauncher,
                             sortPersistence = sortPersistence,

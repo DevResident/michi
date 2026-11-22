@@ -37,6 +37,10 @@ internal data class MediaListEntryDto(
     val startedAt: FuzzyDateDto? = null,
     val completedAt: FuzzyDateDto? = null,
     val priority: Int? = null,
+    val notes: String? = null,
+    val repeat: Int? = null,
+    @SerialName("private") val isPrivate: Boolean? = null,
+    val isRewatching: Boolean? = null,
     val media: MediaListMediaDto,
 )
 
@@ -53,6 +57,10 @@ internal data class MediaListEntryState(
     val startedAt: FuzzyDateDto? = null,
     val completedAt: FuzzyDateDto? = null,
     val priority: Int? = null,
+    val notes: String? = null,
+    val repeat: Int? = null,
+    val isPrivate: Boolean? = null,
+    val isRewatching: Boolean? = null,
 )
 
 internal fun MediaListEntryDto.state(): MediaListEntryState = MediaListEntryState(
@@ -64,6 +72,10 @@ internal fun MediaListEntryDto.state(): MediaListEntryState = MediaListEntryStat
     startedAt = startedAt,
     completedAt = completedAt,
     priority = priority,
+    notes = notes,
+    repeat = repeat,
+    isPrivate = isPrivate,
+    isRewatching = isRewatching,
 )
 
 internal fun FuzzyDateDto?.toComparableInt(): Int {
