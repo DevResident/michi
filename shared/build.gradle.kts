@@ -220,6 +220,9 @@ kotlin {
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
+            // Coil has no network fetcher of its own: without this, iOS shows
+            // every cover as a placeholder (Android uses the OkHttp one).
+            implementation(libs.coil.network.ktor3)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
