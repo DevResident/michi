@@ -382,12 +382,15 @@ internal class SettingsState(
 
     /**
      * Drops the synced prefs back to defaults and writes those defaults to the
-     * store, so a guest never inherits the previous account's 18+ gate. Local
-     * prefs (start tab, image quality, persist list sort) are untouched. Called
-     * only on a user → guest transition, never on a cold start as a guest.
+     * store, so a guest never inherits the previous account's 18+ gate. The
+     * local MAL 18+ value is account data too, so it resets with them: the next
+     * person to sign in on this phone starts with 18+ off. Other local prefs
+     * (start tab, image quality, persist list sort) are untouched. Called only
+     * on a user → guest transition, never on a cold start as a guest.
      */
     fun clearSynced() {
         syncedPrefs.forEach { it.reset() }
+        displayAdultContentLocalPref.reset()
         // reset() restored the defaults, so the state is the new baseline.
         lastSyncedTitleLanguage = titleLanguage
         lastSyncedStaffNameLanguage = staffNameLanguage

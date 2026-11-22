@@ -29,11 +29,23 @@ class SettingsAdultContentTest {
 
         state.displayAdultContent = true
         state.seedFrom(Viewer(id = 1, name = "mal", displayAdultContent = false))
-        state.clearSynced()
 
-        assertTrue(state.displayAdultContent, "seedFrom/clearSynced must not touch the local value")
+        assertTrue(state.displayAdultContent, "seedFrom must not touch the local value")
         val recreated = settings(store, canSync = false, useLocalAdultContent = true)
         assertTrue(recreated.displayAdultContent, "the local value persists across holders")
+    }
+
+    @Test
+    fun signingOutOfMalResetsTheLocalEighteenPlus() {
+        val store = FakeSettingsStore()
+        val state = settings(store, canSync = false, useLocalAdultContent = true)
+        state.displayAdultContent = true
+
+        state.clearSynced()
+
+        assertFalse(state.displayAdultContent)
+        val nextAccount = settings(store, canSync = false, useLocalAdultContent = true)
+        assertFalse(nextAccount.displayAdultContent, "the next MAL account starts with 18+ off")
     }
 
     @Test
