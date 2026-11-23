@@ -67,6 +67,27 @@ class MirrorTranslatorTest {
     }
 
     @Test
+    fun malEquivalenceAcceptsTheFloorAndCeilingOfTheTenScale() {
+        assertTrue(MirrorTranslator.scoresEquivalent(8.5f, ScoreFormat.POINT_10_DECIMAL, 8f, ScoreFormat.POINT_10))
+        assertTrue(MirrorTranslator.scoresEquivalent(8.5f, ScoreFormat.POINT_10_DECIMAL, 9f, ScoreFormat.POINT_10))
+        assertFalse(MirrorTranslator.scoresEquivalent(8.5f, ScoreFormat.POINT_10_DECIMAL, 6f, ScoreFormat.POINT_10))
+
+        assertTrue(MirrorTranslator.scoresEquivalent(87f, ScoreFormat.POINT_100, 8f, ScoreFormat.POINT_10))
+        assertTrue(MirrorTranslator.scoresEquivalent(87f, ScoreFormat.POINT_100, 9f, ScoreFormat.POINT_10))
+        assertFalse(MirrorTranslator.scoresEquivalent(87f, ScoreFormat.POINT_100, 7f, ScoreFormat.POINT_10))
+
+        assertTrue(MirrorTranslator.scoresEquivalent(9f, ScoreFormat.POINT_10, 9f, ScoreFormat.POINT_10))
+        assertFalse(MirrorTranslator.scoresEquivalent(9f, ScoreFormat.POINT_10, 8f, ScoreFormat.POINT_10))
+        assertTrue(MirrorTranslator.scoresEquivalent(4f, ScoreFormat.POINT_5_STARS, 8f, ScoreFormat.POINT_10))
+        assertFalse(MirrorTranslator.scoresEquivalent(4f, ScoreFormat.POINT_5_STARS, 9f, ScoreFormat.POINT_10))
+        assertTrue(MirrorTranslator.scoresEquivalent(1f, ScoreFormat.POINT_3_SMILEYS, 3f, ScoreFormat.POINT_10))
+        assertFalse(MirrorTranslator.scoresEquivalent(1f, ScoreFormat.POINT_3_SMILEYS, 6f, ScoreFormat.POINT_10))
+
+        assertFalse(MirrorTranslator.scoresEquivalent(0f, ScoreFormat.POINT_10, 1f, ScoreFormat.POINT_10))
+        assertTrue(MirrorTranslator.scoresEquivalent(0f, ScoreFormat.POINT_10, 0f, ScoreFormat.POINT_10))
+    }
+
+    @Test
     fun aniListTargetScoresUseItsScoreFormat() {
         assertEquals(85f, MirrorTranslator.toAniListScore(8.5f, ScoreFormat.POINT_10_DECIMAL, ScoreFormat.POINT_100))
         assertEquals(8.5f, MirrorTranslator.toAniListScore(85f, ScoreFormat.POINT_100, ScoreFormat.POINT_10_DECIMAL))

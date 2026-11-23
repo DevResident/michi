@@ -3,6 +3,9 @@ package com.luum.michi.app.core.medialist.domain
 import com.luum.michi.app.core.mal.domain.toMalStatus
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
@@ -147,6 +150,42 @@ internal object MirrorTranslator {
         return (percent / 10f).roundToInt().coerceIn(1, 10)
     }
 
+    /**
+     * The MAL integers an AniList score may correspond to: the floor and the
+     * ceiling of the score on MAL's 0–10 scale. A score that lands exactly on
+     * an integer only accepts that integer. So 8.5 accepts 8 and 9, 87/100
+     * accepts 8 and 9, and 9/10 only accepts 9. A non-zero score never accepts
+     * MAL's 0 ("unrated").
+     */
+    fun malScoreCandidates(value: Float, format: ScoreFormat): Set<Int> {
+        val percent = normalizeScore(value, format)
+        if (percent <= 0f) return setOf(0)
+        val tenths = percent / 10f
+        val rounded = tenths.roundToInt()
+        if (abs(tenths - rounded) < SCORE_EPSILON) {
+            return setOf(rounded.coerceIn(1, 10))
+        }
+        return setOf(
+            floor(tenths).toInt().coerceIn(1, 10),
+            ceil(tenths).toInt().coerceIn(1, 10),
+        )
+    }
+
+    /**
+     * Two scores are the same note when their possible MAL integers overlap.
+     * MAL only stores integers, so a decimal AniList score covers both
+     * neighbouring integers: 8.5 matches 8 and 9, 87/100 matches 8 and 9.
+     */
+    fun scoresEquivalent(
+        first: Float,
+        firstFormat: ScoreFormat,
+        second: Float,
+        secondFormat: ScoreFormat,
+    ): Boolean {
+        val candidates = malScoreCandidates(first, firstFormat)
+        return malScoreCandidates(second, secondFormat).any { it in candidates }
+    }
+
     /** 0–100 → the target account's AniList format, quantized to its step. */
     fun toAniListScore(
         value: Float,
@@ -185,4 +224,7 @@ internal object MirrorTranslator {
         priority == 1 -> 1
         else -> 3
     }
+
+    /** Treats float noise around an exact 0–10 integer as that integer. */
+    private const val SCORE_EPSILON = 0.0001f
 }

@@ -127,6 +127,17 @@ class MirrorDifferTest {
             targetScoreFormat = ScoreFormat.POINT_10,
         )
 
+    private fun diffToAniList(
+        primary: MirrorSnapshot,
+        linked: MirrorSnapshot,
+        format: ScoreFormat,
+    ) = MirrorDiffer.diff(
+        primary = primary,
+        linked = linked,
+        targetProvider = ProviderId.AniList,
+        targetScoreFormat = format,
+    )
+
     @Test
     fun anAdditionCarriesTheWholeEntry() {
         val result = diff(
@@ -153,6 +164,129 @@ class MirrorDifferTest {
         )
 
         assertTrue(result.updates.isEmpty())
+    }
+
+    @Test
+    fun roundedDecimalScoresMatchBothNeighbouringMalIntegers() {
+        listOf(8, 9).forEach { malScore ->
+            val followingMal = diffToAniList(
+                primary = snapshot(ProviderId.Mal, malEntry(score = malScore.toFloat())),
+                linked = snapshot(
+                    ProviderId.AniList,
+                    entry(score = 8.5f, scoreFormat = ScoreFormat.POINT_10_DECIMAL),
+                ),
+                format = ScoreFormat.POINT_10_DECIMAL,
+            )
+            assertTrue(
+                followingMal.updates.isEmpty(),
+                "following AniList: MAL $malScore is the same as 8.5",
+            )
+
+            val followingAniList = diff(
+                primary = snapshot(
+                    ProviderId.AniList,
+                    entry(score = 8.5f, scoreFormat = ScoreFormat.POINT_10_DECIMAL),
+                ),
+                linked = snapshot(ProviderId.Mal, malEntry(score = malScore.toFloat())),
+            )
+            assertTrue(
+                followingAniList.updates.isEmpty(),
+                "following MAL: AniList 8.5 is the same as $malScore",
+            )
+        }
+    }
+
+    @Test
+    fun aRealScoreDifferenceStillUpdatesInBothDirections() {
+        val followingMal = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 6f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 8.5f, scoreFormat = ScoreFormat.POINT_10_DECIMAL),
+            ),
+            format = ScoreFormat.POINT_10_DECIMAL,
+        )
+        assertEquals(setOf(MirrorField.SCORE), followingMal.updates.single().changedFields)
+
+        val followingAniList = diff(
+            primary = snapshot(
+                ProviderId.AniList,
+                entry(score = 8.5f, scoreFormat = ScoreFormat.POINT_10_DECIMAL),
+            ),
+            linked = snapshot(ProviderId.Mal, malEntry(score = 6f)),
+        )
+        assertEquals(setOf(MirrorField.SCORE), followingAniList.updates.single().changedFields)
+    }
+
+    @Test
+    fun point100ScoresMatchTheNeighbouringMalIntegers() {
+        listOf(8, 9).forEach { malScore ->
+            val result = diffToAniList(
+                primary = snapshot(ProviderId.Mal, malEntry(score = malScore.toFloat())),
+                linked = snapshot(
+                    ProviderId.AniList,
+                    entry(score = 87f, scoreFormat = ScoreFormat.POINT_100),
+                ),
+                format = ScoreFormat.POINT_100,
+            )
+            assertTrue(result.updates.isEmpty(), "MAL $malScore is the same as 87/100")
+        }
+
+        val real = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 7f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 87f, scoreFormat = ScoreFormat.POINT_100),
+            ),
+            format = ScoreFormat.POINT_100,
+        )
+        assertEquals(setOf(MirrorField.SCORE), real.updates.single().changedFields)
+    }
+
+    @Test
+    fun point5ScoresUseTheirExactMalValue() {
+        val equivalent = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 8f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 4f, scoreFormat = ScoreFormat.POINT_5_STARS),
+            ),
+            format = ScoreFormat.POINT_5_STARS,
+        )
+        assertTrue(equivalent.updates.isEmpty())
+
+        val real = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 9f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 4f, scoreFormat = ScoreFormat.POINT_5_STARS),
+            ),
+            format = ScoreFormat.POINT_5_STARS,
+        )
+        assertEquals(setOf(MirrorField.SCORE), real.updates.single().changedFields)
+    }
+
+    @Test
+    fun point3ScoresUseTheirExactMalValue() {
+        val equivalent = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 3f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 1f, scoreFormat = ScoreFormat.POINT_3_SMILEYS),
+            ),
+            format = ScoreFormat.POINT_3_SMILEYS,
+        )
+        assertTrue(equivalent.updates.isEmpty())
+
+        val real = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 6f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 1f, scoreFormat = ScoreFormat.POINT_3_SMILEYS),
+            ),
+            format = ScoreFormat.POINT_3_SMILEYS,
+        )
+        assertEquals(setOf(MirrorField.SCORE), real.updates.single().changedFields)
     }
 
     @Test
