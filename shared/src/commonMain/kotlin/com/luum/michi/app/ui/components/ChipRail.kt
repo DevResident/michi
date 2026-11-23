@@ -103,7 +103,7 @@ internal fun <T> ChipRail(
     // Spread the chips equally on one row when they fit; scroll otherwise.
     fill: Boolean = false,
 ) {
-    if (!fill || !interactive || tabs.isEmpty()) {
+    if (!chipRailUsesFill(fill = fill, interactive = interactive, tabs = tabs)) {
         LazyChipRail(
             tabs = tabs,
             selected = selected,
@@ -124,6 +124,23 @@ internal fun <T> ChipRail(
         compact = compact,
     )
 }
+
+/**
+ * Fill mode measures the real pills before choosing equal-width cells. A remote
+ * icon is loaded asynchronously, so measuring it before the image arrives would
+ * decide the layout from an icon-less (or placeholder) width and could then
+ * shift or clip the text when the icon appears. Any `iconUrl` therefore keeps
+ * the normal `LazyChipRail`, which measures each pill lazily with its real
+ * content.
+ */
+internal fun <T> chipRailUsesFill(
+    fill: Boolean,
+    interactive: Boolean,
+    tabs: List<ChipTab<T>>,
+): Boolean = fill &&
+    interactive &&
+    tabs.isNotEmpty() &&
+    tabs.none { !it.iconUrl.isNullOrBlank() }
 
 @Composable
 private fun <T> LazyChipRail(

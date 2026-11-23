@@ -1,7 +1,9 @@
 package com.luum.michi.app.core
 
 import androidx.compose.ui.unit.dp
+import com.luum.michi.app.ui.components.ChipTab
 import com.luum.michi.app.ui.components.chipRailFits
+import com.luum.michi.app.ui.components.chipRailUsesFill
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -53,5 +55,20 @@ class ChipRailFillTest {
                 chipWidths = emptyList(),
             ),
         )
+    }
+
+    @Test
+    fun tabsWithRemoteIconsNeverUseTheFixedRow() {
+        val plain = listOf(
+            ChipTab(value = "anime", label = "Anime"),
+            ChipTab(value = "manga", label = "Manga"),
+        )
+        val withIcon = listOf(
+            ChipTab(value = "anime", label = "Anime", iconUrl = "https://example.com/icon.png"),
+            ChipTab(value = "manga", label = "Manga"),
+        )
+
+        assertTrue(chipRailUsesFill(fill = true, interactive = true, tabs = plain))
+        assertFalse(chipRailUsesFill(fill = true, interactive = true, tabs = withIcon))
     }
 }
