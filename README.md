@@ -2,7 +2,7 @@
 
 # Michi
 
-**A modern, fast, unofficial AniList client built with Kotlin Multiplatform.**
+**A modern, fast, unofficial AniList and MAL client built with Kotlin Multiplatform.**
 
 *michi* (道) means *"the path"* in Japanese, a companion for your journey through anime and manga. It can also be interpreted as the colloquial way of referring to a cat in Spanish.
 
