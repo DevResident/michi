@@ -5,9 +5,9 @@ import com.luum.michi.app.core.media.domain.ProviderId
 
 /**
  * One-time move from the 11.6 linked-token namespaces to each provider's
- * session storage. The session token always wins when both exist, and the
- * legacy namespace is cleared even then (it may still be a live token).
- *
+ * session storage. The session token always wins when both exist; otherwise the
+ * legacy keys are cleared only after the target storage proves it kept the
+ * token (save() is silent on failure, so the migration reads it back first).
  * Idempotent: a second run finds every legacy storage empty.
  */
 internal class LegacyTokenMigration(
@@ -19,11 +19,16 @@ internal class LegacyTokenMigration(
         for (provider in providers) {
             val legacy = legacyStorages[provider] ?: continue
             val token = legacy.load() ?: continue
-            val session = sessionStorages[provider]
-            if (session != null && session.load() == null) {
+            val session = sessionStorages[provider] ?: continue
+            val current = session.load()
+            val migrated = if (current == null) {
                 session.save(token)
+                // save() is silent on failure, so the only proof is a read-back.
+                session.load() == token
+            } else {
+                true
             }
-            legacy.clear()
+            if (migrated) legacy.clear()
         }
     }
 }

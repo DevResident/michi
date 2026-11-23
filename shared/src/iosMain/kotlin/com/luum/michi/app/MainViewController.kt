@@ -1,6 +1,8 @@
 package com.luum.michi.app
 
 import androidx.compose.ui.window.ComposeUIViewController
+import com.luum.michi.app.core.auth.repository.KeychainInstallGuard
+import com.luum.michi.app.core.auth.repository.KeychainTokenStorage
 import com.luum.michi.app.core.auth.repository.NSUserDefaultsTokenStorage
 import com.luum.michi.app.core.auth.repository.SafariOAuthLauncher
 import com.luum.michi.app.core.auth.repository.linkedTokenKeyPrefix
@@ -40,9 +42,17 @@ private object IosMichiDependencies {
      * previous CoroutineScope + HttpClient nor re-trigger bootstrap.
      */
     @OptIn(kotlin.experimental.ExperimentalNativeApi::class)
-    fun getOrCreate(): MichiDependencies =
-        current ?: MichiDependencies(
+    fun getOrCreate(): MichiDependencies {
+        current?.let { return it }
+        // Must run before the Keychain storages read their items: a reinstall
+        // clears the marker and the old Keychain session with it.
+        KeychainInstallGuard.clearOnFreshInstall()
+        return MichiDependencies(
             tokenStorages = mapOf(
+                ProviderId.AniList to KeychainTokenStorage(ProviderId.AniList),
+                ProviderId.Mal to KeychainTokenStorage(ProviderId.Mal),
+            ),
+            legacySessionTokenStorages = mapOf(
                 ProviderId.AniList to NSUserDefaultsTokenStorage(ProviderId.AniList),
                 ProviderId.Mal to NSUserDefaultsTokenStorage(ProviderId.Mal),
             ),
@@ -68,4 +78,5 @@ private object IosMichiDependencies {
             current = it
             it.bootstrap()
         }
+    }
 }
