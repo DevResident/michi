@@ -27,8 +27,10 @@ private fun tokenKey(provider: ProviderId, suffix: String, keyPrefix: String?): 
 internal fun linkedTokenKeyPrefix(provider: ProviderId): String = "michi_link_${provider.value}"
 
 /**
- * Persists one provider's token in `NSUserDefaults`. Upgrade to Keychain for
- * defense in depth.
+ * Legacy storage for the old `NSUserDefaults` namespaces. On iOS the active
+ * session tokens now live in the Keychain; this class is kept for the one-time
+ * migration of `michi_anilist_*` / `michi_auth_mal_*` and the 11.6
+ * `michi_link_*` linked namespaces.
  */
 internal class NSUserDefaultsTokenStorage(
     private val provider: ProviderId,
@@ -71,6 +73,9 @@ internal class NSUserDefaultsTokenStorage(
         defaults.removeObjectForKey(tokenKey(provider, "expires_in_seconds", keyPrefix))
         defaults.removeObjectForKey(tokenKey(provider, "saved_at_epoch_seconds", keyPrefix))
         defaults.removeObjectForKey(tokenKey(provider, "refresh_token", keyPrefix))
+        // This class is migration-only now: make the removal durable immediately
+        // instead of waiting for NSUserDefaults' periodic flush.
+        defaults.synchronize()
         state.value = null
     }
 

@@ -59,6 +59,7 @@ import com.luum.michi.app.core.network.repository.KtorAniListGraphQLClient
 import com.luum.michi.app.core.network.repository.createAniListHttpClient
 import com.luum.michi.app.core.session.domain.AniListViewerRepository
 import com.luum.michi.app.core.session.domain.AccountEvents
+import com.luum.michi.app.core.session.domain.LegacySessionTokenMigration
 import com.luum.michi.app.core.session.domain.LegacyTokenMigration
 import com.luum.michi.app.core.session.domain.LinkedAccountManager
 import com.luum.michi.app.core.session.domain.PendingLinkStore
@@ -120,6 +121,8 @@ import com.luum.michi.app.mediaDetail.repository.ExternalLinkCatalogRepositoryIm
  */
 class MichiDependencies internal constructor(
     private val tokenStorages: Map<ProviderId, TokenStorage>,
+    /** Old iOS NSUserDefaults session namespaces; only the one-time migration reads them. */
+    private val legacySessionTokenStorages: Map<ProviderId, TokenStorage> = emptyMap(),
     /** Legacy 11.6 namespaces; only [legacyTokenMigration] reads/clears them. */
     private val legacyLinkedTokenStorages: Map<ProviderId, TokenStorage>,
     private val oAuthBrowser: OAuthBrowser,
@@ -185,6 +188,12 @@ class MichiDependencies internal constructor(
 
     private val pendingLinkStore: PendingLinkStore =
         SettingsStorePendingLinkStore(settingsStore)
+
+    private val legacySessionTokenMigration = LegacySessionTokenMigration(
+        providers = legacySessionTokenStorages.keys,
+        sessionStorages = tokenStorages,
+        legacySessionStorages = legacySessionTokenStorages,
+    )
 
     private val legacyTokenMigration = LegacyTokenMigration(
         providers = tokenStorages.keys + legacyLinkedTokenStorages.keys,
@@ -490,6 +499,7 @@ class MichiDependencies internal constructor(
     fun bootstrap() {
         clearLegacyDashboardCache(settingsStore)
         scope.launch {
+            legacySessionTokenMigration.migrate()
             legacyTokenMigration.migrate()
             linkedAccountManager.bootstrap()
             sessionManager.bootstrap()
