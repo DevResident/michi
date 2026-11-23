@@ -49,6 +49,7 @@ import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncSource
+import com.luum.michi.app.mirror.ui.state.MirrorSyncStateHolder
 import com.luum.michi.app.ui.components.AppButton
 import com.luum.michi.app.ui.components.ButtonEmphasis
 import com.luum.michi.app.ui.components.ModalSheet
@@ -75,6 +76,7 @@ private sealed interface AccountConfirm {
 internal fun AccountsScreen(
     state: AccountsUiState,
     coordinator: MirrorSyncSource,
+    previewHolder: MirrorSyncStateHolder? = null,
     bottomPadding: Dp,
     onConnect: (ProviderId) -> Unit,
     onDisconnect: (ProviderId) -> Unit,
@@ -97,12 +99,24 @@ internal fun AccountsScreen(
         lastFollowed = state.followed
         if (state.connected.size != 2) {
             holder.clear()
+            previewHolder?.invalidatePreview()
             return@LaunchedEffect
         }
         if (previous != null && previous != state.followed) {
             holder.clear()
-            if (state.autoCopy) holder.compare()
+            previewHolder?.invalidatePreview()
+            if (state.autoCopy) {
+                holder.compare()
+                holder.lastDiff?.let { previewHolder?.adopt(it) }
+            }
         }
+    }
+
+    // A save (or an explicit batch apply) changes the lists behind the preview.
+    // The revision only moves when something is actually enqueued, so a fresh
+    // dialog comparison is not thrown away by unrelated outbox progress.
+    LaunchedEffect(state.outbox.revision) {
+        if (state.outbox.revision > 0L) previewHolder?.invalidatePreview()
     }
 
     val other = state.other
@@ -134,7 +148,10 @@ internal fun AccountsScreen(
         else -> strings.accountsSyncUpToDate
     }
     val statusClick: (() -> Unit)? = when {
-        holder.error != null -> ({ scope.launch { holder.compare() } })
+        holder.error != null -> ({
+            previewHolder?.invalidatePreview()
+            onOpenPreview()
+        })
         state.outbox.withErrors > 0 || skippedParts.isNotEmpty() -> onOpenPreview
         else -> null
     }
@@ -239,10 +256,15 @@ internal fun AccountsScreen(
                         onCheckedChange = { enabled ->
                             if (enabled) {
                                 onSetAutoCopy(true)
-                                scope.launch { holder.compare() }
+                                previewHolder?.invalidatePreview()
+                                scope.launch {
+                                    holder.compare()
+                                    holder.lastDiff?.let { previewHolder?.adopt(it) }
+                                }
                             } else {
                                 onSetAutoCopy(false)
                                 holder.clear()
+                                previewHolder?.invalidatePreview()
                             }
                         },
                         status = statusText,
@@ -253,10 +275,16 @@ internal fun AccountsScreen(
                     SettingsRow(
                         label = strings.accountsCompareLists,
                         value = "",
+                        // The manual entry always opens the preview directly; the
+                        // page loads its own comparison and the dialog is reserved
+                        // for the automatic triggers.
                         onClick = if (holder.comparing) {
                             null
                         } else {
-                            { scope.launch { holder.compare() } }
+                            {
+                                previewHolder?.invalidatePreview()
+                                onOpenPreview()
+                            }
                         },
                     )
                 }
@@ -335,7 +363,11 @@ internal fun AccountsScreen(
             },
             confirmButton = {
                 TextButton(
-                    onClick = { scope.launch { holder.applyCatchUp() } },
+                    onClick = {
+                        scope.launch {
+                            holder.applyCatchUp { previewHolder?.invalidatePreview() }
+                        }
+                    },
                     enabled = !holder.applying,
                 ) {
                     Text(strings.accountsCompareApply)

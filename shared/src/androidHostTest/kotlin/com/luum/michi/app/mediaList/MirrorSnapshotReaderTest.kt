@@ -67,6 +67,7 @@ class MirrorSnapshotReaderTest {
         assertEquals(ProviderId.AniList, result.value.provider)
         assertEquals(20, entry.media.malId)
         assertEquals(10, entry.media.aniListId)
+        assertEquals("https://example.com/a.jpg", entry.media.cover?.large)
         assertEquals("note", entry.entry.notes)
         assertEquals(2, entry.entry.repeat)
         assertTrue(entry.entry.isPrivate)

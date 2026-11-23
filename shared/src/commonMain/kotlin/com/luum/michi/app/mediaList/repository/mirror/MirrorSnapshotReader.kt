@@ -12,6 +12,7 @@ import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.media.repository.MediaIdBridge
 import com.luum.michi.app.core.media.repository.bestTitle
 import com.luum.michi.app.core.media.repository.dto.FuzzyDateDto
+import com.luum.michi.app.core.media.repository.toCoverSizes
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MirrorDate
 import com.luum.michi.app.core.medialist.domain.MirrorEntry
@@ -21,6 +22,7 @@ import com.luum.michi.app.core.medialist.domain.MirrorSnapshotEntry
 import com.luum.michi.app.core.medialist.domain.MirrorTranslator
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.parseMediaListStatus
+import com.luum.michi.app.core.model.CoverSizes
 import com.luum.michi.app.core.network.domain.AniListGraphQLClient
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
@@ -203,7 +205,7 @@ internal class MirrorSnapshotReader(
                 malId = malId,
                 type = type,
                 title = dto.media.title?.bestTitle() ?: "AniList #${dto.media.id}",
-                coverUrl = dto.media.coverImage?.large ?: dto.media.coverImage?.medium,
+                cover = dto.media.coverImage?.toCoverSizes(),
                 totalEpisodes = dto.media.episodes,
                 totalChapters = dto.media.chapters,
                 totalVolumes = dto.media.volumes,
@@ -240,7 +242,10 @@ internal class MirrorSnapshotReader(
                 malId = malId,
                 type = type,
                 title = title,
-                coverUrl = node.pictureLarge ?: node.pictureMedium,
+                cover = CoverSizes(
+                    medium = node.pictureMedium,
+                    large = node.pictureLarge,
+                ),
                 totalEpisodes = if (type == MediaType.ANIME) node.episodes else null,
                 totalChapters = if (type == MediaType.MANGA) node.chapters else null,
                 totalVolumes = if (type == MediaType.MANGA) node.volumes else null,

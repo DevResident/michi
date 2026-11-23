@@ -31,6 +31,10 @@ internal class AccountsStateHolder(
     var error by mutableStateOf<NetworkError?>(null)
         private set
 
+    /** Last successful comparison, shared with the preview page so it is not read twice. */
+    var lastDiff by mutableStateOf<MirrorDiff?>(null)
+        private set
+
     private var request = 0
 
     val catchUpCount: Int get() = dialog?.catchUpRows?.size ?: 0
@@ -41,10 +45,12 @@ internal class AccountsStateHolder(
         error = null
         dialog = null
         skipped = null
+        lastDiff = null
         when (val result = coordinator.loadPreview()) {
             is NetworkResult.Success -> {
                 if (id != request) return
                 val diff = result.value
+                lastDiff = diff
                 if (diff.catchUpRows.isEmpty()) {
                     skipped = if (diff.newerInLinkedCount + diff.regressionCount > 0) {
                         CompareSkipped(
@@ -66,11 +72,13 @@ internal class AccountsStateHolder(
         if (id == request) comparing = false
     }
 
-    suspend fun applyCatchUp(): NetworkResult<Unit> {
+    suspend fun applyCatchUp(onApplied: () -> Unit = {}): NetworkResult<Unit> {
         val diff = dialog ?: return NetworkResult.Success(Unit)
         val rows = diff.catchUpRows
         if (rows.isEmpty()) {
             dialog = null
+            lastDiff = null
+            onApplied()
             return NetworkResult.Success(Unit)
         }
         applying = true
@@ -79,6 +87,10 @@ internal class AccountsStateHolder(
         applying = false
         if (result is NetworkResult.Success) {
             dialog = null
+            // The preview is now stale: applying from the dialog enqueued the
+            // same rows, so the next "View changes" must read the lists again.
+            lastDiff = null
+            onApplied()
         } else {
             error = (result as NetworkResult.Failure).error
         }
@@ -96,5 +108,6 @@ internal class AccountsStateHolder(
         dialog = null
         skipped = null
         error = null
+        lastDiff = null
     }
 }

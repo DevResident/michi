@@ -330,6 +330,34 @@ class MirrorOutboxTest {
     }
 
     @Test
+    fun aPreviewBatchBumpsTheRevision() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        val start = outbox.state.value.revision
+
+        outbox.beginBatch(listOf(MirrorBatchItem(outboxEntry(), AllMirrorFields)))
+
+        assertTrue(outbox.state.value.revision > start)
+        assertEquals(1, outbox.state.value.pending)
+    }
+
+    @Test
+    fun everyEnqueueBumpsThePreviewRevisionEvenWhenItCoalesces() = runBlocking {
+        val outbox = MirrorOutbox(InMemoryFileStore())
+        outbox.load()
+        val start = outbox.state.value.revision
+
+        outbox.enqueue(outboxEntry(progress = 1), AllMirrorFields)
+        val first = outbox.state.value.revision
+        outbox.enqueue(outboxEntry(progress = 2), setOf(MirrorField.PROGRESS))
+        val second = outbox.state.value.revision
+
+        assertTrue(first > start)
+        assertTrue(second > first, "a coalesced save still makes the preview stale")
+        assertEquals(1, outbox.state.value.pending)
+    }
+
+    @Test
     fun clearRemovesTheFileAndAllState() = runBlocking {
         val files = InMemoryFileStore()
         val outbox = MirrorOutbox(files)

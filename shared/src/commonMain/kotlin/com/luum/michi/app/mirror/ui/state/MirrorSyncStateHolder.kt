@@ -42,19 +42,38 @@ internal class MirrorSyncStateHolder(
         preview = null
         selectedKeys = emptySet()
         when (val result = coordinator.loadPreview()) {
-            is NetworkResult.Success -> {
-                val diff = result.value
-                preview = diff
-                selectedKeys = buildSet {
-                    diff.additions.forEach { add(it.key) }
-                    diff.updates
-                        .filterNot { it.newerInLinked || it.regression }
-                        .forEach { add(it.key) }
-                }
-            }
+            is NetworkResult.Success -> adopt(result.value)
             is NetworkResult.Failure -> error = result.error
         }
         loading = false
+    }
+
+    /**
+     * Reuses a comparison already produced by the Accounts dialog. The page
+     * only loads when it has nothing fresh to paint.
+     */
+    suspend fun loadIfStale() {
+        if (preview != null) return
+        load()
+    }
+
+    /** Takes a fresh diff from the Accounts compare flow, with the same defaults. */
+    fun adopt(diff: MirrorDiff) {
+        error = null
+        preview = diff
+        selectedKeys = buildSet {
+            diff.additions.forEach { add(it.key) }
+            diff.updates
+                .filterNot { it.newerInLinked || it.regression }
+                .forEach { add(it.key) }
+        }
+    }
+
+    /** Drops a comparison that can no longer be trusted (manual compare, save). */
+    fun invalidatePreview() {
+        preview = null
+        selectedKeys = emptySet()
+        error = null
     }
 
     fun toggle(row: MirrorPreviewRow) {

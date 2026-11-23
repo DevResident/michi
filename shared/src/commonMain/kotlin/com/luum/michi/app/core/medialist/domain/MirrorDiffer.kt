@@ -3,6 +3,7 @@ package com.luum.michi.app.core.medialist.domain
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.mal.domain.malStatusToMediaListStatus
+import com.luum.michi.app.core.model.CoverSizes
 import kotlin.math.abs
 
 /** One list row plus the catalog data the preview needs. */
@@ -11,7 +12,7 @@ internal data class MirrorMediaSummary(
     val malId: Int?,
     val type: MediaType,
     val title: String,
-    val coverUrl: String? = null,
+    val cover: CoverSizes? = null,
     val totalEpisodes: Int? = null,
     val totalChapters: Int? = null,
     val totalVolumes: Int? = null,

@@ -48,7 +48,7 @@ import com.luum.michi.app.core.model.CoverSizes
 internal fun MediaCoverCard(
     cover: CoverSizes?,
     title: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     titleTrailing: (@Composable () -> Unit)? = null,
@@ -59,69 +59,117 @@ internal fun MediaCoverCard(
     // Token for the cover (and the row height); the default keeps every
     // existing list/calendar/notification row identical.
     coverSize: CoverSize = CoverSize.List,
+    // Announce the work on the cover. Null keeps covers decorative.
+    coverContentDescription: String? = null,
     content: @Composable (ColumnScope.() -> Unit)? = null,
 ) {
     CardCappedDensity {
-        Surface(
-            onClick = onClick,
-            modifier = modifier.fillMaxWidth(),
-            shape = PanelShape,
-            border = flatBorder(),
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            // Fixed row height: bounded, so the text column distributes with
-            // weight and the cover keeps the standard 3:4 (no intrinsics — the
-            // SubcomposeLayout attempt crashed on Coil).
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(mediaCoverCardHeight(coverSize))
-                    .padding(MediaCoverCardPadding),
-                verticalAlignment = Alignment.CenterVertically,
+        val body: @Composable () -> Unit = {
+            MediaCoverCardBody(
+                cover = cover,
+                title = title,
+                subtitle = subtitle,
+                titleTrailing = titleTrailing,
+                titleMaxLines = titleMaxLines,
+                subtitleMaxLines = subtitleMaxLines,
+                coverSize = coverSize,
+                coverContentDescription = coverContentDescription,
+                content = content,
+            )
+        }
+        // A null onClick keeps the same card without a click affordance
+        // (informational rows such as the linked-only preview).
+        if (onClick != null) {
+            Surface(
+                onClick = onClick,
+                modifier = modifier.fillMaxWidth(),
+                shape = PanelShape,
+                border = flatBorder(),
+                color = MaterialTheme.colorScheme.surface,
             ) {
-                // Both dimensions come from the token; the row height derives
-                // from it, so the cover and the card can never drift apart.
-                CoverImage(cover = cover, size = coverSize)
-                Spacer(modifier = Modifier.width(12.dp))
-                // Header top-anchored, slot filling the rest: bottom pills
-                // terminate flush with the cover bottom. Bounded by the fixed Row
-                // height, so weight distributes (in wrap content it would collapse
-                // and float the pills, as before).
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    verticalArrangement = Arrangement.Top,
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = titleMaxLines,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (subtitle != null) {
-                                Text(
-                                    text = subtitle,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = subtitleMaxLines,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                        if (titleTrailing != null) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            titleTrailing()
-                        }
+                body()
+            }
+        } else {
+            Surface(
+                modifier = modifier.fillMaxWidth(),
+                shape = PanelShape,
+                border = flatBorder(),
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                body()
+            }
+        }
+    }
+}
+
+/** Shared interior of both the clickable and the informational card. */
+@Composable
+private fun MediaCoverCardBody(
+    cover: CoverSizes?,
+    title: String,
+    subtitle: String?,
+    titleTrailing: (@Composable () -> Unit)?,
+    titleMaxLines: Int,
+    subtitleMaxLines: Int,
+    coverSize: CoverSize,
+    coverContentDescription: String?,
+    content: (@Composable ColumnScope.() -> Unit)?,
+) {
+    // Fixed row height: bounded, so the text column distributes with
+    // weight and the cover keeps the standard 3:4 (no intrinsics — the
+    // SubcomposeLayout attempt crashed on Coil).
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(mediaCoverCardHeight(coverSize))
+            .padding(MediaCoverCardPadding),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Both dimensions come from the token; the row height derives
+        // from it, so the cover and the card can never drift apart.
+        CoverImage(
+            cover = cover,
+            size = coverSize,
+            contentDescription = coverContentDescription,
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        // Header top-anchored, slot filling the rest: bottom pills
+        // terminate flush with the cover bottom. Bounded by the fixed Row
+        // height, so weight distributes (in wrap content it would collapse
+        // and float the pills, as before).
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.Top,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = titleMaxLines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = subtitleMaxLines,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
-                    content?.invoke(this)
+                }
+                if (titleTrailing != null) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    titleTrailing()
                 }
             }
+            content?.invoke(this)
         }
     }
 }

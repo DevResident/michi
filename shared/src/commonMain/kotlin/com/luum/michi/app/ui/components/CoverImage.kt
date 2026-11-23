@@ -13,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import coil3.compose.SubcomposeAsyncImage
 import com.luum.michi.app.core.model.CoverSizes
@@ -25,7 +27,9 @@ import com.luum.michi.app.ui.theme.brandColor
  * `surfaceVariant`) placeholder behind the image, an optional [bordered] edge
  * and an [overlay] slot drawn on top. When there is no image (no URL, AniList's
  * default art already mapped to null, or a failed load) it also centers a muted
- * [AppIcons.Image], while a loading image stays a plain fill.
+ * [AppIcons.Image], while a loading image stays a plain fill. [contentDescription]
+ * is optional: decorative covers keep the default null, while a row that needs
+ * to announce its work passes the title.
  */
 @Composable
 internal fun CoverImage(
@@ -34,6 +38,7 @@ internal fun CoverImage(
     modifier: Modifier = Modifier,
     placeholderHex: String? = null,
     bordered: Boolean = false,
+    contentDescription: String? = null,
     overlay: (@Composable BoxScope.() -> Unit)? = null,
 ) {
     Box(
@@ -41,7 +46,14 @@ internal fun CoverImage(
             .coverSize(size)
             .clip(CoverShape)
             .background(placeholderHex?.let { brandColor(it) } ?: MaterialTheme.colorScheme.surfaceVariant)
-            .then(if (bordered) Modifier.border(flatBorder(), CoverShape) else Modifier),
+            .then(if (bordered) Modifier.border(flatBorder(), CoverShape) else Modifier)
+            .then(
+                if (contentDescription != null) {
+                    Modifier.semantics { this.contentDescription = contentDescription }
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         val url = rememberCoverUrl(cover, size)
         if (url.isNullOrBlank()) {

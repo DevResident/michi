@@ -117,6 +117,21 @@ class AccountsStateHolderTest {
     }
 
     @Test
+    fun applyingFromTheDialogInvalidatesTheAdoptedDiff() = runBlocking {
+        val source = FakeSyncSource(NetworkResult.Success(diff(row("safe"))))
+        val holder = AccountsStateHolder(source)
+
+        holder.compare()
+        assertNotNull(holder.lastDiff)
+
+        var invalidated = false
+        holder.applyCatchUp { invalidated = true }
+
+        assertTrue(invalidated)
+        assertNull(holder.lastDiff)
+    }
+
+    @Test
     fun noApplicableRowsSkipTheDialogAndExposeTheSkippedCounts() = runBlocking {
         val source = FakeSyncSource(
             NetworkResult.Success(

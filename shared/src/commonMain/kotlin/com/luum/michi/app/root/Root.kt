@@ -318,6 +318,7 @@ internal fun Root(
                                 AccountsScreen(
                                     state = accounts,
                                     coordinator = mirrorSyncCoordinator,
+                                    previewHolder = holders.mirrorSync,
                                     bottomPadding = padding.calculateBottomPadding(),
                                     onConnect = onConnectAccount,
                                     onDisconnect = onDisconnectAccount,

@@ -1,6 +1,7 @@
 package com.luum.michi.app.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luum.michi.app.ui.icons.AppIcons
 
@@ -27,7 +29,8 @@ import com.luum.michi.app.ui.icons.AppIcons
  * set [divider]=false on the first row of a group. Shared by Settings and by
  * Explore's studio results (settings look: name + "Anime studio"/"Producer").
  * Optional leading [icon] (20dp, onSurfaceVariant) and a [supportingText] line
- * under the label (About page rows).
+ * under the label (About page rows). The label keeps priority: the value is the
+ * one that ellipsizes when the row is narrow or the font scale is large.
  */
 @Composable
 internal fun SettingsRow(
@@ -70,7 +73,11 @@ internal fun SettingsRow(
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                 }
-                Column(modifier = Modifier.weight(1f)) {
+                // The label is measured first, so it keeps its full width and
+                // the value is the one that ellipsizes on a narrow row (or at
+                // a large font scale). The trailing slot fills the remaining
+                // width so a short value still sits against the chevron.
+                Column {
                     Text(
                         text = label,
                         style = MaterialTheme.typography.bodyLarge,
@@ -83,22 +90,32 @@ internal fun SettingsRow(
                         )
                     }
                 }
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = valueColor,
-                )
-                if (trailing != null) {
-                    // The overlay's footprint: 48dp touch target + the usual 8dp gap.
-                    Spacer(modifier = Modifier.width(TrailingSlotWidth))
-                } else if (onClick != null) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = AppIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
+                Spacer(modifier = Modifier.width(16.dp))
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = valueColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
+                    if (trailing != null) {
+                        // The overlay's footprint: 48dp touch target + the usual 8dp gap.
+                        Spacer(modifier = Modifier.width(TrailingSlotWidth))
+                    } else if (onClick != null) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = AppIcons.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
             if (trailing != null) {

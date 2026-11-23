@@ -5,18 +5,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,10 +36,12 @@ import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.mirror.ui.model.summaryLine
 import com.luum.michi.app.mirror.ui.state.MirrorSyncStateHolder
 import com.luum.michi.app.ui.components.AppButton
-import com.luum.michi.app.ui.components.Avatar
 import com.luum.michi.app.ui.components.ButtonEmphasis
+import com.luum.michi.app.ui.components.CoverSize
+import com.luum.michi.app.ui.components.MediaCoverCard
 import com.luum.michi.app.ui.components.MessagePanel
 import com.luum.michi.app.ui.components.OptionGroup
+import com.luum.michi.app.ui.components.SectionHeader
 import com.luum.michi.app.ui.icons.AppIcons
 import com.luum.michi.app.ui.language.Strings
 import com.luum.michi.app.ui.theme.LocalWarning
@@ -64,7 +62,9 @@ internal fun MirrorSyncScreen(
     strings: LanguageStrings = Strings.current,
     modifier: Modifier = Modifier,
 ) {
-    LaunchedEffect(Unit) { holder.load() }
+    // Reuse the comparison the Accounts dialog already produced; a manual
+    // "Compare lists" invalidates it first, so this still loads a fresh one.
+    LaunchedEffect(Unit) { holder.loadIfStale() }
     val scope = rememberCoroutineScope()
     val preview = holder.preview
 
@@ -167,9 +167,9 @@ internal fun MirrorSyncScreen(
 
                 if (preview.additions.isNotEmpty()) {
                     item(key = "add-title") {
-                        Text(
-                            text = "${strings.mirrorSyncAddSection} · ${preview.additions.size}",
-                            style = MaterialTheme.typography.titleMedium,
+                        SectionHeader(
+                            title = "${strings.mirrorSyncAddSection} · ${preview.additions.size}",
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                     items(preview.additions, key = { "add-${it.key}" }) { row ->
@@ -186,9 +186,9 @@ internal fun MirrorSyncScreen(
 
                 if (preview.updates.isNotEmpty()) {
                     item(key = "update-title") {
-                        Text(
-                            text = "${strings.mirrorSyncUpdateSection} · ${preview.updates.size}",
-                            style = MaterialTheme.typography.titleMedium,
+                        SectionHeader(
+                            title = "${strings.mirrorSyncUpdateSection} · ${preview.updates.size}",
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                     items(preview.updates, key = { "update-${it.key}" }) { row ->
@@ -216,9 +216,9 @@ internal fun MirrorSyncScreen(
 
                 if (preview.linkedOnly.isNotEmpty()) {
                     item(key = "linked-only-title") {
-                        Text(
-                            text = "${strings.mirrorSyncLinkedOnlySection} · ${preview.linkedOnly.size}",
-                            style = MaterialTheme.typography.titleMedium,
+                        SectionHeader(
+                            title = "${strings.mirrorSyncLinkedOnlySection} · ${preview.linkedOnly.size}",
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                     items(preview.linkedOnly, key = { "linked-${it.media.type}-${it.media.malId}" }) { row ->
@@ -262,57 +262,49 @@ private fun MirrorPreviewRowItem(
     scoreFormat: ScoreFormat,
     onToggle: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    // The whole row toggles the check: a review page never navigates away and
+    // loses the selection. The checkbox is the 48dp explicit control.
+    MediaCoverCard(
+        cover = row.media.cover,
+        title = row.media.title,
+        subtitle = row.summaryLine(strings, scoreFormat = scoreFormat),
+        onClick = { if (enabled) onToggle() },
+        coverSize = CoverSize.List,
+        titleMaxLines = 2,
+        subtitleMaxLines = 1,
+        coverContentDescription = row.media.title,
+        titleTrailing = {
             Checkbox(
                 checked = checked,
                 onCheckedChange = { onToggle() },
                 enabled = enabled,
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Avatar(
-                imageUrl = row.media.coverUrl,
-                initials = row.media.title.take(1).uppercase(),
-                size = 40.dp,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = row.media.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = row.summaryLine(strings, scoreFormat = scoreFormat),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (row.newerInLinked) {
-                    Text(
-                        text = strings.mirrorSyncNewerInLinked,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LocalWarning.current,
-                    )
-                }
-                if (row.regression) {
-                    Text(
-                        text = strings.mirrorSyncRegression,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LocalWarning.current,
-                    )
+        },
+        content = {
+            if (row.newerInLinked || row.regression) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (row.newerInLinked) {
+                        Text(
+                            text = strings.mirrorSyncNewerInLinked,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LocalWarning.current,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (row.regression) {
+                        Text(
+                            text = strings.mirrorSyncRegression,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LocalWarning.current,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    }
+        },
+    )
 }
 
 /**
@@ -322,38 +314,18 @@ private fun MirrorPreviewRowItem(
  */
 @Composable
 private fun LinkedOnlyRow(row: MirrorLinkedOnlyRow, strings: LanguageStrings) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Avatar(
-                imageUrl = row.media.coverUrl,
-                initials = row.media.title.take(1).uppercase(),
-                size = 40.dp,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = row.media.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = row.values.status?.label(
-                        strings,
-                        isManga = row.media.type == MediaType.MANGA,
-                    ) ?: "—",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    }
+    MediaCoverCard(
+        cover = row.media.cover,
+        title = row.media.title,
+        subtitle = row.values.status?.label(
+            strings,
+            isManga = row.media.type == MediaType.MANGA,
+        ) ?: "—",
+        // Informational: it has no check or destination.
+        onClick = null,
+        coverSize = CoverSize.List,
+        titleMaxLines = 2,
+        subtitleMaxLines = 1,
+        coverContentDescription = row.media.title,
+    )
 }
