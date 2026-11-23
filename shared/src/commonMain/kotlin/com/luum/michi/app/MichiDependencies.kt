@@ -42,6 +42,8 @@ import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.parseScoreFormat
 import com.luum.michi.app.core.medialist.repository.MirrorOutbox
+import com.luum.michi.app.core.medialist.repository.clearMirrorOutbox
+import com.luum.michi.app.core.medialist.repository.migrateMirrorOutbox
 import com.luum.michi.app.mediaList.repository.mirror.AniListMirrorWriter
 import com.luum.michi.app.mediaList.repository.mirror.MalMirrorWriter
 import com.luum.michi.app.mediaList.repository.mirror.MirrorController
@@ -124,8 +126,10 @@ class MichiDependencies internal constructor(
     internal val urlOpener: UrlOpener,
     internal val shareLauncher: ShareLauncher,
     internal val settingsStore: SettingsStore,
-    /** Cache-sized files (saved lists); see [FileStore]. */
+    /** Cache-sized files (saved lists); the OS may wipe this folder. */
     internal val fileStore: FileStore,
+    /** Durable files that must survive a cache clear (the mirror outbox). */
+    internal val durableFileStore: FileStore,
     /** Network metering for AUTO image quality; platform impls override it. */
     internal val connectivity: Connectivity = AlwaysUnmeteredConnectivity(),
     /** Debug builds log GraphQL timing and MAL's unmatched-id counts. */
@@ -188,7 +192,7 @@ class MichiDependencies internal constructor(
         legacyStorages = legacyLinkedTokenStorages,
     )
 
-    private val mirrorOutbox: MirrorOutbox = MirrorOutbox(fileStore)
+    private val mirrorOutbox: MirrorOutbox = MirrorOutbox(durableFileStore)
 
     /** Ephemeral account notices; the UI paints them as a short pill. */
     internal val accountEvents: AccountEvents = AccountEvents()
@@ -447,7 +451,8 @@ class MichiDependencies internal constructor(
             linkedAccounts = linkedAccountManager,
             // A replaced/closed session invalidates every queued copy.
             onSessionClosed = {
-                mirrorOutbox.clear()
+                // Also removes a legacy cache copy left by a failed migration.
+                clearMirrorOutbox(mirrorOutbox, fileStore)
                 mirrorController.pause()
                 malEntryClient.clear()
                 linkedMalEntryClient.clear()
@@ -486,6 +491,7 @@ class MichiDependencies internal constructor(
             legacyTokenMigration.migrate()
             linkedAccountManager.bootstrap()
             sessionManager.bootstrap()
+            migrateMirrorOutbox(fileStore, durableFileStore)
             mirrorController.start()
         }
     }

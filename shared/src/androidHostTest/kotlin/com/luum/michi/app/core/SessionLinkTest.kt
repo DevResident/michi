@@ -10,6 +10,9 @@ import com.luum.michi.app.core.auth.domain.InMemoryTokenStorage
 import com.luum.michi.app.core.auth.domain.currentEpochSeconds
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
+import com.luum.michi.app.core.medialist.repository.MirrorOutbox
+import com.luum.michi.app.core.medialist.repository.MirrorOutboxFileName
+import com.luum.michi.app.core.medialist.repository.clearMirrorOutbox
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.session.domain.AccountEvent
@@ -20,6 +23,7 @@ import com.luum.michi.app.core.session.domain.PendingLink
 import com.luum.michi.app.core.session.domain.PendingLinkTtlSeconds
 import com.luum.michi.app.core.session.domain.SessionState
 import com.luum.michi.app.core.session.domain.Viewer
+import com.luum.michi.app.mediaList.InMemoryFileStore
 import com.luum.michi.app.testLinkedAccountManager
 import com.luum.michi.app.testSessionManager
 import kotlinx.coroutines.CoroutineStart
@@ -488,6 +492,26 @@ class SessionLinkTest {
     }
 
     @Test
+    fun logoutClearsTheDurableOutboxAndTheLegacyCacheCopy() = runBlocking {
+        val durable = InMemoryFileStore()
+        val cache = InMemoryFileStore()
+        durable.put(MirrorOutboxFileName, "durable")
+        cache.put(MirrorOutboxFileName, "legacy")
+        val outbox = MirrorOutbox(durable)
+        val storage = InMemoryTokenStorage().apply { save(freshToken("anilist-token")) }
+        val manager = testSessionManager(
+            storage = storage,
+            onSessionClosed = { clearMirrorOutbox(outbox, cache) },
+        )
+        manager.bootstrap()
+
+        manager.logout()
+
+        assertFalse(durable.contains(MirrorOutboxFileName))
+        assertFalse(cache.contains(MirrorOutboxFileName))
+    }
+
+    @Test
     fun bootstrapRestoresBothConnectedAccounts() = runBlocking {
         val h = harness(withMal = true, withOtherMal = true)
         h.bootstrap()
@@ -505,6 +529,49 @@ class SessionLinkTest {
         assertEquals(ProviderId.AniList, h.session.followed.value)
         assertNull(h.sessionMal.load())
         assertNull(h.linked.linked.value)
+    }
+
+    @Test
+    fun aFreshInstallWithRestoredLinkSettingsClearsThemSilently() = runBlocking {
+        val h = harness(withAniList = false, withMal = false, withOtherMal = true)
+        h.linkedStore.autoCopy = true
+        h.linkedStore.lostAccess = ProviderId.Mal
+        val events = mutableListOf<AccountEvent>()
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            h.events.events.collect { events += it }
+        }
+
+        h.bootstrap()
+        kotlinx.coroutines.yield()
+        job.cancel()
+
+        assertTrue(h.session.state.value is SessionState.Anonymous)
+        assertNull(h.linked.linked.value)
+        assertFalse(h.linked.autoCopy.value)
+        assertNull(h.linked.lostAccess.value)
+        assertNull(h.linkedStore.account)
+        assertFalse(h.linkedStore.autoCopy)
+        assertNull(h.linkedStore.lostAccess)
+        assertTrue(events.none { it is AccountEvent.LostAccess })
+        assertTrue(h.disconnected.isEmpty())
+        assertTrue(h.wiped.isEmpty())
+    }
+
+    @Test
+    fun aMissingOtherTokenStillShowsLostAccess() = runBlocking {
+        val h = harness(withAniList = true, withMal = false, withOtherMal = true)
+
+        h.bootstrap()
+
+        val state = h.session.state.value
+        assertTrue(state is SessionState.Authenticated)
+        assertEquals(ProviderId.AniList, state.provider)
+        assertNull(h.linked.linked.value)
+        assertFalse(h.linked.autoCopy.value)
+        assertEquals(ProviderId.Mal, h.linked.lostAccess.value)
+        assertEquals(listOf(ProviderId.Mal), h.disconnected)
+        assertEquals(ProviderId.Mal, h.wiped.single().first)
+        assertEquals(42, h.wiped.single().second)
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.repository.IosUrlOpener
 import com.luum.michi.app.core.platform.repository.IosShareLauncher
 import com.luum.michi.app.core.storage.repository.NSUserDefaultsSettingsStore
+import com.luum.michi.app.core.storage.repository.IosDurableFileStore
 import com.luum.michi.app.core.storage.repository.IosFileStore
 import com.luum.michi.app.core.platform.repository.IosConnectivity
 import kotlin.native.Platform
@@ -60,6 +61,7 @@ private object IosMichiDependencies {
             shareLauncher = IosShareLauncher(),
             settingsStore = NSUserDefaultsSettingsStore(),
             fileStore = IosFileStore(),
+            durableFileStore = IosDurableFileStore(isDebug = Platform.isDebugBinary),
             connectivity = IosConnectivity(),
             isDebug = Platform.isDebugBinary,
         ).also {

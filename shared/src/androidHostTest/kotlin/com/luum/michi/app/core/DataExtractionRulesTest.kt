@@ -44,7 +44,27 @@ class DataExtractionRulesTest {
                 .toSet()
             assertTrue(
                 "cache/michi_cache/" in rootPaths,
-                "the mirror/list cache is not excluded in <$section>",
+                "the list cache is not excluded in <$section>",
+            )
+        }
+    }
+
+    @Test
+    fun theDurableMirrorOutboxIsExcludedFromBackupAndTransfer() {
+        val rules = rulesFile()
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(rules)
+        for (section in listOf("cloud-backup", "device-transfer")) {
+            val node = document.getElementsByTagName(section).item(0) as? Element
+                ?: error("$section is missing from ${rules.path}")
+            val excludes = node.getElementsByTagName("exclude")
+            val filePaths = (0 until excludes.length)
+                .map { excludes.item(it) as Element }
+                .filter { it.getAttribute("domain") == "file" }
+                .map { it.getAttribute("path") }
+                .toSet()
+            assertTrue(
+                "michi_durable/" in filePaths,
+                "the durable mirror outbox is not excluded in <$section>",
             )
         }
     }

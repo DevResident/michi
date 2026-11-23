@@ -9,6 +9,7 @@ import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.repository.AndroidUrlOpener
 import com.luum.michi.app.core.platform.repository.AndroidShareLauncher
 import com.luum.michi.app.core.storage.repository.SharedPreferencesSettingsStore
+import com.luum.michi.app.core.storage.repository.AndroidDurableFileStore
 import com.luum.michi.app.core.storage.repository.AndroidFileStore
 import com.luum.michi.app.core.platform.repository.AndroidConnectivity
 
@@ -41,6 +42,7 @@ fun createMichiDependencies(context: Context): MichiDependencies = MichiDependen
     shareLauncher = AndroidShareLauncher(context.applicationContext),
     settingsStore = SharedPreferencesSettingsStore(context.applicationContext),
     fileStore = AndroidFileStore(context.applicationContext),
+    durableFileStore = AndroidDurableFileStore(context.applicationContext),
     connectivity = AndroidConnectivity(context.applicationContext),
     isDebug = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0,
 )

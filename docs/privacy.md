@@ -10,6 +10,7 @@ Michi is a free, open-source, unofficial client for [AniList](https://anilist.co
 - **Your AniList and MyAnimeList access and refresh tokens**, one per connected account. Each token is stored only on your device, is never sent anywhere except to its own provider, and is excluded from Android cloud backups and device transfers. Disconnecting that account or signing out deletes it.
 - **Your app settings** (language, theme, start tab and similar preferences).
 - **A cache** of your lists, your profile and images, so the app opens fast and works while the network is slow. You can remove it at any time by clearing the app's storage or uninstalling Michi.
+- **A durable copy queue** for list changes waiting to reach your other connected account. It can contain notes, scores, dates and progress. It lives in the app's private files, outside the cache, and is excluded from Android cloud backups/device transfers and from iOS backups. Signing out clears it; disconnecting an account drops the copies aimed at that account.
 
 ## What Michi sends, and to whom
 
@@ -45,6 +46,7 @@ Michi es un cliente no oficial, gratuito y de código abierto para [AniList](htt
 - **Tus tokens de acceso y de renovación de AniList y de MyAnimeList**, uno por cada cuenta conectada. Cada token se guarda solo en tu dispositivo, nunca se envía a nadie salvo a su propio proveedor y queda fuera de las copias de seguridad en la nube y de las transferencias entre dispositivos de Android. Al desconectar esa cuenta o cerrar sesión se borra.
 - **Tus ajustes de la app** (idioma, tema, pestaña de inicio y preferencias parecidas).
 - **Una caché** de tus listas, tu perfil e imágenes, para que la app abra rápido y funcione con una red lenta. Puedes borrarla cuando quieras limpiando el almacenamiento de la app o desinstalando Michi.
+- **Una cola durable** de cambios de lista pendientes de llegar a tu otra cuenta conectada. Puede contener notas, puntuaciones, fechas y progreso. Vive en los archivos privados de la app, fuera de la caché, y queda excluida de las copias de seguridad y transferencias de Android y de las copias de iOS. Al cerrar sesión se borra; al desconectar una cuenta se descartan las copias dirigidas a ella.
 
 ## Qué envía Michi y a quién
 

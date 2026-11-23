@@ -12,6 +12,7 @@ import com.luum.michi.app.core.medialist.repository.MirrorOutbox
 import com.luum.michi.app.core.medialist.repository.MirrorBatchItem
 import com.luum.michi.app.core.medialist.repository.MirrorOutboxFileName
 import com.luum.michi.app.core.medialist.repository.MirrorOutboxKey
+import com.luum.michi.app.core.medialist.repository.migrateMirrorOutbox
 import com.luum.michi.app.mediaList.InMemoryFileStore
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -63,6 +64,38 @@ class MirrorOutboxTest {
         val due = assertNotNull(restarted.nextDue(now = 0L))
         assertEquals(10, due.entry.aniListId)
         assertEquals(AllMirrorFields, due.fields)
+    }
+
+    @Test
+    fun legacyCacheOutboxMovesToTheDurableStore() = runBlocking {
+        val cache = InMemoryFileStore()
+        val durable = InMemoryFileStore()
+        val legacy = MirrorOutbox(cache)
+        legacy.load()
+        legacy.enqueue(outboxEntry(), AllMirrorFields)
+        assertTrue(cache.contains(MirrorOutboxFileName))
+
+        migrateMirrorOutbox(cache, durable)
+
+        assertFalse(cache.contains(MirrorOutboxFileName))
+        val moved = MirrorOutbox(durable)
+        moved.load()
+        assertEquals(1, moved.state.value.pending)
+        assertEquals(AllMirrorFields, assertNotNull(moved.nextDue(now = 0L)).fields)
+    }
+
+    @Test
+    fun migrationNeverOverwritesTheDurableCopyAndIsIdempotent() = runBlocking {
+        val cache = InMemoryFileStore()
+        val durable = InMemoryFileStore()
+        cache.put(MirrorOutboxFileName, "legacy")
+        durable.put(MirrorOutboxFileName, "durable")
+
+        migrateMirrorOutbox(cache, durable)
+        migrateMirrorOutbox(cache, durable)
+
+        assertEquals("durable", durable.read(MirrorOutboxFileName))
+        assertFalse(cache.contains(MirrorOutboxFileName))
     }
 
     @Test
