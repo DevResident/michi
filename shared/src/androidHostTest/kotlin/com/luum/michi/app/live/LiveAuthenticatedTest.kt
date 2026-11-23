@@ -22,6 +22,7 @@ import com.luum.michi.app.mediaList.repository.manga.MangaListRepositoryImpl
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
+import org.junit.Assume.assumeTrue
 import kotlin.test.assertTrue
 import com.luum.michi.app.core.session.domain.CachedViewerStore
 import com.luum.michi.app.core.session.domain.Viewer
@@ -34,9 +35,12 @@ import com.luum.michi.app.core.session.domain.Viewer
  * with LIVE_API_CHECK=1 also set (anonymous suite shares the filter).
  * Asserts are structural, never data values. Never log the token.
  */
-private fun requireToken(): String =
-    System.getenv("ANILIST_TEST_TOKEN")?.takeIf { it.isNotBlank() }
-        ?: error("Missing ANILIST_TEST_TOKEN (set anilistTestToken in local.properties)")
+private fun requireToken(): String {
+    val token = System.getenv("ANILIST_TEST_TOKEN")?.takeIf { it.isNotBlank() }
+    // Opt-in: without a token (e.g. CI) the suite is skipped, not failed.
+    assumeTrue("Set anilistTestToken in local.properties to run live authenticated checks", token != null)
+    return token!!
+}
 
 private class LiveStack(private val token: String) {
     private val storage = InMemoryTokenStorage()
