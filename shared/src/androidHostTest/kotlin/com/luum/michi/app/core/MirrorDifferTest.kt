@@ -290,6 +290,93 @@ class MirrorDifferTest {
     }
 
     @Test
+    fun coarseSmileyDifferencesAreProposed() {
+        val oneSmileyAgainstFour = diff(
+            primary = snapshot(
+                ProviderId.AniList,
+                entry(score = 1f, scoreFormat = ScoreFormat.POINT_3_SMILEYS),
+            ),
+            linked = snapshot(ProviderId.Mal, malEntry(score = 4f)),
+        )
+        assertEquals(
+            setOf(MirrorField.SCORE),
+            oneSmileyAgainstFour.updates.single().changedFields,
+            "one smiley writes MAL 3, so MAL 4 is a real difference",
+        )
+
+        val twoSmileysAgainstSix = diff(
+            primary = snapshot(
+                ProviderId.AniList,
+                entry(score = 2f, scoreFormat = ScoreFormat.POINT_3_SMILEYS),
+            ),
+            linked = snapshot(ProviderId.Mal, malEntry(score = 6f)),
+        )
+        assertEquals(
+            setOf(MirrorField.SCORE),
+            twoSmileysAgainstSix.updates.single().changedFields,
+            "two smileys write MAL 7, so MAL 6 is a real difference",
+        )
+    }
+
+    @Test
+    fun malPoint3ProjectsToTheNearestSmiley() {
+        val malFourAgainstOneSmiley = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 4f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 1f, scoreFormat = ScoreFormat.POINT_3_SMILEYS),
+            ),
+            format = ScoreFormat.POINT_3_SMILEYS,
+        )
+        assertTrue(
+            malFourAgainstOneSmiley.updates.isEmpty(),
+            "MAL 4 projects to one smiley, so writing it changes nothing",
+        )
+
+        val malSevenAgainstTwoSmileys = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 7f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 2f, scoreFormat = ScoreFormat.POINT_3_SMILEYS),
+            ),
+            format = ScoreFormat.POINT_3_SMILEYS,
+        )
+        assertTrue(
+            malSevenAgainstTwoSmileys.updates.isEmpty(),
+            "MAL 7 projects to two smileys, so writing it changes nothing",
+        )
+    }
+
+    @Test
+    fun malSevenAgainstFourStarsOnlyUpdatesWhenMalIsTheTarget() {
+        val toAniList = diffToAniList(
+            primary = snapshot(ProviderId.Mal, malEntry(score = 7f)),
+            linked = snapshot(
+                ProviderId.AniList,
+                entry(score = 4f, scoreFormat = ScoreFormat.POINT_5_STARS),
+            ),
+            format = ScoreFormat.POINT_5_STARS,
+        )
+        assertTrue(
+            toAniList.updates.isEmpty(),
+            "the star target cannot represent MAL 7 differently from 8",
+        )
+
+        val toMal = diff(
+            primary = snapshot(
+                ProviderId.AniList,
+                entry(score = 4f, scoreFormat = ScoreFormat.POINT_5_STARS),
+            ),
+            linked = snapshot(ProviderId.Mal, malEntry(score = 7f)),
+        )
+        assertEquals(
+            setOf(MirrorField.SCORE),
+            toMal.updates.single().changedFields,
+            "4 stars write MAL 8, so MAL 7 is a real difference",
+        )
+    }
+
+    @Test
     fun notesDifferingDoesCreateAnUpdate() {
         val result = diff(
             snapshot(ProviderId.AniList, entry(notes = "new note")),
