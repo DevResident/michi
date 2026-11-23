@@ -354,7 +354,6 @@ object EnglishStrings : LanguageStrings {
     override fun accountsCompareSkippedRegression(count: Int): String =
         if (count == 1) "1 stays as it is: it would move backwards" else
             "$count stay as they are: they would move backwards"
-    override val accountsCompareApply = "Catch up"
     override val accountsCompareView = "View changes"
     override val accountsCompareLater = "Not now"
     override val accountsConnect = "Connect"

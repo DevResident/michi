@@ -14,15 +14,13 @@ internal data class CompareSkipped(
 )
 
 /**
- * The compare/catch-up flow of the Accounts page. The actual copy keeps running
- * in the app-scoped mirror controller, so leaving the page never stops it.
+ * The automatic compare flow of the Accounts page: it only reads and opens the
+ * review dialog. Applying always happens on the Compare lists page.
  */
 internal class AccountsStateHolder(
     private val coordinator: MirrorSyncSource,
 ) {
     var comparing by mutableStateOf(false)
-        private set
-    var applying by mutableStateOf(false)
         private set
     var dialog by mutableStateOf<MirrorDiff?>(null)
         private set
@@ -36,8 +34,6 @@ internal class AccountsStateHolder(
         private set
 
     private var request = 0
-
-    val catchUpCount: Int get() = dialog?.catchUpRows?.size ?: 0
 
     suspend fun compare() {
         val id = ++request
@@ -75,32 +71,9 @@ internal class AccountsStateHolder(
         }
     }
 
-    suspend fun applyCatchUp(onApplied: () -> Unit = {}): NetworkResult<Unit> {
-        val diff = dialog ?: return NetworkResult.Success(Unit)
-        val rows = diff.catchUpRows
-        if (rows.isEmpty()) {
-            dialog = null
-            lastDiff = null
-            onApplied()
-            return NetworkResult.Success(Unit)
-        }
-        applying = true
-        error = null
-        try {
-            val result = coordinator.apply(rows)
-            if (result is NetworkResult.Success) {
-                dialog = null
-                // The preview is now stale: applying from the dialog enqueued the
-                // same rows, so the next "View changes" must read the lists again.
-                lastDiff = null
-                onApplied()
-            } else {
-                error = (result as NetworkResult.Failure).error
-            }
-            return result
-        } finally {
-            applying = false
-        }
+    /** The automatic dialog only inspects; it never writes to the other account. */
+    fun viewChanges() {
+        dialog = null
     }
 
     fun dismissDialog() {
@@ -110,7 +83,6 @@ internal class AccountsStateHolder(
     fun clear() {
         request++
         comparing = false
-        applying = false
         dialog = null
         skipped = null
         error = null

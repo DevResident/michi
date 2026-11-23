@@ -341,40 +341,21 @@ internal fun AccountsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    holder.error?.let { error ->
-                        Text(
-                            text = strings.networkErrorMessage(error),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LocalWarning.current,
-                        )
-                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch {
-                            holder.applyCatchUp { previewHolder?.invalidatePreview() }
-                        }
+                        holder.viewChanges()
+                        onOpenPreview()
                     },
-                    enabled = !holder.applying,
                 ) {
-                    Text(strings.accountsCompareApply)
+                    Text(strings.accountsCompareView)
                 }
             },
             dismissButton = {
-                Row {
-                    TextButton(onClick = { holder.dismissDialog() }) {
-                        Text(strings.accountsCompareLater)
-                    }
-                    TextButton(
-                        onClick = {
-                            holder.dismissDialog()
-                            onOpenPreview()
-                        },
-                    ) {
-                        Text(strings.accountsCompareView)
-                    }
+                TextButton(onClick = { holder.dismissDialog() }) {
+                    Text(strings.accountsCompareLater)
                 }
             },
         )

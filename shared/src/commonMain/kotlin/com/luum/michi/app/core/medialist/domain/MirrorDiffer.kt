@@ -148,7 +148,15 @@ internal object MirrorDiffer {
                 return@forEach
             }
             val effectiveAfter = protectEmptyFields(after, before)
-            val changed = changedFields(effectiveAfter, before)
+            val scoreEquivalent =
+                abs(effectiveAfter.score - before.score) <= 0.01f ||
+                    MirrorTranslator.scoresEquivalent(
+                        first = source.entry.score,
+                        firstFormat = source.entry.scoreFormat,
+                        second = target.entry.score,
+                        secondFormat = target.entry.scoreFormat,
+                    )
+            val changed = changedFields(effectiveAfter, before, scoreEquivalent)
             if (changed.isEmpty()) return@forEach
             updates += MirrorPreviewRow(
                 key = key,
@@ -314,11 +322,14 @@ internal object MirrorDiffer {
     private fun changedFields(
         after: MirrorPreviewValues,
         before: MirrorPreviewValues,
+        scoreEquivalent: Boolean,
     ): Set<MirrorField> = buildSet {
         if (after.status != before.status) add(MirrorField.STATUS)
         if (after.progress != before.progress) add(MirrorField.PROGRESS)
         if (after.progressVolumes != before.progressVolumes) add(MirrorField.PROGRESS_VOLUMES)
-        if (abs(after.score - before.score) > 0.01f) add(MirrorField.SCORE)
+        if (!scoreEquivalent && abs(after.score - before.score) > 0.01f) {
+            add(MirrorField.SCORE)
+        }
         if (after.notes != before.notes) add(MirrorField.NOTES)
         if (after.priority != before.priority) add(MirrorField.PRIORITY)
         if (after.repeat != before.repeat) add(MirrorField.REPEAT)

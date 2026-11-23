@@ -356,7 +356,6 @@ object SpanishStrings : LanguageStrings {
     override fun accountsCompareSkippedRegression(count: Int): String =
         if (count == 1) "1 se queda como está: sería un retroceso" else
             "$count se quedan como están: serían retrocesos"
-    override val accountsCompareApply = "Poner al día"
     override val accountsCompareView = "Ver cambios"
     override val accountsCompareLater = "Ahora no"
     override val accountsConnect = "Conectar"

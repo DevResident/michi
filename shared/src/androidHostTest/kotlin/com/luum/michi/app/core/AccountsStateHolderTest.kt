@@ -128,7 +128,7 @@ class AccountsStateHolderTest {
     }
 
     @Test
-    fun aSafeDifferenceOpensTheDialogAndCatchUpAppliesOnlyThoseRows() = runBlocking {
+    fun aSafeDifferenceOpensTheDialogWithoutApplyingAnything(): Unit = runBlocking {
         val safe = row("safe")
         val newer = row("newer", newer = true)
         val regression = row("regression", regression = true)
@@ -138,28 +138,22 @@ class AccountsStateHolderTest {
         holder.compare()
 
         assertNotNull(holder.dialog)
-        assertEquals(1, holder.catchUpCount)
         assertNull(holder.skipped)
-
-        holder.applyCatchUp()
-
-        assertEquals(listOf("safe"), source.applied?.map { it.key })
-        assertNull(holder.dialog)
+        assertNull(source.applied, "opening the automatic dialog never writes")
+        assertNotNull(holder.lastDiff, "the preview can reuse the comparison")
     }
 
     @Test
-    fun applyingFromTheDialogInvalidatesTheAdoptedDiff() = runBlocking {
+    fun viewChangesNeverEnqueuesAnything(): Unit = runBlocking {
         val source = FakeSyncSource(NetworkResult.Success(diff(row("safe"))))
         val holder = AccountsStateHolder(source)
 
         holder.compare()
-        assertNotNull(holder.lastDiff)
+        holder.viewChanges()
 
-        var invalidated = false
-        holder.applyCatchUp { invalidated = true }
-
-        assertTrue(invalidated)
-        assertNull(holder.lastDiff)
+        assertNull(holder.dialog)
+        assertNull(source.applied, "view changes only opens the preview")
+        assertNotNull(holder.lastDiff, "the preview reuses the adopted comparison")
     }
 
     @Test

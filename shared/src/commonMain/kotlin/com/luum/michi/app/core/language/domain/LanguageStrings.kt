@@ -332,7 +332,6 @@ interface LanguageStrings {
     fun accountsCompareMessage(provider: String, additions: Int, updates: Int): String
     fun accountsCompareSkippedNewer(count: Int, provider: String): String
     fun accountsCompareSkippedRegression(count: Int): String
-    val accountsCompareApply: String
     val accountsCompareView: String
     val accountsCompareLater: String
     val accountsConnect: String

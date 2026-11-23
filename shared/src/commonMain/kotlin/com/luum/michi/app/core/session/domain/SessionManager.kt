@@ -398,7 +398,7 @@ internal class SessionManager(
         if (provider == currentFollowedProvider() ||
             linkedAccounts?.linked?.value?.provider == provider
         ) {
-            disconnect(provider, lostAccess = true)
+            disconnect(provider, lostAccess = true, expectedToken = token)
         }
     }
 
@@ -482,11 +482,21 @@ internal class SessionManager(
     // Disconnect / clear
     // ---------------------------------------------------------------------
 
-    private suspend fun disconnect(provider: ProviderId, lostAccess: Boolean) {
+    private suspend fun disconnect(
+        provider: ProviderId,
+        lostAccess: Boolean,
+        expectedToken: AuthToken? = null,
+    ) {
+        var applied = false
         var viewerId: Int? = null
         var promoted: ProviderId? = null
         var last = false
         mutex.withLock {
+            // A late 401 must only close the session whose token actually failed.
+            if (expectedToken != null) {
+                val current = tokenStorages[provider]?.load() ?: return@withLock
+                if (current.accessToken != expectedToken.accessToken) return@withLock
+            }
             linkedAccounts?.clearLinkError()
             val wasFollowed = provider == (followedProvider ?: activeProviderStore.load())
             val linked = linkedAccounts?.linked?.value
@@ -537,7 +547,9 @@ internal class SessionManager(
                     publishConnectedLocked()
                 }
             }
+            applied = true
         }
+        if (!applied) return
         events.emit(AccountEvent.Disconnected(provider))
         if (!last) {
             onClearAccountData(provider, viewerId)

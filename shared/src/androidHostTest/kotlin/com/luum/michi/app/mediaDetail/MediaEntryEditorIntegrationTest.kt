@@ -276,6 +276,25 @@ class MediaEntryEditorIntegrationTest {
     }
 
     @Test
+    fun aDecimalScoreSaveWithoutEditingItNeverPassesScoreToTheMirror() {
+        val decimalEntry = existingEntry().copy(score = 8.5f)
+        val repository = RecordingEntryRepository(decimalEntry)
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = decimalEntry,
+            entryRepository = repository,
+        )
+
+        editor.load()
+        editor.updateStatus(MediaListStatus.PAUSED)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(setOf(MirrorField.STATUS), repository.changedFields)
+    }
+
+    @Test
     fun clearingTheNotePassesOnlyNotesToTheMirror() {
         val repository = RecordingEntryRepository(existingEntry())
         val editor = editorWired(
