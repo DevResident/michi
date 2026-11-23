@@ -76,6 +76,62 @@ private fun manager(
 
 class SessionManagerTest {
 
+    /**
+     * Holds the second and fourth [load] so two concurrent [SessionManager.onUnauthorized]
+     * calls both finish their token lookup before either disconnects. The value
+     * is read before waiting, like two 401s that already saw the same token.
+     */
+    private class GatedTokenStorage(private val delegate: InMemoryTokenStorage) : TokenStorage {
+        private var loads = 0
+        private var blocked = 0
+        private val bothBlocked = CompletableDeferred<Unit>()
+        private val release = CompletableDeferred<Unit>()
+
+        override val tokenFlow = delegate.tokenFlow
+
+        override suspend fun save(token: AuthToken) = delegate.save(token)
+        override suspend fun clear() = delegate.clear()
+
+        override suspend fun load(): AuthToken? {
+            val snapshot = delegate.load()
+            val call = ++loads
+            if (call == 2 || call == 4) {
+                blocked++
+                if (blocked == 2) bothBlocked.complete(Unit)
+                release.await()
+            }
+            return snapshot
+        }
+
+        suspend fun awaitBothBlocked() = bothBlocked.await()
+        fun releaseAll() = release.complete(Unit)
+    }
+
+    /** Returns [stale] once, then whatever the delegate currently holds. */
+    private class OneShotStaleTokenStorage(
+        private val delegate: InMemoryTokenStorage,
+    ) : TokenStorage {
+        private var stale: AuthToken? = null
+
+        override val tokenFlow = delegate.tokenFlow
+
+        override suspend fun save(token: AuthToken) = delegate.save(token)
+        override suspend fun clear() = delegate.clear()
+
+        fun armStale(token: AuthToken) {
+            stale = token
+        }
+
+        override suspend fun load(): AuthToken? {
+            val value = stale
+            if (value != null) {
+                stale = null
+                return value
+            }
+            return delegate.load()
+        }
+    }
+
     @Test
     fun bootstrapWithoutTokenGoesAnonymousWithoutFetching() {
         val storage = InMemoryTokenStorage()
@@ -290,6 +346,56 @@ class SessionManagerTest {
         assertTrue(manager.state.value is SessionState.Anonymous)
         runBlocking { assertNull(storage.load()) }
         assertNull(cache.stored)
+    }
+
+    @Test
+    fun twoSimultaneousUnauthorizedCallsClearTheUserDataOnce() = runBlocking {
+        val token = freshToken()
+        val stored = InMemoryTokenStorage().apply { save(token) }
+        val storage = GatedTokenStorage(stored)
+        var clears = 0
+        var closed = 0
+        val manager = testSessionManager(
+            storage = storage,
+            onClearUserData = { clears++ },
+            onSessionClosed = { closed++ },
+        )
+
+        val first = launch { manager.onUnauthorized(token) }
+        val second = launch { manager.onUnauthorized(token) }
+        storage.awaitBothBlocked()
+        storage.releaseAll()
+        first.join()
+        second.join()
+
+        assertEquals(1, clears, "both 401s pass the lookup, only one may wipe")
+        assertEquals(1, closed)
+        assertNull(stored.load())
+    }
+
+    @Test
+    fun aLateUnauthorizedForAReplacedTokenLeavesTheNewSession() = runBlocking {
+        val old = freshToken()
+        val stored = InMemoryTokenStorage().apply { save(old) }
+        val storage = OneShotStaleTokenStorage(stored)
+        var clears = 0
+        val manager = testSessionManager(
+            storage = storage,
+            onClearUserData = { clears++ },
+        )
+        manager.bootstrap()
+        assertTrue(manager.state.value is SessionState.Authenticated)
+
+        // The user reconnected while the old request was in flight.
+        val replacement = old.copy(accessToken = "new-token")
+        storage.save(replacement)
+        storage.armStale(old)
+
+        manager.onUnauthorized(old)
+
+        assertEquals(replacement, stored.load(), "the stale 401 never clears the new token")
+        assertEquals(0, clears)
+        assertTrue(manager.state.value is SessionState.Authenticated)
     }
 
     @Test
