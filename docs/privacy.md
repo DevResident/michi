@@ -1,13 +1,13 @@
 # Michi privacy policy
 
-Last updated: November 22, 2026
+Last updated: November 23, 2026
 
 Michi is a free, open-source, unofficial client for [AniList](https://anilist.co), with optional MyAnimeList list support. It has no ads, no analytics and no tracking. Michi is not affiliated with AniList or MyAnimeList.
 
 ## What Michi stores on your device
 
-- **Your AniList access token**, after you sign in. It is stored only on your device, is never sent anywhere except to AniList, and is excluded from Android cloud backups and device transfers. Signing out deletes it.
-- **Your AniList and MyAnimeList access and refresh tokens**, one per connected account. Each token is stored only on your device, is never sent anywhere except to its own provider, and is excluded from Android cloud backups and device transfers. Disconnecting that account or signing out deletes it.
+- **Your AniList access token**, after you sign in. It is stored only on your device, is never sent anywhere except to AniList, and stays out of cloud backups and device transfers: Android excludes it from backups/transfers, and on iOS it lives in the Keychain with `AfterFirstUnlockThisDeviceOnly`, so it is not included in iCloud or Finder backups and is not migrated to another device. Signing out deletes it.
+- **Your AniList and MyAnimeList access and refresh tokens**, one per connected account. Each token is stored only on your device, is never sent anywhere except to its own provider, and stays out of cloud backups and device transfers under the same platform rules (Android backups/transfers; iOS Keychain with `AfterFirstUnlockThisDeviceOnly`). Disconnecting that account or signing out deletes it.
 - **Your app settings** (language, theme, start tab and similar preferences).
 - **A cache** of your lists, your profile and images, so the app opens fast and works while the network is slow. You can remove it at any time by clearing the app's storage or uninstalling Michi.
 - **A durable copy queue** for list changes waiting to reach your other connected account. It can contain notes, scores, dates and progress. It lives in the app's private files, outside the cache, and is excluded from Android cloud backups/device transfers and from iOS backups. Signing out clears it; disconnecting an account drops the copies aimed at that account.
@@ -36,14 +36,14 @@ If this policy changes, the new version will be published at this same address. 
 
 # Política de privacidad de Michi
 
-Última actualización: 22 de noviembre de 2026
+Última actualización: 23 de noviembre de 2026
 
 Michi es un cliente no oficial, gratuito y de código abierto para [AniList](https://anilist.co), con soporte opcional de listas de MyAnimeList. No tiene anuncios, analíticas ni rastreo. Michi no está afiliado a AniList ni a MyAnimeList.
 
 ## Qué guarda Michi en tu dispositivo
 
-- **Tu token de acceso de AniList**, después de iniciar sesión. Se guarda solo en tu dispositivo, nunca se envía a nadie salvo a AniList y queda fuera de las copias de seguridad en la nube y de las transferencias entre dispositivos de Android. Al cerrar sesión se borra.
-- **Tus tokens de acceso y de renovación de AniList y de MyAnimeList**, uno por cada cuenta conectada. Cada token se guarda solo en tu dispositivo, nunca se envía a nadie salvo a su propio proveedor y queda fuera de las copias de seguridad en la nube y de las transferencias entre dispositivos de Android. Al desconectar esa cuenta o cerrar sesión se borra.
+- **Tu token de acceso de AniList**, después de iniciar sesión. Se guarda solo en tu dispositivo, nunca se envía a nadie salvo a AniList y queda fuera de las copias de seguridad y de las transferencias entre dispositivos: Android lo excluye de las copias y transferencias, y en iOS vive en el Keychain con `AfterFirstUnlockThisDeviceOnly`, así que no entra en las copias de iCloud ni de Finder y no se migra a otro dispositivo. Al cerrar sesión se borra.
+- **Tus tokens de acceso y de renovación de AniList y de MyAnimeList**, uno por cada cuenta conectada. Cada token se guarda solo en tu dispositivo, nunca se envía a nadie salvo a su propio proveedor y queda fuera de las copias de seguridad y de las transferencias entre dispositivos con las mismas reglas por plataforma (copias y transferencias de Android; Keychain de iOS con `AfterFirstUnlockThisDeviceOnly`). Al desconectar esa cuenta o cerrar sesión se borra.
 - **Tus ajustes de la app** (idioma, tema, pestaña de inicio y preferencias parecidas).
 - **Una caché** de tus listas, tu perfil e imágenes, para que la app abra rápido y funcione con una red lenta. Puedes borrarla cuando quieras limpiando el almacenamiento de la app o desinstalando Michi.
 - **Una cola durable** de cambios de lista pendientes de llegar a tu otra cuenta conectada. Puede contener notas, puntuaciones, fechas y progreso. Vive en los archivos privados de la app, fuera de la caché, y queda excluida de las copias de seguridad y transferencias de Android y de las copias de iOS. Al cerrar sesión se borra; al desconectar una cuenta se descartan las copias dirigidas a ella.
