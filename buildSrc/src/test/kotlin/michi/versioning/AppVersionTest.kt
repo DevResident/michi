@@ -117,4 +117,49 @@ class AppVersionTest {
         assertTrue(error is IllegalArgumentException)
         assertTrue(error!!.message!!.contains("between 0 and 99"))
     }
+
+    @Test
+    fun `requireTagVersion accepts a valid tag`() {
+        val result = AppVersionCalculator.resolve("v1.2.3-0-gabc1234", requireTagVersion = true)
+
+        assertEquals("1.2.3", result.version.versionName)
+        assertEquals(10203, result.version.versionCode)
+        assertNull(result.warning)
+    }
+
+    @Test
+    fun `requireTagVersion rejects a missing tag`() {
+        val error = runCatching {
+            AppVersionCalculator.resolve(null, requireTagVersion = true)
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(error!!.message!!.contains("-PrequireTagVersion=true"))
+        assertTrue(error.message!!.contains("0.0.0-unknown"))
+    }
+
+    @Test
+    fun `requireTagVersion rejects a malformed describe`() {
+        val error = runCatching {
+            AppVersionCalculator.resolve("v1.0.0-extra", requireTagVersion = true)
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(error!!.message!!.contains("-PrequireTagVersion=true"))
+    }
+
+    @Test
+    fun `requireTagVersion rejects overrides without a tag`() {
+        val error = runCatching {
+            AppVersionCalculator.resolve(
+                describe = null,
+                overrideName = "2.0.0",
+                overrideCode = "20000",
+                requireTagVersion = true,
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(error!!.message!!.contains("-PrequireTagVersion=true"))
+    }
 }

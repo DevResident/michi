@@ -31,13 +31,23 @@ object AppVersionCalculator {
      * @param describe output of `git describe`, or null when git/the tag is unavailable.
      * @param overrideName value of `-PmichiVersionName`, if present.
      * @param overrideCode value of `-PmichiVersionCode`, if present.
+     * @param requireTagVersion when true (release builds), fail instead of falling
+     *   back to [FALLBACK_NAME] if no valid tag is reachable.
      */
     fun resolve(
         describe: String?,
         overrideName: String? = null,
         overrideCode: String? = null,
+        requireTagVersion: Boolean = false,
     ): VersionResolution {
         val tagVersion = describe?.trim()?.let(::parseDescribe)
+        if (requireTagVersion && tagVersion == null) {
+            throw IllegalArgumentException(
+                "No reachable vX.Y.Z git tag found and -PrequireTagVersion=true is set. " +
+                    "Refusing to build with the $FALLBACK_NAME fallback. Fetch tags " +
+                    "(git fetch --tags) and build from a tagged commit.",
+            )
+        }
         val nameOverride = overrideName?.takeIf { it.isNotBlank() }
         val codeOverride = overrideCode
             ?.takeIf { it.isNotBlank() }

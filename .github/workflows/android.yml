@@ -1,0 +1,43 @@
+name: Android checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Host tests and lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The shared build derives its version with git describe; without
+          # full history and tags it would fall back to 0.0.0-unknown.
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@d9c87d481d55275bb5441eef3fe0e46805f9ef70 # v3.5.0
+
+      - name: Test the build plugin
+        run: ./gradlew -p buildSrc test
+
+      - name: Test shared (Android host) and lint the app
+        env:
+          # lintRelease contains "release", so the shared build requires a
+          # client id even though nothing is signed here. No local.properties
+          # exists on CI; a placeholder is fine because only the release
+          # workflow builds artifacts.
+          ANILIST_CLIENT_ID: ci-check
+        run: ./gradlew :shared:testAndroidHostTest :androidApp:lintRelease
