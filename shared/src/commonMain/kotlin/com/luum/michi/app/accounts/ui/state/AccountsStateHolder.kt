@@ -46,30 +46,33 @@ internal class AccountsStateHolder(
         dialog = null
         skipped = null
         lastDiff = null
-        when (val result = coordinator.loadPreview()) {
-            is NetworkResult.Success -> {
-                if (id != request) return
-                val diff = result.value
-                lastDiff = diff
-                if (diff.catchUpRows.isEmpty()) {
-                    skipped = if (diff.newerInLinkedCount + diff.regressionCount > 0) {
-                        CompareSkipped(
-                            newer = diff.newerInLinkedCount,
-                            regression = diff.regressionCount,
-                        )
+        try {
+            when (val result = coordinator.loadPreview()) {
+                is NetworkResult.Success -> {
+                    if (id != request) return
+                    val diff = result.value
+                    lastDiff = diff
+                    if (diff.catchUpRows.isEmpty()) {
+                        skipped = if (diff.newerInLinkedCount + diff.regressionCount > 0) {
+                            CompareSkipped(
+                                newer = diff.newerInLinkedCount,
+                                regression = diff.regressionCount,
+                            )
+                        } else {
+                            null
+                        }
                     } else {
-                        null
+                        dialog = diff
                     }
-                } else {
-                    dialog = diff
+                }
+                is NetworkResult.Failure -> {
+                    if (id != request) return
+                    error = result.error
                 }
             }
-            is NetworkResult.Failure -> {
-                if (id != request) return
-                error = result.error
-            }
+        } finally {
+            if (id == request) comparing = false
         }
-        if (id == request) comparing = false
     }
 
     suspend fun applyCatchUp(onApplied: () -> Unit = {}): NetworkResult<Unit> {
@@ -83,18 +86,21 @@ internal class AccountsStateHolder(
         }
         applying = true
         error = null
-        val result = coordinator.apply(rows)
-        applying = false
-        if (result is NetworkResult.Success) {
-            dialog = null
-            // The preview is now stale: applying from the dialog enqueued the
-            // same rows, so the next "View changes" must read the lists again.
-            lastDiff = null
-            onApplied()
-        } else {
-            error = (result as NetworkResult.Failure).error
+        try {
+            val result = coordinator.apply(rows)
+            if (result is NetworkResult.Success) {
+                dialog = null
+                // The preview is now stale: applying from the dialog enqueued the
+                // same rows, so the next "View changes" must read the lists again.
+                lastDiff = null
+                onApplied()
+            } else {
+                error = (result as NetworkResult.Failure).error
+            }
+            return result
+        } finally {
+            applying = false
         }
-        return result
     }
 
     fun dismissDialog() {

@@ -15,6 +15,10 @@ import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncSource
 import com.luum.michi.app.mirror.ui.model.MirrorSection
 import com.luum.michi.app.mirror.ui.state.MirrorSyncStateHolder
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,6 +36,48 @@ private class CountingSyncSource(
     override suspend fun loadPreview(): NetworkResult<MirrorDiff> {
         loads += 1
         return NetworkResult.Success(diff)
+    }
+
+    override suspend fun apply(rows: List<MirrorPreviewRow>): NetworkResult<Unit> =
+        NetworkResult.Success(Unit)
+}
+
+/** First call suspends until cancelled; later calls answer immediately. */
+private class SuspendingFirstLoadSource(
+    private val diff: MirrorDiff,
+) : MirrorSyncSource {
+    val started = CompletableDeferred<Unit>()
+    private var calls = 0
+
+    override suspend fun loadPreview(): NetworkResult<MirrorDiff> {
+        if (calls++ == 0) {
+            started.complete(Unit)
+            awaitCancellation()
+        }
+        return NetworkResult.Success(diff)
+    }
+
+    override suspend fun apply(rows: List<MirrorPreviewRow>): NetworkResult<Unit> =
+        NetworkResult.Success(Unit)
+}
+
+/** First call waits for [release]; the second answers with [secondDiff]. */
+private class GatedLoadsSource(
+    private val firstDiff: MirrorDiff,
+    private val secondDiff: MirrorDiff,
+) : MirrorSyncSource {
+    val started = CompletableDeferred<Unit>()
+    val release = CompletableDeferred<Unit>()
+    private var calls = 0
+
+    override suspend fun loadPreview(): NetworkResult<MirrorDiff> {
+        return if (calls++ == 0) {
+            started.complete(Unit)
+            release.await()
+            NetworkResult.Success(firstDiff)
+        } else {
+            NetworkResult.Success(secondDiff)
+        }
     }
 
     override suspend fun apply(rows: List<MirrorPreviewRow>): NetworkResult<Unit> =
@@ -109,6 +155,65 @@ private fun linkedRow(key: Int) = MirrorLinkedOnlyRow(
 )
 
 class MirrorSyncStateHolderTest {
+
+    @Test
+    fun cancellingALoadClearsLoadingAndTheNextLoadSucceeds() = runBlocking {
+        val expected = diff(row("safe"))
+        val source = SuspendingFirstLoadSource(expected)
+        val holder = MirrorSyncStateHolder(source)
+
+        val job = launch { holder.load() }
+        source.started.await()
+        assertTrue(holder.loading)
+
+        job.cancelAndJoin()
+
+        assertFalse(holder.loading)
+        holder.load()
+        assertEquals(expected, holder.preview)
+        assertFalse(holder.loading)
+    }
+
+    @Test
+    fun invalidatingDuringALoadDiscardsTheStaleResult() = runBlocking {
+        val stale = diff(row("old"))
+        val fresh = diff(row("new"))
+        val source = GatedLoadsSource(firstDiff = stale, secondDiff = fresh)
+        val holder = MirrorSyncStateHolder(source)
+
+        val job = launch { holder.load() }
+        source.started.await()
+        holder.invalidatePreview()
+        assertFalse(holder.loading)
+
+        source.release.complete(Unit)
+        job.join()
+
+        assertNull(holder.preview)
+        assertFalse(holder.loading)
+
+        holder.load()
+        assertEquals(fresh, holder.preview)
+    }
+
+    @Test
+    fun adoptingDuringALoadDiscardsTheInFlightResult() = runBlocking {
+        val inFlight = diff(row("in-flight"))
+        val adopted = diff(row("adopted"))
+        val source = GatedLoadsSource(firstDiff = inFlight, secondDiff = inFlight)
+        val holder = MirrorSyncStateHolder(source)
+
+        val job = launch { holder.load() }
+        source.started.await()
+        holder.adopt(adopted)
+        assertFalse(holder.loading)
+
+        source.release.complete(Unit)
+        job.join()
+
+        assertEquals(adopted, holder.preview)
+        assertFalse(holder.loading)
+    }
 
     @Test
     fun adoptingADiffKeepsOnlySafeRowsChecked() {

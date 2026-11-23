@@ -355,6 +355,7 @@ interface LanguageStrings {
     fun accountsEventLostAccess(provider: String): String
     fun accountsEventFollowed(provider: String): String
     val mirrorSyncTitle: String
+    val mirrorSyncLoading: String
     val mirrorSyncRegression: String
     val mirrorSyncAddSection: String
     val mirrorSyncUpdateSection: String

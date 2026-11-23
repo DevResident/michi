@@ -31,6 +31,9 @@ import com.luum.michi.app.core.session.domain.MirrorTokenSource
 import com.luum.michi.app.mediaList.repository.MediaListEntryDto
 import com.luum.michi.app.mediaList.repository.fetchMediaListCollection
 import com.luum.michi.app.mediaList.repository.mal.MalListLoader
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 /** The destination's own totals; the differ only caps with positive values. */
 internal data class MirrorTargetTotals(
@@ -56,104 +59,134 @@ internal class MirrorSnapshotReader(
     private val bridge: MediaIdBridge,
     private val onUnauthorized: suspend (AuthToken) -> Unit,
 ) {
-    suspend fun readPrimary(): NetworkResult<MirrorSnapshot> {
+    suspend fun readPrimary(): NetworkResult<MirrorSnapshot> = coroutineScope {
         val provider = sessionProvider()
         val userId = sessionUserId()
-            ?: return NetworkResult.Failure(
+            ?: return@coroutineScope NetworkResult.Failure(
                 NetworkError.Unknown(IllegalStateException("No authenticated viewer id")),
             )
-        val entries = mutableListOf<MirrorSnapshotEntry>()
-        for (type in MediaType.entries) {
-            when (provider) {
-                ProviderId.AniList -> {
-                    val result = sessionAniListClient.fetchMediaListCollection(userId, type)
-                    when (result) {
-                        is NetworkResult.Failure -> return result
-                        is NetworkResult.Success -> entries += result.value.toMirrorEntries(
+        if (provider != ProviderId.AniList && provider != ProviderId.Mal) {
+            return@coroutineScope NetworkResult.Failure(
+                NetworkError.Unknown(IllegalStateException("Unsupported session provider")),
+            )
+        }
+        val scoreFormat = if (provider == ProviderId.AniList) {
+            sessionScoreFormat()
+        } else {
+            ScoreFormat.POINT_10
+        }
+        // Both media types are independent reads. They run together, but the
+        // results are combined in MediaType.entries order: the final snapshot —
+        // and therefore the diff — never depends on which one answers first.
+        val results = MediaType.entries.map { type ->
+            async {
+                when (provider) {
+                    ProviderId.AniList -> sessionAniListClient
+                        .fetchMediaListCollection(userId, type)
+                        .mapEntriesToMirror(
                             provider = ProviderId.AniList,
                             type = type,
-                            scoreFormat = sessionScoreFormat(),
+                            scoreFormat = scoreFormat,
                             resolveMissingMalId = true,
                         )
-                    }
-                }
-                ProviderId.Mal -> {
-                    val result = sessionMalLoader.refresh(type, userId)
-                    when (result) {
-                        is NetworkResult.Failure -> return result
-                        is NetworkResult.Success -> entries += result.value.toMirrorEntries(
+                    else -> sessionMalLoader
+                        .refresh(type, userId)
+                        .mapEntriesToMirror(
                             provider = ProviderId.Mal,
                             type = type,
                             scoreFormat = ScoreFormat.POINT_10,
                             resolveMissingMalId = false,
                         )
-                    }
                 }
-                else -> return NetworkResult.Failure(
-                    NetworkError.Unknown(IllegalStateException("Unsupported session provider")),
-                )
+            }
+        }.awaitAll()
+        val entries = mutableListOf<MirrorSnapshotEntry>()
+        for (result in results) {
+            when (result) {
+                is NetworkResult.Failure -> return@coroutineScope result
+                is NetworkResult.Success -> entries += result.value
             }
         }
-        return NetworkResult.Success(MirrorSnapshot(provider, entries))
+        NetworkResult.Success(MirrorSnapshot(provider, entries))
     }
 
-    suspend fun readLinked(): NetworkResult<MirrorSnapshot> {
+    suspend fun readLinked(): NetworkResult<MirrorSnapshot> = coroutineScope {
         val linked = linkedAccounts.linked.value
-            ?: return NetworkResult.Failure(
+            ?: return@coroutineScope NetworkResult.Failure(
                 NetworkError.Unknown(IllegalStateException("No linked account")),
             )
-        val entries = mutableListOf<MirrorSnapshotEntry>()
-        when (linked.provider) {
-            ProviderId.AniList -> {
-                for (type in MediaType.entries) {
-                    val result = linkedAniListClient.fetchMediaListCollection(
-                        linked.viewer.id,
-                        type,
-                    )
-                    when (result) {
-                        is NetworkResult.Failure -> return result
-                        is NetworkResult.Success -> entries += result.value.toMirrorEntries(
+        val results = when (linked.provider) {
+            ProviderId.AniList -> MediaType.entries.map { type ->
+                async {
+                    linkedAniListClient
+                        .fetchMediaListCollection(linked.viewer.id, type)
+                        .mapEntriesToMirror(
                             provider = ProviderId.AniList,
                             type = type,
                             scoreFormat = linked.viewer.scoreFormat,
                             resolveMissingMalId = false,
                         )
-                    }
                 }
-            }
+            }.awaitAll()
             ProviderId.Mal -> {
                 val token = mirrorTokens.mirrorToken(ProviderId.Mal)
-                    ?: return NetworkResult.Failure(NetworkError.Unauthorized(null))
-                for (type in MediaType.entries) {
-                    val result = when (type) {
-                        MediaType.ANIME -> malHttp.loadAnimeList(token)
-                        MediaType.MANGA -> malHttp.loadMangaList(token)
-                    }
-                    when (result) {
-                        is NetworkResult.Failure -> {
-                            if (result.error is NetworkError.Unauthorized) {
-                                onUnauthorized(token)
-                            }
-                            return result
-                        }
-                        is NetworkResult.Success -> entries += result.value.map {
-                            it.toMirrorEntry(type)
+                    ?: return@coroutineScope NetworkResult.Failure(NetworkError.Unauthorized(null))
+                val pages = MediaType.entries.map { type ->
+                    async {
+                        when (val result = when (type) {
+                            MediaType.ANIME -> malHttp.loadAnimeList(token)
+                            MediaType.MANGA -> malHttp.loadMangaList(token)
+                        }) {
+                            is NetworkResult.Failure -> result
+                            is NetworkResult.Success -> NetworkResult.Success(
+                                result.value.map { it.toMirrorEntry(type) },
+                            )
                         }
                     }
+                }.awaitAll()
+                // Both pages can answer 401 at once; notify the session only
+                // once for this read, after both results are in.
+                if (pages.any { (it as? NetworkResult.Failure)?.error is NetworkError.Unauthorized }) {
+                    onUnauthorized(token)
                 }
+                pages
             }
-            else -> return NetworkResult.Failure(
+            else -> return@coroutineScope NetworkResult.Failure(
                 NetworkError.Unknown(IllegalStateException("Unsupported linked provider")),
             )
         }
-        return NetworkResult.Success(MirrorSnapshot(linked.provider, entries))
+        val entries = mutableListOf<MirrorSnapshotEntry>()
+        for (result in results) {
+            when (result) {
+                is NetworkResult.Failure -> return@coroutineScope result
+                is NetworkResult.Success -> entries += result.value
+            }
+        }
+        NetworkResult.Success(MirrorSnapshot(linked.provider, entries))
+    }
+
+    private suspend fun NetworkResult<List<MediaListEntryDto>>.mapEntriesToMirror(
+        provider: ProviderId,
+        type: MediaType,
+        scoreFormat: ScoreFormat,
+        resolveMissingMalId: Boolean,
+    ): NetworkResult<List<MirrorSnapshotEntry>> = when (this) {
+        is NetworkResult.Failure -> this
+        is NetworkResult.Success -> NetworkResult.Success(
+            value.toMirrorEntries(
+                provider = provider,
+                type = type,
+                scoreFormat = scoreFormat,
+                resolveMissingMalId = resolveMissingMalId,
+            ),
+        )
     }
 
     /**
-     * MAL's user-list endpoint only returns id/title/picture for the node, so
-     * the target totals are fetched only for the rows that would increase
-     * progress. A failure leaves the total unknown (no cap), never fails the
-     * whole preview.
+     * Fallback for the rows whose target snapshot is missing the work total.
+     * The MAL list already sends the requested node totals, so this normally
+     * runs with an empty list and makes no request. A failure leaves the total
+     * unknown (no cap), never fails the whole preview.
      */
     suspend fun readMalTotals(
         requests: List<Pair<MediaType, Int>>,

@@ -50,12 +50,15 @@ private fun aniListPage(progress: Int) = AniListJson.parseToJsonElement(
 
 private val emptyPage = AniListJson.parseToJsonElement("""{"MediaListCollection":{"lists":[]}}""")
 
-private fun malListPage(progress: Int) = """
-{"data":[{"node":{"id":20,"title":"Test","main_picture":{"medium":"https://example.com/m.jpg","large":"https://example.com/l.jpg"}},
+private fun malListPage(progress: Int, totalEpisodes: Int? = null): String {
+    val total = totalEpisodes?.let { ""","num_episodes":$it""" }.orEmpty()
+    return """
+{"data":[{"node":{"id":20,"title":"Test","main_picture":{"medium":"https://example.com/m.jpg","large":"https://example.com/l.jpg"}$total},
 "list_status":{"status":"completed","score":9,"num_episodes_watched":$progress,
 "is_rewatching":false,"updated_at":"2026-11-22T09:05:00+00:00","priority":0,
 "finish_date":"2026-01-02","num_times_rewatched":0,"comments":""}}],"paging":{}}
 """.trimIndent()
+}
 
 private fun malDetail(progress: Int) = """
 {"id":20,"title":"Test","num_episodes":12,
@@ -66,13 +69,17 @@ private fun malDetail(progress: Int) = """
 private fun coordinator(
     listProgress: Int,
     primaryProgress: Int,
+    listTotalEpisodes: Int? = null,
+    malPaths: MutableList<String>? = null,
 ): MirrorSyncCoordinator {
     val malHttp = MalHttp(
         httpClient = HttpClient(
             MockEngine { request ->
                 val path = request.url.encodedPath
+                malPaths?.add(path)
                 val body = when {
-                    path.endsWith("/users/@me/animelist") -> malListPage(listProgress)
+                    path.endsWith("/users/@me/animelist") ->
+                        malListPage(listProgress, listTotalEpisodes)
                     path.endsWith("/users/@me/mangalist") -> """{"data":[],"paging":{}}"""
                     path.contains("/anime/20") -> malDetail(listProgress)
                     else -> error("unexpected MAL path $path")
@@ -142,5 +149,25 @@ class MirrorSyncCoordinatorTest {
         assertEquals(setOf(MirrorField.PROGRESS), row.changedFields)
         assertEquals(12, row.after.progress)
         assertTrue(!row.regression)
+    }
+
+    @Test
+    fun malListTotalsAvoidTheWorkDetailAndKeepTheSameDiff() = runBlocking {
+        val paths = mutableListOf<String>()
+        val withTotals = coordinator(
+            listProgress = 5,
+            primaryProgress = 13,
+            listTotalEpisodes = 12,
+            malPaths = paths,
+        ).loadPreview()
+        val fallback = coordinator(listProgress = 5, primaryProgress = 13).loadPreview()
+
+        assertEquals(fallback, withTotals)
+        assertTrue(paths.none { it.contains("/anime/") })
+
+        assertTrue(withTotals is NetworkResult.Success)
+        val row = withTotals.value.updates.single()
+        assertEquals(setOf(MirrorField.PROGRESS), row.changedFields)
+        assertEquals(12, row.after.progress)
     }
 }

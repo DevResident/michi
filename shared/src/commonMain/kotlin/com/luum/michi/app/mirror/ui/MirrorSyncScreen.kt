@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +43,7 @@ import com.luum.michi.app.ui.components.ChipTab
 import com.luum.michi.app.ui.components.CoverSize
 import com.luum.michi.app.ui.components.GlassBar
 import com.luum.michi.app.ui.components.GlassBarClearance
+import com.luum.michi.app.ui.components.LoadingPanel
 import com.luum.michi.app.ui.components.MediaCoverCard
 import com.luum.michi.app.ui.components.MessagePanel
 import com.luum.michi.app.ui.components.TrailingPill
@@ -81,12 +81,11 @@ internal fun MirrorSyncScreen(
     val preview = holder.preview
 
     when {
-        holder.loading || (preview == null && holder.error == null) -> Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
-        }
+        holder.loading || (preview == null && holder.error == null) -> LoadingPanel(
+            label = strings.mirrorSyncLoading,
+            waitingLabel = strings.networkThrottleWaitingLabel,
+            modifier = modifier,
+        )
         preview == null -> MessagePanel(
             title = strings.errorUnknownLabel,
             message = holder.error?.let { strings.networkErrorMessage(it) },

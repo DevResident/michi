@@ -384,6 +384,7 @@ object SpanishStrings : LanguageStrings {
         "Se perdió el acceso a $provider"
     override fun accountsEventFollowed(provider: String): String = "Ahora sigues $provider"
     override val mirrorSyncTitle = "Comparar listas"
+    override val mirrorSyncLoading = "Leyendo tus listas…"
     override val mirrorSyncRegression = "Sería un retroceso"
     override val mirrorSyncAddSection = "Añadir"
     override val mirrorSyncUpdateSection = "Actualizar"

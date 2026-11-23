@@ -305,6 +305,7 @@ class MichiDependencies internal constructor(
                 sessionManager.connected.value.any { it.provider == provider }
         },
         scope = scope,
+        isDebug = isDebug,
     )
 
     private val malListLoader: MalListLoader = MalListLoader(
@@ -340,6 +341,7 @@ class MichiDependencies internal constructor(
         ),
         linkedAccounts = linkedAccountManager,
         mirror = mirrorController,
+        isDebug = isDebug,
     )
 
     private val aniListAnimeListRepository: AnimeListRepository =

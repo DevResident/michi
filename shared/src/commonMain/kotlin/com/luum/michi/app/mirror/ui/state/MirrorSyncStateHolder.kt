@@ -32,6 +32,9 @@ internal class MirrorSyncStateHolder(
     var selectedSection by mutableStateOf<MirrorSection?>(null)
         private set
 
+    /** Bumped by every load start, adopt or invalidation: stale results never land. */
+    private var generation = 0
+
     val tabs: List<MirrorTab> get() = preview?.let(::mirrorTabs).orEmpty()
 
     /**
@@ -88,15 +91,20 @@ internal class MirrorSyncStateHolder(
 
     suspend fun load() {
         if (loading) return
+        val id = ++generation
         loading = true
         error = null
         preview = null
         selectedKeys = emptySet()
-        when (val result = coordinator.loadPreview()) {
-            is NetworkResult.Success -> adopt(result.value)
-            is NetworkResult.Failure -> error = result.error
+        try {
+            when (val result = coordinator.loadPreview()) {
+                is NetworkResult.Success -> if (id == generation) applyPreview(result.value)
+                is NetworkResult.Failure -> if (id == generation) error = result.error
+            }
+        } finally {
+            // A cancelled or superseded load never owns the spinner anymore.
+            if (id == generation) loading = false
         }
-        loading = false
     }
 
     /**
@@ -110,6 +118,22 @@ internal class MirrorSyncStateHolder(
 
     /** Takes a fresh diff from the Accounts compare flow, with the same defaults. */
     fun adopt(diff: MirrorDiff) {
+        // An adopted diff also supersedes a load still in flight.
+        generation++
+        loading = false
+        applyPreview(diff)
+    }
+
+    /** Drops a comparison that can no longer be trusted (manual compare, save). */
+    fun invalidatePreview() {
+        generation++
+        loading = false
+        preview = null
+        selectedKeys = emptySet()
+        error = null
+    }
+
+    private fun applyPreview(diff: MirrorDiff) {
         error = null
         preview = diff
         selectedKeys = buildSet {
@@ -118,13 +142,6 @@ internal class MirrorSyncStateHolder(
                 .filterNot { it.newerInLinked || it.regression }
                 .forEach { add(it.key) }
         }
-    }
-
-    /** Drops a comparison that can no longer be trusted (manual compare, save). */
-    fun invalidatePreview() {
-        preview = null
-        selectedKeys = emptySet()
-        error = null
     }
 
     fun toggle(row: MirrorPreviewRow) {
@@ -165,9 +182,12 @@ internal class MirrorSyncStateHolder(
         if (rows.isEmpty()) return NetworkResult.Success(Unit)
         applying = true
         error = null
-        val result = coordinator.apply(rows)
-        applying = false
-        if (result is NetworkResult.Failure) error = result.error
-        return result
+        try {
+            val result = coordinator.apply(rows)
+            if (result is NetworkResult.Failure) error = result.error
+            return result
+        } finally {
+            applying = false
+        }
     }
 }
