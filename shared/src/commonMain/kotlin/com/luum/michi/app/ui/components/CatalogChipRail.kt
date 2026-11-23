@@ -17,6 +17,9 @@ internal fun <T> CatalogChipRail(
     onSelect: (T) -> Unit,
     strings: LanguageStrings,
     modifier: Modifier = Modifier,
+    // Spread the two labels across the row when they fit (Discover). Other
+    // callers keep the scrolling rail until they ask for it.
+    fill: Boolean = false,
 ) {
     ChipRail(
         tabs = listOf(
@@ -26,5 +29,6 @@ internal fun <T> CatalogChipRail(
         selected = selected,
         onSelect = onSelect,
         modifier = modifier,
+        fill = fill,
     )
 }

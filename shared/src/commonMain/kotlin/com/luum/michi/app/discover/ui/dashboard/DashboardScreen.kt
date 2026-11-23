@@ -105,6 +105,7 @@ private fun DashboardContent(
             selected = holder.mediaType,
             onSelect = holder::selectType,
             strings = strings,
+            fill = true,
         )
         LoadStateContainer(
             hasContent = sections.isNotEmpty(),
