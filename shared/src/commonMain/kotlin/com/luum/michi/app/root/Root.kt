@@ -312,6 +312,7 @@ internal fun Root(
                                     bottomPadding = padding.calculateBottomPadding(),
                                     outbox = mirrorOutbox,
                                     onRetry = onRetryMirror,
+                                    providerLabel = { accounts.label(it) },
                                     onApplied = { state.closeSettingsMirror() },
                                 )
                             } else if (state.settingsAccountsOpen) {

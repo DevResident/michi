@@ -37,6 +37,7 @@ import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.model.utcMillisToLocalMidnightBucket
 import com.luum.michi.app.calendar.ui.components.CalendarDateBar
 import com.luum.michi.app.ui.components.DatePickerField
+import com.luum.michi.app.ui.components.GlassBarClearance
 import com.luum.michi.app.ui.components.LoadingPanel
 import com.luum.michi.app.ui.components.MessagePanel
 import com.luum.michi.app.ui.components.PullRefresh
@@ -154,7 +155,7 @@ internal fun CalendarScreen(
                             state = listState,
                             contentPadding = PaddingValues(
                                 top = 16.dp,
-                                bottom = 16.dp + bottomPadding + BottomBarClearance,
+                                bottom = 16.dp + bottomPadding + GlassBarClearance,
                             ),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -233,9 +234,6 @@ internal fun CalendarScreen(
         )
     }
 }
-
-/** Date bar clearance: TabBar-sized capsule + its 24dp margin, above the tab-bar pad. */
-private val BottomBarClearance = 96.dp
 
 /**
  * Scroll reset key (app-wide scroll rule): changing the day, the season filter

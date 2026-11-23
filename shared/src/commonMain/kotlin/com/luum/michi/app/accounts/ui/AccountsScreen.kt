@@ -1,31 +1,24 @@
 package com.luum.michi.app.accounts.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,9 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luum.michi.app.accounts.ui.state.AccountsStateHolder
@@ -52,10 +43,12 @@ import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncSource
 import com.luum.michi.app.mirror.ui.state.MirrorSyncStateHolder
 import com.luum.michi.app.ui.components.AppButton
 import com.luum.michi.app.ui.components.ButtonEmphasis
+import com.luum.michi.app.ui.components.ChipRail
+import com.luum.michi.app.ui.components.ChipTab
 import com.luum.michi.app.ui.components.ModalSheet
 import com.luum.michi.app.ui.components.OptionGroup
-import com.luum.michi.app.ui.components.PillShape
 import com.luum.michi.app.ui.components.SettingsRow
+import com.luum.michi.app.ui.components.ToggleRow
 import com.luum.michi.app.ui.icons.AppIcons
 import com.luum.michi.app.ui.language.Strings
 import com.luum.michi.app.ui.theme.LocalWarning
@@ -121,39 +114,25 @@ internal fun AccountsScreen(
 
     val other = state.other
     val orderedAccounts = state.providers.mapNotNull { state.account(it) }
-    val skippedParts = buildList {
-        holder.skipped?.let { skipped ->
-            if (skipped.newer > 0 && other != null) {
-                add(strings.accountsSyncNewer(skipped.newer, state.label(other.provider)))
-            }
-            if (skipped.regression > 0) {
-                add(strings.accountsSyncRegression(skipped.regression))
-            }
-        }
-    }
     val activeBatch = state.outbox.batch?.takeIf { it.active }
-    val statusText = when {
+    // Only what the user can act on: queue errors first, then live progress,
+    // then pending work. A clean queue paints no extra line at all.
+    val compareStatus = when {
+        state.outbox.withErrors > 0 -> strings.accountsQueueErrors(state.outbox.withErrors)
+        activeBatch != null -> strings.accountsSyncCopying(activeBatch.done, activeBatch.total)
         holder.comparing -> strings.accountsSyncComparing
-        holder.error != null -> strings.networkErrorMessage(requireNotNull(holder.error))
-        activeBatch != null -> buildString {
-            append(strings.accountsSyncCopying(activeBatch.done, activeBatch.total))
-            if (activeBatch.errors > 0) {
-                append(" · ")
-                append(strings.accountsSyncErrors(activeBatch.errors))
-            }
-        }
-        state.outbox.withErrors > 0 -> strings.accountsSyncErrors(state.outbox.withErrors)
-        skippedParts.isNotEmpty() -> strings.accountsSyncUpToDate + " · " + skippedParts.joinToString(" · ")
         state.outbox.pending > 0 -> strings.accountsSyncPending(state.outbox.pending)
-        else -> strings.accountsSyncUpToDate
-    }
-    val statusClick: (() -> Unit)? = when {
-        holder.error != null -> ({
-            previewHolder?.invalidatePreview()
-            onOpenPreview()
-        })
-        state.outbox.withErrors > 0 || skippedParts.isNotEmpty() -> onOpenPreview
+        holder.error != null -> strings.networkErrorMessage(requireNotNull(holder.error))
         else -> null
+    }
+    val compareStatusIsWarning = state.outbox.withErrors > 0 || holder.error != null
+    val syncDirection = if (state.followed != null && other != null) {
+        strings.accountsSyncDirection(
+            state.label(state.followed),
+            state.label(other.provider),
+        )
+    } else {
+        null
     }
 
     LazyColumn(
@@ -230,29 +209,37 @@ internal fun AccountsScreen(
         }
 
         if (state.connected.size == 2 && other != null) {
-            item(key = "followed") {
-                OptionGroup(title = strings.accountsFollowedSection) {
-                    ProviderSegmentedControl(
-                        accounts = orderedAccounts,
-                        followed = state.followed,
-                        label = { state.label(it) },
-                        onSelect = onSetFollowed,
-                        modifier = Modifier.padding(vertical = 12.dp),
-                    )
-                    Text(
-                        text = strings.accountsFollowedHint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 12.dp),
-                    )
-                }
-            }
-
-            item(key = "sync") {
-                OptionGroup(title = null) {
-                    SyncStatusRow(
+            item(key = "sync-group") {
+                OptionGroup(title = strings.accountsSyncSection) {
+                    Column(
+                        modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = strings.accountsFollowedSection,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        ChipRail(
+                            tabs = orderedAccounts.map { account ->
+                                val label = state.label(account.provider)
+                                ChipTab(
+                                    value = account.provider,
+                                    label = label,
+                                    accessibilityLabel = strings.accountsFollowedChip(label),
+                                )
+                            },
+                            selected = state.followed,
+                            onSelect = onSetFollowed,
+                            contentPadding = PaddingValues(0.dp),
+                            fill = true,
+                            modifier = Modifier.selectableGroup(),
+                        )
+                    }
+                    ToggleRow(
                         title = strings.accountsSyncSection,
                         checked = state.autoCopy,
+                        subtitle = syncDirection,
+                        divider = true,
                         onCheckedChange = { enabled ->
                             if (enabled) {
                                 onSetAutoCopy(true)
@@ -267,10 +254,6 @@ internal fun AccountsScreen(
                                 previewHolder?.invalidatePreview()
                             }
                         },
-                        status = statusText,
-                        statusClick = statusClick,
-                        statusIsWarning = holder.error != null || state.outbox.withErrors > 0,
-                        divider = false,
                     )
                     SettingsRow(
                         label = strings.accountsCompareLists,
@@ -285,6 +268,12 @@ internal fun AccountsScreen(
                                 previewHolder?.invalidatePreview()
                                 onOpenPreview()
                             }
+                        },
+                        supportingText = compareStatus,
+                        supportingColor = if (compareStatusIsWarning) {
+                            LocalWarning.current
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         },
                     )
                 }
@@ -458,77 +447,6 @@ internal fun AccountsScreen(
 }
 
 @Composable
-private fun ProviderSegmentedControl(
-    accounts: List<com.luum.michi.app.core.session.domain.ConnectedAccount>,
-    followed: ProviderId?,
-    label: (ProviderId) -> String,
-    onSelect: (ProviderId) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clip(PillShape)
-            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), PillShape),
-    ) {
-        accounts.forEachIndexed { index, account ->
-            val selected = followed == account.provider
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(
-                        if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            Color.Transparent
-                        },
-                    )
-                    .selectable(
-                        selected = selected,
-                        onClick = { onSelect(account.provider) },
-                        role = Role.Tab,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    if (selected) {
-                        Icon(
-                            imageVector = AppIcons.Check,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Text(
-                        text = label(account.provider),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    )
-                }
-            }
-            if (index < accounts.lastIndex) {
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.outlineVariant),
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun ConnectedAccountRow(
     label: String,
     status: String,
@@ -586,54 +504,6 @@ private fun ProviderBadge(provider: ProviderId, modifier: Modifier = Modifier) {
             contentDescription = null,
             tint = Color.White,
             modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
-@Composable
-private fun SyncStatusRow(
-    title: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    status: String,
-    statusClick: (() -> Unit)?,
-    statusIsWarning: Boolean,
-    divider: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        if (divider) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
-        }
-        Text(
-            text = status,
-            style = MaterialTheme.typography.bodySmall,
-            color = if (statusIsWarning) {
-                LocalWarning.current
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (statusClick != null) {
-                        Modifier.clickable(onClick = statusClick)
-                    } else {
-                        Modifier
-                    },
-                )
-                .padding(vertical = 12.dp),
         )
     }
 }

@@ -27,21 +27,27 @@ import androidx.compose.ui.unit.dp
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.medialist.domain.MirrorLinkedOnlyRow
 import com.luum.michi.app.core.medialist.domain.MirrorPreviewRow
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.label
 import com.luum.michi.app.core.medialist.repository.MirrorOutboxState
 import com.luum.michi.app.core.network.domain.NetworkResult
+import com.luum.michi.app.mirror.ui.model.MirrorSection
 import com.luum.michi.app.mirror.ui.model.summaryLine
 import com.luum.michi.app.mirror.ui.state.MirrorSyncStateHolder
 import com.luum.michi.app.ui.components.AppButton
 import com.luum.michi.app.ui.components.ButtonEmphasis
+import com.luum.michi.app.ui.components.ChipRail
+import com.luum.michi.app.ui.components.ChipTab
 import com.luum.michi.app.ui.components.CoverSize
+import com.luum.michi.app.ui.components.GlassBar
+import com.luum.michi.app.ui.components.GlassBarClearance
 import com.luum.michi.app.ui.components.MediaCoverCard
 import com.luum.michi.app.ui.components.MessagePanel
-import com.luum.michi.app.ui.components.OptionGroup
-import com.luum.michi.app.ui.components.SectionHeader
+import com.luum.michi.app.ui.components.TrailingPill
+import com.luum.michi.app.ui.components.rememberResetListState
 import com.luum.michi.app.ui.icons.AppIcons
 import com.luum.michi.app.ui.language.Strings
 import com.luum.michi.app.ui.theme.LocalWarning
@@ -51,6 +57,11 @@ import kotlinx.coroutines.launch
  * Full-screen preview inside Settings. Root owns the toolbar; applying enqueues
  * the selected rows and closes the page, while the batch keeps draining in the
  * app scope.
+ *
+ * The page is organised by the three comparison sections: Update, Add and Only
+ * in the other account. Only the selected section is painted; the tabs carry
+ * their own counts and the initial tab is the first one with rows. The previous
+ * tab survives a reload while it still has rows.
  */
 @Composable
 internal fun MirrorSyncScreen(
@@ -58,6 +69,7 @@ internal fun MirrorSyncScreen(
     bottomPadding: Dp,
     outbox: MirrorOutboxState = MirrorOutboxState(),
     onRetry: () -> Unit = {},
+    providerLabel: (ProviderId) -> String = { it.value },
     onApplied: () -> Unit,
     strings: LanguageStrings = Strings.current,
     modifier: Modifier = Modifier,
@@ -84,77 +96,111 @@ internal fun MirrorSyncScreen(
             modifier = modifier,
         )
         else -> {
-            val hasRows = preview.additions.isNotEmpty() || preview.updates.isNotEmpty() ||
-                preview.linkedOnly.isNotEmpty()
-            LazyColumn(
-                modifier = modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    top = 16.dp,
-                    end = 16.dp,
-                    bottom = 16.dp + bottomPadding,
-                ),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                item(key = "summary") {
-                    OptionGroup(title = null) {
-                        Column(
+            val tabs = holder.tabs
+            val active = holder.activeSection
+            val hasSelectableBar = preview.additions.isNotEmpty() || preview.updates.isNotEmpty()
+            val listState = rememberResetListState(
+                listOf(preview.targetProvider, active),
+            )
+            Box(modifier = modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (tabs.isNotEmpty()) {
+                        ChipRail(
+                            tabs = tabs.map { tab ->
+                                ChipTab(
+                                    value = tab.section,
+                                    label = tab.section.label(strings),
+                                    count = tab.count,
+                                )
+                            },
+                            selected = active,
+                            onSelect = holder::selectSection,
+                            fill = true,
+                        )
+                    }
+
+                    if (active == MirrorSection.UPDATE || active == MirrorSection.ADD) {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                .padding(start = 16.dp, top = 8.dp, end = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = strings.mirrorSyncAddCount(preview.additions.size),
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = strings.mirrorSyncSelection(
+                                    holder.activeSelectedCount,
+                                    holder.activeRowCount,
+                                    providerLabel(preview.targetProvider),
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
                             )
-                            Text(
-                                text = strings.mirrorSyncUpdateCount(preview.updates.size),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            if (preview.linkedOnly.isNotEmpty()) {
-                                Text(
-                                    text = strings.mirrorSyncLinkedOnlyCount(preview.linkedOnly.size),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (preview.noEquivalent > 0) {
-                                Text(
-                                    text = strings.mirrorSyncNoEquivalent(preview.noEquivalent),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (preview.privateOmitted > 0) {
-                                Text(
-                                    text = strings.mirrorSyncPrivateOmitted(preview.privateOmitted),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            holder.error?.let { error ->
-                                Text(
-                                    text = strings.networkErrorMessage(error),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = LocalWarning.current,
+                            if (holder.selectableRows.isNotEmpty()) {
+                                TrailingPill(
+                                    label = if (holder.allSelectableSelected) {
+                                        strings.mirrorSyncClearSelection
+                                    } else {
+                                        strings.mirrorSyncSelectAll
+                                    },
+                                    onClick = holder::toggleSelectAll,
                                 )
                             }
                         }
                     }
-                }
 
-                if (outbox.withErrors > 0) {
-                    item(key = "outbox-errors") {
+                    if (preview.noEquivalent > 0 || preview.privateOmitted > 0) {
+                        Text(
+                            text = buildString {
+                                if (preview.noEquivalent > 0) {
+                                    append(strings.mirrorSyncNoEquivalent(preview.noEquivalent))
+                                }
+                                if (preview.privateOmitted > 0) {
+                                    if (isNotEmpty()) append(" · ")
+                                    append(strings.mirrorSyncPrivateOmitted(preview.privateOmitted))
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                        )
+                    }
+
+                    holder.error?.let { error ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
+                                .padding(start = 16.dp, top = 4.dp, end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = strings.networkErrorMessage(error),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LocalWarning.current,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        if (holder.apply() is NetworkResult.Success) onApplied()
+                                    }
+                                },
+                            ) {
+                                Text(strings.retryAction)
+                            }
+                        }
+                    }
+
+                    if (outbox.withErrors > 0) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, top = 4.dp, end = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
                                 text = strings.accountsSyncErrors(outbox.withErrors),
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = LocalWarning.current,
                                 modifier = Modifier.weight(1f),
                             )
@@ -163,94 +209,113 @@ internal fun MirrorSyncScreen(
                             }
                         }
                     }
-                }
 
-                if (preview.additions.isNotEmpty()) {
-                    item(key = "add-title") {
-                        SectionHeader(
-                            title = "${strings.mirrorSyncAddSection} · ${preview.additions.size}",
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                    items(preview.additions, key = { "add-${it.key}" }) { row ->
-                        MirrorPreviewRowItem(
-                            row = row,
-                            checked = row.key in holder.selectedKeys,
-                            enabled = !holder.applying,
-                            strings = strings,
-                            scoreFormat = preview.targetScoreFormat,
-                            onToggle = { holder.toggle(row) },
-                        )
-                    }
-                }
-
-                if (preview.updates.isNotEmpty()) {
-                    item(key = "update-title") {
-                        SectionHeader(
-                            title = "${strings.mirrorSyncUpdateSection} · ${preview.updates.size}",
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                    items(preview.updates, key = { "update-${it.key}" }) { row ->
-                        MirrorPreviewRowItem(
-                            row = row,
-                            checked = row.key in holder.selectedKeys,
-                            enabled = !holder.applying,
-                            strings = strings,
-                            scoreFormat = preview.targetScoreFormat,
-                            onToggle = { holder.toggle(row) },
-                        )
-                    }
-                }
-
-                if (!hasRows) {
-                    item(key = "empty") {
-                        MessagePanel(
-                            title = strings.mirrorSyncEmptyTitle,
-                            message = strings.mirrorSyncEmptyMessage,
-                            icon = AppIcons.Check,
-                            modifier = Modifier.height(240.dp),
-                        )
-                    }
-                }
-
-                if (preview.linkedOnly.isNotEmpty()) {
-                    item(key = "linked-only-title") {
-                        SectionHeader(
-                            title = "${strings.mirrorSyncLinkedOnlySection} · ${preview.linkedOnly.size}",
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                    items(preview.linkedOnly, key = { "linked-${it.media.type}-${it.media.malId}" }) { row ->
-                        LinkedOnlyRow(row, strings)
-                    }
-                }
-
-                if (preview.additions.isNotEmpty() || preview.updates.isNotEmpty()) {
-                    item(key = "apply") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            AppButton(
-                                label = strings.mirrorSyncApply(holder.selectedCount),
-                                onClick = {
-                                    scope.launch {
-                                        if (holder.apply() is NetworkResult.Success) onApplied()
-                                    }
-                                },
-                                emphasis = ButtonEmphasis.Primary,
-                                enabled = holder.selectedCount > 0 && !holder.applying,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Text(
-                                text = strings.mirrorSyncSlowHint,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (active == null) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            MessagePanel(
+                                title = strings.mirrorSyncEmptyTitle,
+                                message = strings.mirrorSyncEmptyMessage,
+                                icon = AppIcons.Check,
+                                modifier = Modifier.height(240.dp),
                             )
                         }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentPadding = PaddingValues(
+                                start = 16.dp,
+                                top = 8.dp,
+                                end = 16.dp,
+                                bottom = 16.dp + bottomPadding +
+                                    if (hasSelectableBar) GlassBarClearance else 0.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            when (active) {
+                                MirrorSection.UPDATE -> items(
+                                    items = preview.updates,
+                                    key = { "update-${it.key}" },
+                                ) { row ->
+                                    MirrorPreviewRowItem(
+                                        row = row,
+                                        checked = row.key in holder.selectedKeys,
+                                        enabled = !holder.applying,
+                                        strings = strings,
+                                        scoreFormat = preview.targetScoreFormat,
+                                        onToggle = { holder.toggle(row) },
+                                    )
+                                }
+
+                                MirrorSection.ADD -> items(
+                                    items = preview.additions,
+                                    key = { "add-${it.key}" },
+                                ) { row ->
+                                    MirrorPreviewRowItem(
+                                        row = row,
+                                        checked = row.key in holder.selectedKeys,
+                                        enabled = !holder.applying,
+                                        strings = strings,
+                                        scoreFormat = preview.targetScoreFormat,
+                                        onToggle = { holder.toggle(row) },
+                                    )
+                                }
+
+                                MirrorSection.LINKED_ONLY -> items(
+                                    items = preview.linkedOnly,
+                                    key = { "linked-${it.media.type}-${it.media.malId}" },
+                                ) { row ->
+                                    LinkedOnlyRow(row, strings)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (hasSelectableBar) {
+                    GlassBar(
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = strings.mirrorSyncBackgroundCopy,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        AppButton(
+                            label = if (holder.applying) {
+                                strings.mirrorSyncApplying
+                            } else {
+                                strings.mirrorSyncApply(holder.selectedCount)
+                            },
+                            onClick = {
+                                scope.launch {
+                                    if (holder.apply() is NetworkResult.Success) onApplied()
+                                }
+                            },
+                            emphasis = ButtonEmphasis.Primary,
+                            enabled = holder.selectedCount > 0 && !holder.applying,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
             }
         }
     }
+}
+
+private fun MirrorSection.label(strings: LanguageStrings): String = when (this) {
+    MirrorSection.UPDATE -> strings.mirrorSyncUpdateSection
+    MirrorSection.ADD -> strings.mirrorSyncAddSection
+    MirrorSection.LINKED_ONLY -> strings.mirrorSyncLinkedOnlySection
 }
 
 @Composable
@@ -264,6 +329,9 @@ private fun MirrorPreviewRowItem(
 ) {
     // The whole row toggles the check: a review page never navigates away and
     // loses the selection. The checkbox is the 48dp explicit control.
+    // The card height is fixed. A warning row already spends a line on the
+    // alert, so it gets two subtitle lines; safe rows can use the full three.
+    val hasWarning = row.newerInLinked || row.regression
     MediaCoverCard(
         cover = row.media.cover,
         title = row.media.title,
@@ -271,7 +339,7 @@ private fun MirrorPreviewRowItem(
         onClick = { if (enabled) onToggle() },
         coverSize = CoverSize.List,
         titleMaxLines = 2,
-        subtitleMaxLines = 1,
+        subtitleMaxLines = if (hasWarning) 2 else 3,
         coverContentDescription = row.media.title,
         titleTrailing = {
             Checkbox(
@@ -281,7 +349,7 @@ private fun MirrorPreviewRowItem(
             )
         },
         content = {
-            if (row.newerInLinked || row.regression) {
+            if (hasWarning) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (row.newerInLinked) {
                         Text(

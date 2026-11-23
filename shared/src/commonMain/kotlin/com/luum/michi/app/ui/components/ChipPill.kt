@@ -1,5 +1,6 @@
 package com.luum.michi.app.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -24,7 +25,8 @@ import coil3.compose.SubcomposeAsyncImage
  * chip lands where the list pills land; [iconUrl] draws a 16dp leading image
  * (platform logos) and [count] appends " · N". Shared by [ChipRail] and the
  * editor status rail. [leadingIcon] draws a 16dp leading icon tinted with
- * [leadingIconTint] (null = the chip's content color).
+ * [leadingIconTint] (null = the chip's content color). [modifier] lets the fill
+ * rail hand the pill a fixed cell width; the normal wrap recipe is unchanged.
  */
 @Composable
 internal fun ChipPill(
@@ -36,6 +38,9 @@ internal fun ChipPill(
     count: Int? = null,
     leadingIcon: ImageVector? = null,
     leadingIconTint: Color? = null,
+    // Fill mode gives every pill the width of its cell; the content stays
+    // centered inside it. Wrap-content callers are unaffected.
+    modifier: Modifier = Modifier,
 ) {
     val contentColor = if (selected) {
         MaterialTheme.colorScheme.onPrimaryContainer
@@ -51,12 +56,14 @@ internal fun ChipPill(
             toolContainerColor()
         },
         border = if (selected) null else toolBorder(),
+        modifier = modifier,
     ) {
         Row(
             modifier = Modifier.padding(
                 horizontal = 16.dp,
                 vertical = if (compact) 6.dp else 10.dp,
             ),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (!iconUrl.isNullOrBlank()) {

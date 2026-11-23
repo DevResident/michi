@@ -48,6 +48,8 @@ internal fun SettingsRow(
     /** Custom leading slot (e.g. the followed account's avatar); wins over [icon]. */
     leading: (@Composable () -> Unit)? = null,
     supportingText: String? = null,
+    /** Color of [supportingText]; warnings pass [LocalWarning]. */
+    supportingColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         if (divider) {
@@ -86,7 +88,7 @@ internal fun SettingsRow(
                         Text(
                             text = supportingText,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = supportingColor,
                         )
                     }
                 }

@@ -1,17 +1,10 @@
 package com.luum.michi.app.calendar.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.luum.michi.app.core.language.domain.LanguageStrings
-import com.luum.michi.app.ui.components.GlassCapsule
+import com.luum.michi.app.ui.components.GlassBar
 import com.luum.michi.app.ui.components.GlassCircleButton
 import com.luum.michi.app.ui.icons.AppIcons
 import com.luum.michi.app.ui.language.Strings
@@ -33,34 +26,19 @@ internal fun CalendarDateBar(
     modifier: Modifier = Modifier,
     dateContent: @Composable RowScope.() -> Unit,
 ) {
-    Box(
-        modifier = modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center,
-    ) {
-        GlassCapsule(
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                GlassCircleButton(
-                    icon = AppIcons.Back,
-                    contentDescription = strings.calendarPreviousDayAction,
-                    onClick = onPrevious,
-                    enabled = previousEnabled,
-                )
-                dateContent()
-                GlassCircleButton(
-                    icon = AppIcons.ChevronRight,
-                    contentDescription = strings.calendarNextDayAction,
-                    onClick = onNext,
-                    enabled = nextEnabled,
-                )
-            }
-        }
+    GlassBar(modifier = modifier) {
+        GlassCircleButton(
+            icon = AppIcons.Back,
+            contentDescription = strings.calendarPreviousDayAction,
+            onClick = onPrevious,
+            enabled = previousEnabled,
+        )
+        dateContent()
+        GlassCircleButton(
+            icon = AppIcons.ChevronRight,
+            contentDescription = strings.calendarNextDayAction,
+            onClick = onNext,
+            enabled = nextEnabled,
+        )
     }
 }

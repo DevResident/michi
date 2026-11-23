@@ -8,6 +8,9 @@ import com.luum.michi.app.core.medialist.domain.MirrorPreviewRow
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncSource
+import com.luum.michi.app.mirror.ui.model.MirrorSection
+import com.luum.michi.app.mirror.ui.model.MirrorTab
+import com.luum.michi.app.mirror.ui.model.mirrorTabs
 
 /**
  * State for the "Sync now" preview page. The page can close immediately after
@@ -26,6 +29,50 @@ internal class MirrorSyncStateHolder(
         private set
     var selectedKeys by mutableStateOf<Set<String>>(emptySet())
         private set
+    var selectedSection by mutableStateOf<MirrorSection?>(null)
+        private set
+
+    val tabs: List<MirrorTab> get() = preview?.let(::mirrorTabs).orEmpty()
+
+    /**
+     * The tab painted now. A still-visible previous selection survives a reload;
+     * if its section disappeared, the first section with rows takes over.
+     */
+    val activeSection: MirrorSection?
+        get() {
+            val visible = tabs
+            return selectedSection?.takeIf { section ->
+                visible.any { it.section == section }
+            } ?: visible.firstOrNull()?.section
+        }
+
+    /** Rows that can be selected from the active tab (linked-only has none). */
+    val selectableRows: List<MirrorPreviewRow>
+        get() = when (activeSection) {
+            MirrorSection.UPDATE -> updatesWithoutWarnings()
+            MirrorSection.ADD -> preview?.additions.orEmpty()
+            MirrorSection.LINKED_ONLY, null -> emptyList()
+        }
+
+    /** Every row painted in the active tab, safe or not. */
+    val activeRows: List<MirrorPreviewRow>
+        get() = when (activeSection) {
+            MirrorSection.UPDATE -> preview?.updates.orEmpty()
+            MirrorSection.ADD -> preview?.additions.orEmpty()
+            MirrorSection.LINKED_ONLY, null -> emptyList()
+        }
+
+    val activeSelectedCount: Int
+        get() = activeRows.count { it.key in selectedKeys }
+
+    val activeRowCount: Int
+        get() = activeRows.size
+
+    val allSelectableSelected: Boolean
+        get() {
+            val selectable = selectableRows
+            return selectable.isNotEmpty() && selectable.all { it.key in selectedKeys }
+        }
 
     val selectedRows: List<MirrorPreviewRow>
         get() {
@@ -34,6 +81,10 @@ internal class MirrorSyncStateHolder(
         }
 
     val selectedCount: Int get() = selectedRows.size
+
+    fun selectSection(section: MirrorSection) {
+        selectedSection = section
+    }
 
     suspend fun load() {
         if (loading) return
@@ -83,6 +134,24 @@ internal class MirrorSyncStateHolder(
             selectedKeys + row.key
         }
     }
+
+    /**
+     * Select all safe rows of the active tab, or clear every row in it. Update
+     * never auto-selects "newer in the linked account" or regression rows.
+     */
+    fun toggleSelectAll() {
+        if (activeSection == null || activeSection == MirrorSection.LINKED_ONLY) return
+        val rows = activeRows
+        if (rows.isEmpty()) return
+        selectedKeys = if (allSelectableSelected) {
+            selectedKeys - rows.map { it.key }.toSet()
+        } else {
+            selectedKeys + selectableRows.map { it.key }
+        }
+    }
+
+    private fun updatesWithoutWarnings(): List<MirrorPreviewRow> =
+        preview?.updates.orEmpty().filterNot { it.newerInLinked || it.regression }
 
     suspend fun apply(): NetworkResult<Unit> {
         if (applying) {
