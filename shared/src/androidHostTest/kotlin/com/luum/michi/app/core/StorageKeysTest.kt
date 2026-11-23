@@ -18,7 +18,10 @@ class StorageKeysTest {
             SettingsStoreKeys.StartMangaSection,
             SettingsStoreKeys.StartCatalogType,
             SettingsStoreKeys.ActiveProvider,
+            SettingsStoreKeys.LinkedAccount,
+            SettingsStoreKeys.LinkedLostAccess,
+            SettingsStoreKeys.LinkedAutoCopy,
         )
-        assertEquals(9, keys.size)
+        assertEquals(12, keys.size)
     }
 }

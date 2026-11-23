@@ -9,9 +9,16 @@ import com.luum.michi.app.core.mal.domain.PendingMalAuthStore
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.domain.map
+import com.luum.michi.app.core.session.domain.AccountEvents
 import com.luum.michi.app.core.session.domain.ActiveProviderStore
 import com.luum.michi.app.core.session.domain.CachedViewerStore
+import com.luum.michi.app.core.session.domain.LinkedAccount
+import com.luum.michi.app.core.session.domain.LinkedAccountManager
+import com.luum.michi.app.core.session.domain.LinkedAccountStore
+import com.luum.michi.app.core.session.domain.PendingLink
+import com.luum.michi.app.core.session.domain.PendingLinkStore
 import com.luum.michi.app.core.session.domain.SessionManager
+import com.luum.michi.app.core.session.domain.TokenRefreshCoordinator
 import com.luum.michi.app.core.session.domain.Viewer
 import kotlinx.coroutines.CompletableDeferred
 
@@ -40,12 +47,18 @@ internal class TestAuthProvider(
     var viewerResult: NetworkResult<Viewer> = NetworkResult.Success(Viewer(id = 1, name = "user")),
     var refreshResult: NetworkResult<AuthToken>? = null,
     var callbackResult: (String) -> NetworkResult<AuthToken>? = { null },
+    /** Overrides the default ownership check when a test needs it. */
+    var callbackOwned: ((String) -> Boolean)? = null,
 ) : AuthProvider {
     var openCalls = 0
         private set
     var viewerCalls = 0
         private set
     var refreshCalls = 0
+        private set
+    var callbackCalls = 0
+        private set
+    var discardPendingCalls = 0
         private set
 
     var viewerGate: CompletableDeferred<Unit>? = null
@@ -55,8 +68,17 @@ internal class TestAuthProvider(
         openCalls++
     }
 
-    override suspend fun handleCallback(uri: String): NetworkResult<AuthToken>? =
-        callbackResult(uri)
+    override fun ownsCallback(uri: String): Boolean =
+        callbackOwned?.invoke(uri) ?: (callbackResult(uri) != null)
+
+    override fun discardPending() {
+        discardPendingCalls++
+    }
+
+    override suspend fun handleCallback(uri: String): NetworkResult<AuthToken>? {
+        callbackCalls++
+        return callbackResult(uri)
+    }
 
     override suspend fun refresh(token: AuthToken): NetworkResult<AuthToken>? {
         refreshCalls++
@@ -120,18 +142,86 @@ internal class InMemoryCachedViewerStore(initial: Viewer? = null) : CachedViewer
     }
 }
 
+internal class InMemoryPendingLinkStore(
+    var pending: PendingLink? = null,
+) : PendingLinkStore {
+    override fun load(): PendingLink? = pending
+
+    override fun save(pending: PendingLink) {
+        this.pending = pending
+    }
+
+    override fun clear() {
+        pending = null
+    }
+}
+
+internal class InMemoryLinkedAccountStore(
+    var account: LinkedAccount? = null,
+    var lostAccess: ProviderId? = null,
+    var autoCopy: Boolean = false,
+) : LinkedAccountStore {
+    override fun load(): LinkedAccount? = account
+
+    override fun save(account: LinkedAccount) {
+        this.account = account
+    }
+
+    override fun clear() {
+        account = null
+    }
+
+    override fun loadLostAccess(): ProviderId? = lostAccess
+
+    override fun saveLostAccess(provider: ProviderId) {
+        lostAccess = provider
+    }
+
+    override fun clearLostAccess() {
+        lostAccess = null
+    }
+
+    override fun loadAutoCopy(): Boolean = autoCopy
+
+    override fun saveAutoCopy(enabled: Boolean) {
+        autoCopy = enabled
+    }
+}
+
+internal fun testLinkedAccountManager(
+    store: InMemoryLinkedAccountStore = InMemoryLinkedAccountStore(),
+): LinkedAccountManager = LinkedAccountManager(store = store)
+
 internal fun testSessionManager(
     providers: List<AuthProvider>,
     tokenStorages: Map<ProviderId, TokenStorage>,
     activeProviderStore: ActiveProviderStore = InMemoryActiveProviderStore(),
     cachedViewerStore: CachedViewerStore = InMemoryCachedViewerStore(),
     onClearUserData: suspend () -> Unit = {},
+    pendingLinkStore: PendingLinkStore? = null,
+    linkedAccounts: LinkedAccountManager? = null,
+    onSessionClosed: suspend () -> Unit = {},
+    onSessionAuthenticated: suspend (ProviderId) -> Unit = {},
+    otherViewerFetchers: Map<ProviderId, suspend (AuthToken) -> NetworkResult<Viewer>> = emptyMap(),
+    onClearAccountData: suspend (ProviderId, Int?) -> Unit = { _, _ -> },
+    onFollowedChanged: suspend (ProviderId) -> Unit = {},
+    onAccountDisconnected: suspend (ProviderId) -> Unit = {},
+    events: AccountEvents = AccountEvents(),
 ): SessionManager = SessionManager(
     providers = providers,
     tokenStorages = tokenStorages,
     activeProviderStore = activeProviderStore,
     cachedViewerStore = cachedViewerStore,
     onClearUserData = onClearUserData,
+    pendingLinkStore = pendingLinkStore,
+    linkedAccounts = linkedAccounts,
+    onSessionClosed = onSessionClosed,
+    onSessionAuthenticated = onSessionAuthenticated,
+    otherViewerFetchers = otherViewerFetchers,
+    onClearAccountData = onClearAccountData,
+    onFollowedChanged = onFollowedChanged,
+    onAccountDisconnected = onAccountDisconnected,
+    events = events,
 )
 
 internal fun testSessionManager(
@@ -140,10 +230,28 @@ internal fun testSessionManager(
     activeProviderStore: ActiveProviderStore = InMemoryActiveProviderStore(),
     cachedViewerStore: CachedViewerStore = InMemoryCachedViewerStore(),
     onClearUserData: suspend () -> Unit = {},
+    pendingLinkStore: PendingLinkStore? = null,
+    linkedAccounts: LinkedAccountManager? = null,
+    onSessionClosed: suspend () -> Unit = {},
+    onSessionAuthenticated: suspend (ProviderId) -> Unit = {},
+    otherViewerFetchers: Map<ProviderId, suspend (AuthToken) -> NetworkResult<Viewer>> = emptyMap(),
+    onClearAccountData: suspend (ProviderId, Int?) -> Unit = { _, _ -> },
+    onFollowedChanged: suspend (ProviderId) -> Unit = {},
+    onAccountDisconnected: suspend (ProviderId) -> Unit = {},
+    events: AccountEvents = AccountEvents(),
 ): SessionManager = testSessionManager(
     providers = listOf(provider),
     tokenStorages = mapOf(provider.id to storage),
     activeProviderStore = activeProviderStore,
     cachedViewerStore = cachedViewerStore,
     onClearUserData = onClearUserData,
+    pendingLinkStore = pendingLinkStore,
+    linkedAccounts = linkedAccounts,
+    onSessionClosed = onSessionClosed,
+    onSessionAuthenticated = onSessionAuthenticated,
+    otherViewerFetchers = otherViewerFetchers,
+    onClearAccountData = onClearAccountData,
+    onFollowedChanged = onFollowedChanged,
+    onAccountDisconnected = onAccountDisconnected,
+    events = events,
 )

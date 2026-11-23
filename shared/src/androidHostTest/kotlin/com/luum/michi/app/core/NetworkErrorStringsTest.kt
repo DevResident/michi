@@ -35,4 +35,16 @@ class NetworkErrorStringsTest {
             EnglishStrings.networkErrorMessage(NetworkError.GraphQL(listOf("boom"))),
         )
     }
+
+    @Test
+    fun anExpiredLinkHasItsOwnMessageInBothLanguages() {
+        assertEquals(
+            "The link expired. Please try again.",
+            EnglishStrings.networkErrorMessage(NetworkError.LinkExpired),
+        )
+        assertEquals(
+            "El enlace caducó. Vuelve a intentarlo.",
+            SpanishStrings.networkErrorMessage(NetworkError.LinkExpired),
+        )
+    }
 }

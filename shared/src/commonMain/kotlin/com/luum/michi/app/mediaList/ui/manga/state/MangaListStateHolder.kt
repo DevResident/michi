@@ -1,10 +1,12 @@
 package com.luum.michi.app.mediaList.ui.manga.state
 
+import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.aniListRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.SortPersistence
 import com.luum.michi.app.core.medialist.domain.SortScope
 import com.luum.michi.app.core.network.domain.NetworkResult
+import com.luum.michi.app.core.network.domain.map
 import com.luum.michi.app.mediaList.domain.manga.MangaListRepository
 import com.luum.michi.app.mediaList.domain.manga.model.MangaListEntry
 import com.luum.michi.app.mediaList.domain.manga.model.MangaListSection
@@ -58,7 +60,8 @@ internal class MangaListStateHolder(
             progress = if (entry.tracksByVolume) null else entry.chaptersProgress,
             status = entry.status.toMediaListStatus(),
             progressVolumes = entry.volumesProgress,
-        )
+            mediaType = MediaType.MANGA,
+        ).map { }
 
     fun incrementChapters(entry: MangaListEntry) {
         enqueue(entry.id) { it.incrementedChapters(lastSplitCompleted) }

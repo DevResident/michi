@@ -7,7 +7,9 @@ import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.media.domain.MediaFormat
+import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.MediaSeason
 import com.luum.michi.app.core.media.domain.MediaWorkStatus
 import com.luum.michi.app.core.medialist.domain.UserListOrder
@@ -153,6 +155,8 @@ private class GatedEntryRepository(
         hiddenFromStatusLists: Boolean,
         startedAtMillis: Long?,
         completedAtMillis: Long?,
+        mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(
@@ -160,13 +164,29 @@ private class GatedEntryRepository(
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
-    ): NetworkResult<Unit> {
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry> {
         progressCalls++
         gate.await()
         return if (progressCalls == failAtCall) {
             NetworkResult.Failure(NetworkError.Http(500, null))
         } else {
-            NetworkResult.Success(Unit)
+            NetworkResult.Success(
+                MediaListViewerEntry(
+                    id = mediaRef.id.toInt(),
+                    status = status,
+                    progress = progress ?: 0,
+                    progressVolumes = progressVolumes,
+                    score = 0f,
+                    notes = "",
+                    repeat = 0,
+                    priority = 0,
+                    isPrivate = false,
+                    hiddenFromStatusLists = false,
+                    startedAtMillis = null,
+                    completedAtMillis = null,
+                ),
+            )
         }
     }
 

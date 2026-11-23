@@ -22,6 +22,12 @@ internal interface AuthProvider {
     /** Opens the provider's authorization page. */
     fun open()
 
+    /** True when [uri] is this provider's redirect, without exchanging anything. */
+    fun ownsCallback(uri: String): Boolean
+
+    /** Drops this provider's pending verifier/state without exchanging a code. */
+    fun discardPending()
+
     /** null when [uri] does not belong to this provider; may do network (code exchange). */
     suspend fun handleCallback(uri: String): NetworkResult<AuthToken>?
 

@@ -156,6 +156,7 @@ private suspend fun MalMediaListEntryRepository.save(
     startedAtMillis: Long? = null,
     completedAtMillis: Long? = null,
     ref: EntityRef = aniListRef(100),
+    mediaType: MediaType = MediaType.ANIME,
 ): NetworkResult<com.luum.michi.app.core.medialist.domain.MediaListViewerEntry> = saveEntry(
     mediaRef = ref,
     status = status,
@@ -170,6 +171,8 @@ private suspend fun MalMediaListEntryRepository.save(
     hiddenFromStatusLists = true,
     startedAtMillis = startedAtMillis,
     completedAtMillis = completedAtMillis,
+    mediaType = mediaType,
+    changedFields = null,
 )
 
 class MalMediaListEntryRepositoryTest {
@@ -280,6 +283,7 @@ class MalMediaListEntryRepositoryTest {
             progress = 6,
             status = null,
             progressVolumes = null,
+            mediaType = MediaType.ANIME,
         )
 
         assertTrue(result is NetworkResult.Success)
@@ -588,6 +592,7 @@ class MalMediaListEntryRepositoryTest {
             progress = 4,
             status = null,
             progressVolumes = null,
+            mediaType = MediaType.MANGA,
         )
         val deleted = harness.repository.deleteEntry(entryId = 1, mediaRef = manga)
 

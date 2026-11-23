@@ -45,6 +45,12 @@ internal class MalAuthProvider(
         browser.open(MalOAuthConfig.buildAuthorizeUrl(pkce))
     }
 
+    override fun ownsCallback(uri: String): Boolean = parseMalOAuthCallback(uri) != null
+
+    override fun discardPending() {
+        pendingStore.clear()
+    }
+
     override suspend fun handleCallback(uri: String): NetworkResult<AuthToken>? {
         val callback = parseMalOAuthCallback(uri) ?: return null
         val pending = pendingStore.load()

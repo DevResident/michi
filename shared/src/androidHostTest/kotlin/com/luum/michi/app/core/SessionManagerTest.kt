@@ -510,7 +510,7 @@ class SessionManagerTest {
     }
 
     @Test
-    fun callbackFromASecondProviderClosesTheFirstSession() = runBlocking {
+    fun aCallbackWithoutAPendingLinkNeverClosesTheFirstSession() = runBlocking {
         val aniListStorage = InMemoryTokenStorage()
         aniListStorage.save(freshToken())
         val otherStorage = InMemoryTokenStorage()
@@ -550,13 +550,17 @@ class SessionManagerTest {
 
         manager.onOAuthCallback("michi://other/callback?code=1")
 
-        assertNull(aniListStorage.load(), "the previous provider's session is closed")
-        assertEquals("other-token", otherStorage.load()?.accessToken)
-        assertEquals(other, active.load())
-        assertEquals(1, clears, "switching providers wipes user data once")
+        assertEquals("abc", aniListStorage.load()?.accessToken, "the persisted session stays")
+        assertNull(otherStorage.load(), "the stray callback stores no token")
+        assertEquals(ProviderId.AniList, active.load())
+        assertEquals(0, clears, "nothing is wiped")
+        assertEquals(0, otherProvider.callbackCalls, "the callback is never exchanged")
+        assertEquals(0, otherProvider.viewerCalls)
+
+        manager.bootstrap()
+
         val state = manager.state.value
         assertTrue(state is SessionState.Authenticated)
-        assertEquals(other, state.provider)
-        assertEquals(other, manager.activeProvider(), "the list router follows the active provider")
+        assertEquals(ProviderId.AniList, state.provider)
     }
 }

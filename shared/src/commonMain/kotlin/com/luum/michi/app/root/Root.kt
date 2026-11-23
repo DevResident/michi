@@ -7,16 +7,37 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import com.luum.michi.app.calendar.domain.CalendarRepository
 import com.luum.michi.app.calendar.ui.CalendarScreen
 import com.luum.michi.app.core.auth.domain.ProviderCapabilities
@@ -24,13 +45,16 @@ import com.luum.michi.app.core.auth.domain.effectiveScoreFormat
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.favourite.domain.FavouriteRepository
 import com.luum.michi.app.core.media.domain.aniListRef
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.medialist.domain.parseScoreFormat
+import com.luum.michi.app.core.medialist.repository.MirrorOutboxState
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.SortPersistence
 import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.TabSection
 import com.luum.michi.app.core.platform.domain.ShareLauncher
 import com.luum.michi.app.core.platform.domain.UrlOpener
+import com.luum.michi.app.core.session.domain.AccountEvent
 import com.luum.michi.app.core.session.domain.Viewer
 import com.luum.michi.app.discover.domain.DashboardRepository
 import com.luum.michi.app.discover.domain.ExploreRepository
@@ -41,6 +65,8 @@ import com.luum.michi.app.mediaDetail.domain.staff.StaffDetailRepository
 import com.luum.michi.app.mediaDetail.domain.studio.StudioDetailRepository
 import com.luum.michi.app.mediaList.domain.anime.AnimeListRepository
 import com.luum.michi.app.mediaList.domain.manga.MangaListRepository
+import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncCoordinator
+import com.luum.michi.app.mirror.ui.MirrorSyncScreen
 import com.luum.michi.app.notifications.domain.NotificationsRepository
 import com.luum.michi.app.notifications.ui.NotificationsScreen
 import com.luum.michi.app.profile.domain.ProfileRepository
@@ -52,12 +78,18 @@ import com.luum.michi.app.root.state.resolveStartDestination
 import com.luum.michi.app.root.state.startDestinationChoice
 import com.luum.michi.app.settings.ui.AboutScreen
 import com.luum.michi.app.settings.ui.SettingsScreen
+import kotlinx.coroutines.delay
+import com.luum.michi.app.accounts.ui.AccountsScreen
+import com.luum.michi.app.accounts.ui.state.AccountsUiState
 import com.luum.michi.app.settings.ui.state.SettingsState
+import com.luum.michi.app.ui.components.PillShape
 import com.luum.michi.app.ui.components.SearchScrim
 import com.luum.michi.app.ui.components.ToolbarSearch
 import com.luum.michi.app.ui.components.tabFadeSpec
+import com.luum.michi.app.ui.icons.AppIcons
 import com.luum.michi.app.ui.language.Strings
 import com.luum.michi.app.ui.language.searchHintFor
+import com.luum.michi.app.ui.theme.LocalWarning
 
 /**
  * Slim app orchestrator: owns the [State], derives the topbar per tab and
@@ -91,6 +123,7 @@ internal fun Root(
     profileRepository: ProfileRepository,
     favouriteRepository: FavouriteRepository,
     notificationsRepository: NotificationsRepository,
+    mirrorSyncCoordinator: MirrorSyncCoordinator,
     urlOpener: UrlOpener,
     shareLauncher: ShareLauncher,
     sortPersistence: SortPersistence,
@@ -98,6 +131,19 @@ internal fun Root(
     loginErrorMessage: String? = null,
     onSignInDismissed: () -> Unit = {},
     isAuthConfigured: Boolean,
+    accounts: AccountsUiState = AccountsUiState(
+        connected = emptyList(),
+        followed = null,
+        labels = emptyMap(),
+    ),
+    mirrorOutbox: MirrorOutboxState = MirrorOutboxState(),
+    onConnectAccount: (ProviderId) -> Unit = {},
+    onDisconnectAccount: (ProviderId) -> Unit = {},
+    onSetFollowed: (ProviderId) -> Unit = {},
+    onSetAutoCopy: (Boolean) -> Unit = {},
+    onDismissLostAccess: () -> Unit = {},
+    onRetryMirror: () -> Unit = {},
+    accountEvents: kotlinx.coroutines.flow.Flow<AccountEvent> = kotlinx.coroutines.flow.emptyFlow(),
     autoOpenSignIn: Boolean = false,
     onAutoSignInShown: () -> Unit = {},
     deepLinkDestination: DetailDestination? = null,
@@ -122,6 +168,16 @@ internal fun Root(
         },
     )
     val tab = state.selectedTab
+    var accountEvent by remember { mutableStateOf<AccountEvent?>(null) }
+    LaunchedEffect(accountEvents) {
+        accountEvents.collect { accountEvent = it }
+    }
+    LaunchedEffect(accountEvent) {
+        if (accountEvent != null) {
+            delay(3_000)
+            accountEvent = null
+        }
+    }
     val searchTab = state.searchActiveTab
     // The search field is a tab-surface affordance: while a detail, the editor or
     // an above-detail overlay draws over it, the toolbar shows that surface
@@ -161,7 +217,8 @@ internal fun Root(
     // detail entry drops its state (a new entry always starts at the top).
     val surfaceStates = rememberSaveableStateHolder()
 
-    val holders = rememberRootHolders(
+    val holders = key(viewer?.provider) {
+        rememberRootHolders(
         viewerId = viewerId,
         notificationsEnabled = capabilities.notifications,
         profileDetailsEnabled = capabilities.profileDetails,
@@ -182,7 +239,9 @@ internal fun Root(
         favouriteRepository = favouriteRepository,
         notificationsRepository = notificationsRepository,
         sortPersistence = sortPersistence,
-    )
+        mirrorSyncCoordinator = mirrorSyncCoordinator,
+        )
+    }
 
     RootEffects(
         state = state,
@@ -247,7 +306,29 @@ internal fun Root(
                 surfaceStates.SaveableStateProvider(surface) {
                     key(surface) {
                         if (state.isOpen(RootOverlay.Settings)) {
-                            if (state.settingsAboutOpen) {
+                            if (state.settingsMirrorOpen && holders.mirrorSync != null) {
+                                MirrorSyncScreen(
+                                    holder = holders.mirrorSync,
+                                    bottomPadding = padding.calculateBottomPadding(),
+                                    outbox = mirrorOutbox,
+                                    onRetry = onRetryMirror,
+                                    onApplied = { state.closeSettingsMirror() },
+                                )
+                            } else if (state.settingsAccountsOpen) {
+                                AccountsScreen(
+                                    state = accounts,
+                                    coordinator = mirrorSyncCoordinator,
+                                    bottomPadding = padding.calculateBottomPadding(),
+                                    onConnect = onConnectAccount,
+                                    onDisconnect = onDisconnectAccount,
+                                    onSetFollowed = onSetFollowed,
+                                    onSetAutoCopy = onSetAutoCopy,
+                                    onDismissLostAccess = onDismissLostAccess,
+                                    onOpenUrl = { urlOpener.open(it) },
+                                    onOpenPreview = { state.openSettingsMirror() },
+                                    onLogout = onLogout,
+                                )
+                            } else if (state.settingsAboutOpen) {
                                 AboutScreen(
                                     bottomPadding = padding.calculateBottomPadding(),
                                     onOpenUrl = { urlOpener.open(it) },
@@ -260,8 +341,9 @@ internal fun Root(
                                     settingsState = settingsState,
                                     startDestination = startChoice,
                                     viewer = viewer,
-                                    onLogin = { state.open(RootOverlay.SignIn) },
-                                    onLogout = onLogout,
+                                    accounts = accounts,
+                                    onDismissLostAccess = onDismissLostAccess,
+                                    onOpenAccounts = { state.openSettingsAccounts() },
                                     onOpenAbout = { state.openSettingsAbout() },
                                     bottomPadding = padding.calculateBottomPadding(),
                                 )
@@ -347,12 +429,73 @@ internal fun Root(
                 shareLauncher = shareLauncher,
                 strings = strings,
             )
+            accountEvent?.let { event ->
+                AccountEventPill(
+                    event = event,
+                    providerLabel = accounts.label(event.provider),
+                    strings = strings,
+                    onDismiss = { accountEvent = null },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp, start = 16.dp, end = 16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountEventPill(
+    event: AccountEvent,
+    providerLabel: String,
+    strings: LanguageStrings,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val (icon, text) = when (event) {
+        is AccountEvent.Connected -> AppIcons.Check to strings.accountsEventConnected(providerLabel)
+        is AccountEvent.Disconnected ->
+            AppIcons.Clear to strings.accountsEventDisconnected(providerLabel)
+        is AccountEvent.LostAccess ->
+            AppIcons.Warning to strings.accountsEventLostAccess(providerLabel)
+        is AccountEvent.FollowedChanged ->
+            AppIcons.ChevronRight to strings.accountsEventFollowed(providerLabel)
+    }
+    val warning = event is AccountEvent.LostAccess
+    Surface(
+        modifier = modifier
+            .clip(PillShape)
+            .semantics { liveRegion = LiveRegionMode.Polite }
+            .clickable(onClick = onDismiss),
+        shape = PillShape,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (warning) LocalWarning.current else MaterialTheme.colorScheme.outlineVariant,
+        ),
+        shadowElevation = 4.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (warning) LocalWarning.current else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = text, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
 
 /** Which saved surface the content area shows: the slot's tab + the view. */
 private fun surfaceKey(tab: TabSection, state: State): String = when {
+    state.isOpen(RootOverlay.Settings) && state.settingsMirrorOpen -> "${tab.name}:settings-mirror"
+    state.isOpen(RootOverlay.Settings) && state.settingsAccountsOpen -> "${tab.name}:settings-accounts"
     state.isOpen(RootOverlay.Settings) && state.settingsAboutOpen -> "${tab.name}:settings-about"
     state.isOpen(RootOverlay.Settings) -> "${tab.name}:settings"
     state.isDetailOpen -> detailSurfaceKey(tab, state.currentDetailEntryId)

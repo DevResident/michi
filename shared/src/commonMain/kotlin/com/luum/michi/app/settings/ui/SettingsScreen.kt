@@ -33,6 +33,7 @@ import com.luum.michi.app.MichiBuildConfig
 import com.luum.michi.app.core.language.domain.AppLanguage
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.model.ImageQuality
+import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.label
@@ -43,6 +44,7 @@ import com.luum.michi.app.settings.domain.model.StartTabOption
 import com.luum.michi.app.settings.domain.model.TitleLanguage
 import com.luum.michi.app.settings.domain.model.label
 import com.luum.michi.app.core.session.domain.Viewer
+import com.luum.michi.app.accounts.ui.state.AccountsUiState
 import com.luum.michi.app.settings.ui.state.SettingsState
 import com.luum.michi.app.ui.components.ModalSheet
 import com.luum.michi.app.ui.components.OptionGroup
@@ -78,15 +80,15 @@ internal fun SettingsScreen(
     settingsState: SettingsState,
     startDestination: StartDestinationChoice = StartDestinationChoice(),
     viewer: Viewer?,
-    onLogin: () -> Unit,
-    onLogout: () -> Unit,
+    accounts: AccountsUiState? = null,
+    onDismissLostAccess: () -> Unit = {},
+    onOpenAccounts: () -> Unit = {},
     onOpenAbout: () -> Unit,
     bottomPadding: Dp,
     strings: LanguageStrings = Strings.current,
     modifier: Modifier = Modifier,
 ) {
     var openSheet: SettingsSheet? by remember { mutableStateOf(null) }
-    var signOutConfirmSheet by remember { mutableStateOf(false) }
 
     val listContent: @Composable () -> Unit = {
         LazyColumn(
@@ -102,12 +104,25 @@ internal fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                SettingsAccountCard(
+                SettingsAccountsRow(
                     viewer = viewer,
+                    accounts = accounts,
                     strings = strings,
-                    onSignIn = onLogin,
-                    onAccountSettings = { openSheet = SettingsSheet.Account },
+                    onOpenAccounts = onOpenAccounts,
                 )
+            }
+            accounts?.lostAccess?.let { provider ->
+                item {
+                    OptionGroup(title = null) {
+                        SettingsRow(
+                            label = strings.accountsLostAccess(accounts.label(provider)),
+                            value = strings.accountsLostAccessDismiss,
+                            onClick = onDismissLostAccess,
+                            valueColor = LocalWarning.current,
+                            divider = false,
+                        )
+                    }
+                }
             }
             item {
                 OptionGroup(title = strings.settingsGeneralSection) {
@@ -488,53 +503,8 @@ internal fun SettingsScreen(
         )
     }
 
-    if (openSheet == SettingsSheet.Account && viewer != null) {
-        ModalSheet(
-            title = strings.settingsAccountSettingsTitle,
-            dismissLabel = strings.dismissAction,
-            onDismiss = { openSheet = null },
-        ) {
-            OptionGroup(title = null) {
-                SettingsRow(
-                    label = viewer.name,
-                    value = strings.settingsSignOutTitle,
-                    onClick = { signOutConfirmSheet = true },
-                    divider = false,
-                    valueColor = MaterialTheme.colorScheme.error,
-                )
-            }
-        }
-    }
-
-    if (signOutConfirmSheet) {
-        ModalSheet(
-            title = strings.settingsSignOutTitle,
-            dismissLabel = strings.dismissAction,
-            onDismiss = { signOutConfirmSheet = false },
-            footer = {
-                AppButton(
-                    label = strings.settingsSignOutConfirmAction,
-                    onClick = {
-                        signOutConfirmSheet = false
-                        openSheet = null
-                        onLogout()
-                    },
-                    emphasis = ButtonEmphasis.Secondary,
-                    containerColor = null,
-                    contentColor = MaterialTheme.colorScheme.error,
-                )
-            },
-        ) {
-            Text(
-                text = strings.settingsSignOutConfirmMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
 }
 
-/** Mode group first: the frequent change sits on top, no scroll needed. */
 @Composable
 private fun ThemeModeSection(
     themeType: ThemeType,
@@ -577,51 +547,37 @@ private fun ThemePaletteSection(
     )
 }
 
-/** Session card, first in Settings (identity before prefs). Plain [OptionGroup]:
- * the glass pilot (sep-2026) proved content cards read worse in light mode
- * (translucency washes out, shadow + 40% border render a ghost edge), so
- * glass stays reserved for floating surfaces and actions. */
+/** First Settings section: the followed account + the connected services summary.
+ *  Connected and guest share the same row; it always opens Accounts. */
 @Composable
-private fun SettingsAccountCard(
+private fun SettingsAccountsRow(
     viewer: Viewer?,
+    accounts: AccountsUiState?,
     strings: LanguageStrings,
-    onSignIn: () -> Unit,
-    onAccountSettings: () -> Unit,
+    onOpenAccounts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OptionGroup(
-        title = strings.settingsAccountTitle,
-        modifier = modifier,
-    ) {
+    OptionGroup(title = null, modifier = modifier) {
         if (viewer != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Avatar(
-                    imageUrl = viewer.avatarUrl,
-                    initials = initialsFor(viewer.name),
-                    size = AvatarSize.Row,
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = viewer.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
-            }
             SettingsRow(
-                label = strings.settingsAccountSettingsTitle,
+                label = viewer.name,
                 value = "",
-                onClick = onAccountSettings,
+                onClick = onOpenAccounts,
+                supportingText = accounts?.summary?.takeIf { it.isNotBlank() },
+                leading = {
+                    Avatar(
+                        imageUrl = viewer.avatarUrl,
+                        initials = initialsFor(viewer.name),
+                        size = AvatarSize.Row,
+                    )
+                },
+                divider = false,
             )
         } else {
             SettingsRow(
                 label = strings.settingsSignInTitle,
                 value = "",
-                onClick = onSignIn,
+                onClick = onOpenAccounts,
                 divider = false,
             )
         }
@@ -718,7 +674,6 @@ private enum class SettingsSheet {
     StaffNameLanguage,
     ScoreFormat,
     Sort,
-    Account,
 }
 
 private fun ThemeType.label(strings: LanguageStrings): String = when (this) {

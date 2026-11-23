@@ -106,9 +106,27 @@ internal class MalEntryClient(
         aniListId: Int,
         ref: MalRef,
         update: MalEntryUpdate,
+    ): NetworkResult<MalEntryStatus> = saveInternal(aniListId, ref, update, exact = false)
+
+    /**
+     * Mirror-only save: writes exactly the supplied fields. Unlike [save], an
+     * empty date/comments/priority is a deliberate clear, so a full primary
+     * entry can be copied faithfully.
+     */
+    suspend fun saveExact(
+        aniListId: Int,
+        ref: MalRef,
+        update: MalEntryUpdate,
+    ): NetworkResult<MalEntryStatus> = saveInternal(aniListId, ref, update, exact = true)
+
+    private suspend fun saveInternal(
+        aniListId: Int,
+        ref: MalRef,
+        update: MalEntryUpdate,
+        exact: Boolean,
     ): NetworkResult<MalEntryStatus> {
         val token = tokenProvider() ?: return NetworkResult.Failure(NetworkError.Unauthorized(null))
-        val adjusted = omitUntouched(aniListId, update)
+        val adjusted = if (exact) update else omitUntouched(aniListId, update)
         return when (val result = http.patchEntry(token, ref, adjusted)) {
             is NetworkResult.Success -> {
                 remember(aniListId, ref.type, result.value)

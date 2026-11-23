@@ -122,6 +122,26 @@ internal class MediaListDiskCache(
         }
     }
 
+    /** Deletes only one account's cached lists (both media types + old shapes). */
+    suspend fun clear(userId: Int, provider: ProviderId) {
+        for (type in MediaType.entries) {
+            val names = buildList {
+                add(listCacheFileName(userId, type, provider))
+                add(v2ListCacheFileName(userId, type, provider))
+                if (provider == ProviderId.AniList) add(legacyListCacheFileName(userId, type))
+            }
+            names.forEach { name ->
+                try {
+                    files.delete(name)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    // A failed cleanup never breaks the logout/disconnect.
+                }
+            }
+        }
+    }
+
     suspend fun clear() {
         try {
             files.clear()

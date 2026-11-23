@@ -15,6 +15,7 @@ import com.luum.michi.app.core.medialist.repository.MediaListEntryRepositoryImpl
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.session.domain.CachedViewerStore
@@ -147,6 +148,8 @@ private class CountingEntryRepository : MediaListEntryRepository {
         hiddenFromStatusLists: Boolean,
         startedAtMillis: Long?,
         completedAtMillis: Long?,
+        mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(
@@ -154,9 +157,25 @@ private class CountingEntryRepository : MediaListEntryRepository {
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
-    ): NetworkResult<Unit> {
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry> {
         progressCalls++
-        return NetworkResult.Success(Unit)
+        return NetworkResult.Success(
+            MediaListViewerEntry(
+                id = mediaRef.id.toInt(),
+                status = status,
+                progress = progress ?: 0,
+                progressVolumes = progressVolumes,
+                score = 0f,
+                notes = "",
+                repeat = 0,
+                priority = 0,
+                isPrivate = false,
+                hiddenFromStatusLists = false,
+                startedAtMillis = null,
+                completedAtMillis = null,
+            ),
+        )
     }
 
     override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =

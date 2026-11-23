@@ -113,16 +113,17 @@ internal fun RootEffects(
     // state is per-user). It only fires on a real change, so a cold start (or a
     // deep link opened during it) never loses navigation.
     val viewerId = viewer?.id
+    val viewerKey = viewer?.let { it.id to it.provider }
 
-    // Session change: drop the transient navigation state (the synced prefs are
-    // seeded/cleared in App, next to the settings holder) and mark the calendar
-    // stale — its rows carry the viewer's status/score.
-    var lastViewerId by remember { mutableStateOf(viewerId) }
-    LaunchedEffect(viewerId) {
-        if (viewerId != lastViewerId) {
-            state.reset()
+    // Only logging out drops the transient navigation state. A followed switch
+    // (and a guest -> account login) keeps the current page — Accounts stays open
+    // through the switch — while the provider-keyed holders are recreated by Root.
+    var lastViewerKey by remember { mutableStateOf(viewerKey) }
+    LaunchedEffect(viewerKey) {
+        if (viewerKey != lastViewerKey) {
+            if (viewerKey == null) state.reset()
             holders.calendar.invalidateEntries()
-            lastViewerId = viewerId
+            lastViewerKey = viewerKey
         }
     }
 
@@ -135,7 +136,7 @@ internal fun RootEffects(
     var pendingMangaReload by remember(settingsState) { mutableStateOf(false) }
     LaunchedEffect(
         tab,
-        viewerId,
+        viewerKey,
         settingsState.splitCompletedAnime,
         settingsState.splitCompletedManga,
         settingsState.syncedGeneration,
@@ -217,7 +218,7 @@ internal fun RootEffects(
         // Always: the calendar rows are re-localized too (open or not).
         holders.calendar.invalidateEntries()
     }
-    LaunchedEffect(state.currentDetail) {
+    LaunchedEffect(state.currentDetail, viewerKey) {
         when (val destination = state.currentDetail) {
             is DetailDestination.Media ->
                 holders.mediaDetail.load(destination.ref.requireAniListId(), destination.typeHint)
@@ -288,7 +289,7 @@ internal fun RootEffects(
     // toggle-off so stale values never resurrect. Filters never persist.
     val persistSort = settingsState.persistListSort
     val defaultSort = settingsState.listSort
-    LaunchedEffect(viewerId, persistSort, defaultSort) {
+    LaunchedEffect(viewerKey, persistSort, defaultSort) {
         if (viewerId == null) return@LaunchedEffect
         if (!persistSort) {
             sortPersistence.clearSort(SortScope.ANIME)

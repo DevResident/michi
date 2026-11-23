@@ -321,13 +321,95 @@ object SpanishStrings : LanguageStrings {
     override val aboutDataByTitle = "Datos por AniList"
     override val aboutThemesByTitle = "Openings por AnimeThemes"
     override val aboutNotAffiliatedText = "Michi no está afiliado a AniList"
-    override val settingsAccountTitle = "Cuenta"
-    override val settingsAccountSettingsTitle = "Configuración de la cuenta"
     override val settingsSignInTitle = "Iniciar sesión"
     override val settingsSignOutTitle = "Cerrar sesión"
     override val settingsSignOutConfirmAction = "Cerrar sesión"
     override val settingsSignOutConfirmMessage =
-        "Cerrarás sesión en este dispositivo. Tus listas están a salvo en AniList."
+        "Cerrarás sesión en este dispositivo. Tus listas están a salvo en sus servicios."
+    override val accountsTitle = "Cuentas"
+    override val accountsConnectedSection = "Cuentas conectadas"
+    override val accountsFollowedSection = "Lista que sigues"
+    override val accountsFollowedHint =
+        "Los cambios nuevos se copian desde esta lista a la otra cuenta."
+    override val accountsSyncSection = "Sincronizar con ambas"
+    override val accountsSyncComparing = "Comparando listas…"
+    override val accountsSyncUpToDate = "Al día"
+    override fun accountsSyncCopying(done: Int, total: Int): String = "Copiando $done/$total"
+    override fun accountsSyncPending(count: Int): String =
+        if (count == 1) "1 pendiente" else "$count pendientes"
+    override fun accountsSyncErrors(count: Int): String =
+        if (count == 1) "1 con error" else "$count con error"
+    override fun accountsSyncNewer(count: Int, provider: String): String =
+        if (count == 1) {
+            "1 más reciente en $provider"
+        } else {
+            "$count más recientes en $provider"
+        }
+    override fun accountsSyncRegression(count: Int): String =
+        if (count == 1) "1 retroceso" else "$count retrocesos"
+    override val accountsCompareTitle = "Comparar listas"
+    override fun accountsCompareMessage(provider: String, additions: Int, updates: Int): String {
+        val add = if (additions == 1) "1 título menos" else "$additions títulos menos"
+        val upd = if (updates == 1) "1 diferencia" else "$updates diferencias"
+        return "$provider tiene $add y $upd."
+    }
+    override fun accountsCompareSkippedNewer(count: Int, provider: String): String =
+        if (count == 1) {
+            "1 se queda como está: más reciente en $provider"
+        } else {
+            "$count se quedan como están: más recientes en $provider"
+        }
+    override fun accountsCompareSkippedRegression(count: Int): String =
+        if (count == 1) "1 se queda como está: sería un retroceso" else
+            "$count se quedan como están: serían retrocesos"
+    override val accountsCompareApply = "Poner al día"
+    override val accountsCompareView = "Ver cambios"
+    override val accountsCompareLater = "Ahora no"
+    override val accountsConnect = "Conectar"
+    override val accountsDisconnect = "Desconectar"
+    override fun accountsConnectedAs(name: String): String = "Conectada como $name"
+    override val accountsNotConnected = "No conectada"
+    override fun accountsProviderSection(provider: String): String = "Cuenta de $provider"
+    override val accountsEditProfile = "Editar perfil"
+    override val accountsManageAccount = "Gestionar cuenta"
+    override val accountsCompareLists = "Comparar listas"
+    override val accountsDisconnectTitle = "Desconectar"
+    override fun accountsDisconnectMessage(provider: String): String =
+        "¿Desconectar $provider? Su token y sus datos locales se borran de aquí. " +
+            "No se borra nada en la cuenta."
+    override fun accountsDisconnectFollowedMessage(provider: String, other: String): String =
+        "¿Desconectar $provider? $other pasa a ser la lista que sigues y no tendrás que iniciar sesión. " +
+            "Los cambios pendientes para $provider se descartan."
+    override fun accountsLostAccess(provider: String): String = "Se perdió el acceso a $provider."
+    override val accountsLostAccessDismiss = "Descartar"
+    override val accountsLostAccessReconnect = "Reconectar"
+    override val accountsConnectFailed = "No se pudo conectar la cuenta."
+    override fun accountsEventConnected(provider: String): String = "$provider conectado"
+    override fun accountsEventDisconnected(provider: String): String = "$provider desconectado"
+    override fun accountsEventLostAccess(provider: String): String =
+        "Se perdió el acceso a $provider"
+    override fun accountsEventFollowed(provider: String): String = "Ahora sigues $provider"
+    override val mirrorSyncTitle = "Comparar listas"
+    override val mirrorSyncRegression = "Sería un retroceso"
+    override val mirrorSyncAddSection = "Añadir"
+    override val mirrorSyncUpdateSection = "Actualizar"
+    override val mirrorSyncLinkedOnlySection = "Solo en la otra cuenta"
+    override fun mirrorSyncAddCount(count: Int): String =
+        if (count == 1) "1 por añadir" else "$count por añadir"
+    override fun mirrorSyncUpdateCount(count: Int): String =
+        if (count == 1) "1 por actualizar" else "$count por actualizar"
+    override fun mirrorSyncLinkedOnlyCount(count: Int): String =
+        if (count == 1) "1 solo en la otra cuenta" else "$count solo en la otra cuenta"
+    override fun mirrorSyncNoEquivalent(count: Int): String =
+        if (count == 1) "1 sin equivalente" else "$count sin equivalente"
+    override fun mirrorSyncPrivateOmitted(count: Int): String =
+        if (count == 1) "1 privada sin copiar" else "$count privadas sin copiar"
+    override fun mirrorSyncApply(count: Int): String =
+        if (count == 1) "Aplicar 1 cambio" else "Aplicar $count cambios"
+    override val mirrorSyncSlowHint = "Esto puede tardar unos minutos."
+    override val mirrorSyncEmptyTitle = "No hay nada que sincronizar"
+    override val mirrorSyncEmptyMessage = "Tus listas ya coinciden."
+    override val mirrorSyncNewerInLinked = "Más reciente en la otra cuenta"
     override val backButton = "Volver"
     override val authWelcomeTitle = "Bienvenido a Michi"
     override val authModalSubtitle = "Tu cliente para anime, manga, listas y favoritos."
@@ -358,6 +440,7 @@ object SpanishStrings : LanguageStrings {
     override val errorRateLimitedLabel = "Demasiadas solicitudes. Espera un momento."
     override val errorServerLabel = "Algo salió mal. Inténtalo de nuevo."
     override val errorUnknownLabel = "Algo salió mal. Inténtalo de nuevo."
+    override val errorLinkExpiredLabel = "El enlace caducó. Vuelve a intentarlo."
     override val notFoundLabel = "Esto ya no existe en AniList"
 
     // Filter Sheet & Filter/Order Labels

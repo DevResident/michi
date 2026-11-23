@@ -23,6 +23,12 @@ internal object SettingsStoreKeys {
     const val SurfaceStyle = "surface_style"
     /** Last resolved Viewer, for an instant shell on cold start. */
     const val CachedViewer = "cached_viewer"
-    /** Which auth provider currently owns the session (AniList by default). */
+    /** Which connected account is followed (AniList by default). */
     const val ActiveProvider = "active_auth_provider"
+    /** The other connected account's viewer identity (its token lives in session storage). */
+    const val LinkedAccount = "linked_account"
+    /** The other account's token died (401/invalid_grant); shown until dismissed or reconnected. */
+    const val LinkedLostAccess = "linked_lost_access"
+    /** Whether automatic copies run (off when the second account is connected). */
+    const val LinkedAutoCopy = "linked_auto_copy"
 }

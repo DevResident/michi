@@ -7,11 +7,14 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSCachesDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.NSURL
+import platform.Foundation.NSURLIsExcludedFromBackupKey
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.stringWithContentsOfFile
 import platform.Foundation.writeToFile
@@ -19,20 +22,50 @@ import platform.Foundation.writeToFile
 /** One cache folder for every user-scoped file (lists today, profile later). */
 private const val CacheDirName = "michi_cache"
 
+/** Durable files that must survive the OS clearing the cache. */
+private const val DurableDirName = "michi_durable"
+
 /** File work runs on [Dispatchers.IO] (a shared pool for blocking callers). */
 private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+private fun baseDirectory(domain: ULong): String = (
+    NSSearchPathForDirectoriesInDomains(domain, NSUserDomainMask, true).firstOrNull() as? String
+    ).orEmpty()
 
 /**
  * [FileStore] over `NSCachesDirectory`, in its own subfolder. Every call runs on
  * [ioDispatcher]; writes are atomic (`writeToFile(atomically = true)`), so a
  * killed process never leaves a half-written file.
  */
-internal class IosFileStore : FileStore {
+internal class IosFileStore : FileStore by IosDirFileStore(
+    dir = baseDirectory(NSCachesDirectory) + "/" + CacheDirName,
+    excludeFromBackup = false,
+    isDebug = false,
+)
 
-    private val dir: String = (
-        NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, true)
-            .firstOrNull() as? String
-        ).orEmpty() + "/" + CacheDirName
+/**
+ * [FileStore] over `Application Support`, outside the cache. It backs the
+ * mirror outbox and is excluded from iOS backups with
+ * [NSURLIsExcludedFromBackupKey].
+ */
+internal class IosDurableFileStore(
+    isDebug: Boolean = false,
+) : FileStore by IosDirFileStore(
+    dir = baseDirectory(NSApplicationSupportDirectory) + "/" + DurableDirName,
+    excludeFromBackup = true,
+    isDebug = isDebug,
+)
+
+/**
+ * Atomic text files in one directory. On iOS `writeToFile(atomically = true)`
+ * writes a temporary file and renames it, so a killed process never leaves a
+ * half-written outbox.
+ */
+private class IosDirFileStore(
+    private val dir: String,
+    private val excludeFromBackup: Boolean,
+    private val isDebug: Boolean,
+) : FileStore {
 
     private fun path(name: String): String = "$dir/$name"
 
@@ -44,7 +77,7 @@ internal class IosFileStore : FileStore {
 
     override suspend fun write(name: String, content: String) {
         withContext(ioDispatcher) {
-            NSFileManager.defaultManager.createDirectoryAtPath(dir, true, null, null)
+            ensureDir()
             @Suppress("CAST_NEVER_SUCCEEDS")
             (content as NSString).writeToFile(path(name), true, NSUTF8StringEncoding, null)
         }
@@ -63,6 +96,26 @@ internal class IosFileStore : FileStore {
             names.forEach { entry ->
                 (entry as? String)?.let { manager.removeItemAtPath(path(it), null) }
             }
+        }
+    }
+
+    /** Create the directory before the backup attribute; an existing one is fine. */
+    private fun ensureDir() {
+        if (dir.isEmpty()) return
+        NSFileManager.defaultManager.createDirectoryAtURL(
+            url = NSURL.fileURLWithPath(dir),
+            withIntermediateDirectories = true,
+            attributes = null,
+            error = null,
+        )
+        if (!excludeFromBackup) return
+        val excluded = NSURL.fileURLWithPath(dir).setResourceValue(
+            value = true,
+            forKey = NSURLIsExcludedFromBackupKey,
+            error = null,
+        )
+        if (!excluded && isDebug) {
+            println("[Michi] Could not exclude $dir from backup")
         }
     }
 }

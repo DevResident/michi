@@ -3,10 +3,12 @@ package com.luum.michi.app
 import androidx.compose.ui.window.ComposeUIViewController
 import com.luum.michi.app.core.auth.repository.NSUserDefaultsTokenStorage
 import com.luum.michi.app.core.auth.repository.SafariOAuthLauncher
+import com.luum.michi.app.core.auth.repository.linkedTokenKeyPrefix
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.platform.repository.IosUrlOpener
 import com.luum.michi.app.core.platform.repository.IosShareLauncher
 import com.luum.michi.app.core.storage.repository.NSUserDefaultsSettingsStore
+import com.luum.michi.app.core.storage.repository.IosDurableFileStore
 import com.luum.michi.app.core.storage.repository.IosFileStore
 import com.luum.michi.app.core.platform.repository.IosConnectivity
 import kotlin.native.Platform
@@ -44,11 +46,22 @@ private object IosMichiDependencies {
                 ProviderId.AniList to NSUserDefaultsTokenStorage(ProviderId.AniList),
                 ProviderId.Mal to NSUserDefaultsTokenStorage(ProviderId.Mal),
             ),
+            legacyLinkedTokenStorages = mapOf(
+                ProviderId.AniList to NSUserDefaultsTokenStorage(
+                    ProviderId.AniList,
+                    keyPrefix = linkedTokenKeyPrefix(ProviderId.AniList),
+                ),
+                ProviderId.Mal to NSUserDefaultsTokenStorage(
+                    ProviderId.Mal,
+                    keyPrefix = linkedTokenKeyPrefix(ProviderId.Mal),
+                ),
+            ),
             oAuthBrowser = SafariOAuthLauncher(),
             urlOpener = IosUrlOpener(),
             shareLauncher = IosShareLauncher(),
             settingsStore = NSUserDefaultsSettingsStore(),
             fileStore = IosFileStore(),
+            durableFileStore = IosDurableFileStore(isDebug = Platform.isDebugBinary),
             connectivity = IosConnectivity(),
             isDebug = Platform.isDebugBinary,
         ).also {

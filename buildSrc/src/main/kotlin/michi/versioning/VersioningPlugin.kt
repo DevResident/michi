@@ -18,12 +18,16 @@ class VersioningPlugin : Plugin<Project> {
         val extension = project.extensions.create("michiVersion", MichiVersioningExtension::class.java)
         val overrideName = project.findProperty("michiVersionName") as? String
         val overrideCode = project.findProperty("michiVersionCode") as? String
+        val requireTagVersion = project.findProperty("requireTagVersion")
+            ?.toString()
+            ?.toBoolean() == true
         val needsGit = overrideName.isNullOrBlank() || overrideCode.isNullOrBlank()
         val describe = if (needsGit) readGitDescribe(project) else null
         val resolution = AppVersionCalculator.resolve(
             describe = describe,
             overrideName = overrideName,
             overrideCode = overrideCode,
+            requireTagVersion = requireTagVersion,
         )
 
         extension.versionName.set(resolution.version.versionName)
@@ -37,6 +41,16 @@ class VersioningPlugin : Plugin<Project> {
             versionCode.set(extension.versionCode)
             fullVersionName.set(extension.versionName)
             outputFile.set(project.layout.projectDirectory.file("iosApp/Configuration/Version.xcconfig"))
+        }
+
+        // Release workflow guard: prints only the versionName so it can be
+        // compared with the pushed tag (use `./gradlew -q printVersion`).
+        project.tasks.register("printVersion") {
+            group = "help"
+            description = "Prints the resolved versionName."
+            doLast {
+                println(extension.versionName.get())
+            }
         }
     }
 

@@ -6,6 +6,7 @@ import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.MediaWorkStatus
@@ -294,6 +295,8 @@ private object NoopEntryRepository : MediaListEntryRepository {
         hiddenFromStatusLists: Boolean,
         startedAtMillis: Long?,
         completedAtMillis: Long?,
+        mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun saveProgress(
@@ -301,7 +304,8 @@ private object NoopEntryRepository : MediaListEntryRepository {
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
-    ): NetworkResult<Unit> = NetworkResult.Failure(NetworkError.Unknown(null))
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry> = NetworkResult.Failure(NetworkError.Unknown(null))
 
     override suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit> =
         NetworkResult.Failure(NetworkError.Unknown(null))

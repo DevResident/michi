@@ -3,12 +3,18 @@ package com.luum.michi.app.core.medialist.repository
 import com.luum.michi.app.core.favourite.domain.FavouriteRepository
 import com.luum.michi.app.core.favourite.domain.FavouriteTarget
 import com.luum.michi.app.core.media.domain.EntityRef
+import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.requireAniListId
+import com.luum.michi.app.core.media.repository.dto.FuzzyDateDto
 import com.luum.michi.app.core.media.repository.dto.MediaViewerListEntryDto
 import com.luum.michi.app.core.media.repository.dto.toMillisOrNull
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
+import com.luum.michi.app.core.medialist.domain.MirrorDate
+import com.luum.michi.app.core.medialist.domain.MirrorField
+import com.luum.michi.app.core.medialist.domain.AniListMirrorValues
+import com.luum.michi.app.core.medialist.domain.MirrorEntry
 import com.luum.michi.app.core.medialist.domain.parseMediaListStatus
 import com.luum.michi.app.core.medialist.domain.toApiValue
 import com.luum.michi.app.core.model.millisToCalendarParts
@@ -86,6 +92,11 @@ private data class SaveMediaListEntryResponse(
     @SerialName("SaveMediaListEntry") val entry: MediaViewerListEntryDto? = null,
 )
 
+private fun FuzzyDateDto?.toMirrorDate(): MirrorDate? {
+    val year = this?.year ?: return null
+    return MirrorDate(year = year, month = month, day = day)
+}
+
 private const val SaveMediaListProgressMutation = """
 mutation SaveMediaListProgress(
   ${'$'}mediaId: Int!,
@@ -99,14 +110,16 @@ mutation SaveMediaListProgress(
     progressVolumes: ${'$'}progressVolumes,
     status: ${'$'}status
   ) {
-    id status progress progressVolumes
+    id status progress progressVolumes score advancedScores notes repeat priority private hiddenFromStatusLists
+    startedAt { year month day }
+    completedAt { year month day }
   }
 }
 """
 
 @Serializable
 private data class SaveProgressResponse(
-    @SerialName("SaveMediaListEntry") val entry: JsonElement? = null,
+    @SerialName("SaveMediaListEntry") val entry: MediaViewerListEntryDto? = null,
 )
 
 private const val DeleteMediaListEntryMutation = """
@@ -119,6 +132,47 @@ mutation DeleteMediaListEntry(${'$'}id: Int!) {
 private data class DeleteMediaListEntryResponse(
     @SerialName("DeleteMediaListEntry") val payload: JsonElement? = null,
 )
+
+private const val SaveMirrorMutation = """
+mutation MirrorMediaListEntry(
+  ${'$'}mediaId: Int!,
+  ${'$'}status: MediaListStatus,
+  ${'$'}progress: Int,
+  ${'$'}progressVolumes: Int,
+  ${'$'}score: Float,
+  ${'$'}notes: String,
+  ${'$'}repeat: Int,
+  ${'$'}priority: Int,
+  ${'$'}startedAt: FuzzyDateInput,
+  ${'$'}completedAt: FuzzyDateInput
+) {
+  SaveMediaListEntry(
+    mediaId: ${'$'}mediaId,
+    status: ${'$'}status,
+    progress: ${'$'}progress,
+    progressVolumes: ${'$'}progressVolumes,
+    score: ${'$'}score,
+    notes: ${'$'}notes,
+    repeat: ${'$'}repeat,
+    priority: ${'$'}priority,
+    startedAt: ${'$'}startedAt,
+    completedAt: ${'$'}completedAt
+  ) {
+    id
+  }
+}
+"""
+
+@Serializable
+private data class SaveMirrorResponse(
+    @SerialName("SaveMediaListEntry") val entry: JsonElement? = null,
+)
+
+private fun mirrorDateInput(date: MirrorDate?): JsonElement = buildJsonObject {
+    put("year", date?.year?.let(::JsonPrimitive) ?: JsonNull)
+    put("month", date?.month?.let(::JsonPrimitive) ?: JsonNull)
+    put("day", date?.day?.let(::JsonPrimitive) ?: JsonNull)
+}
 
 internal class MediaListEntryRepositoryImpl(
     private val graphQLClient: AniListGraphQLClient,
@@ -139,6 +193,8 @@ internal class MediaListEntryRepositoryImpl(
         hiddenFromStatusLists: Boolean,
         startedAtMillis: Long?,
         completedAtMillis: Long?,
+        mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> {
         val mediaId = mediaRef.requireAniListId()
         val variables = buildMap<String, JsonElement> {
@@ -174,10 +230,11 @@ internal class MediaListEntryRepositoryImpl(
                     ?: return NetworkResult.Failure(
                         NetworkError.GraphQL(listOf("SaveMediaListEntry returned no entry")),
                     )
+                val parsedStatus = parseMediaListStatus(entry.status) ?: status
                 NetworkResult.Success(
                     MediaListViewerEntry(
                         id = entry.id,
-                        status = parseMediaListStatus(entry.status) ?: status,
+                        status = parsedStatus,
                         progress = entry.progress ?: progress,
                         progressVolumes = entry.progressVolumes ?: progressVolumes,
                         score = entry.score?.toFloat() ?: score,
@@ -189,6 +246,9 @@ internal class MediaListEntryRepositoryImpl(
                         hiddenFromStatusLists = entry.hiddenFromStatusLists ?: hiddenFromStatusLists,
                         startedAtMillis = entry.startedAt?.toMillisOrNull() ?: startedAtMillis,
                         completedAtMillis = entry.completedAt?.toMillisOrNull() ?: completedAtMillis,
+                        isRewatching = parsedStatus == MediaListStatus.REPEATING,
+                        startedAtDate = entry.startedAt.toMirrorDate(),
+                        completedAtDate = entry.completedAt.toMirrorDate(),
                     ),
                 )
             }
@@ -201,7 +261,8 @@ internal class MediaListEntryRepositoryImpl(
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
-    ): NetworkResult<Unit> {
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry> {
         val mediaId = mediaRef.requireAniListId()
         val variables = buildMap<String, JsonElement> {
             put("mediaId", JsonPrimitive(mediaId))
@@ -220,8 +281,89 @@ internal class MediaListEntryRepositoryImpl(
             variables = JsonObject(variables),
             operationName = "SaveMediaListProgress",
         )
+        return when (
+            val result = graphQLClient.execute(request) { dataJson ->
+                AniListJson.decodeFromJsonElement(SaveProgressResponse.serializer(), dataJson)
+            }
+        ) {
+            is NetworkResult.Success -> {
+                val entry = result.value.entry
+                    ?: return NetworkResult.Failure(
+                        NetworkError.GraphQL(listOf("SaveMediaListEntry returned no entry")),
+                    )
+                val parsedStatus = parseMediaListStatus(entry.status) ?: status
+                NetworkResult.Success(
+                    MediaListViewerEntry(
+                        id = entry.id,
+                        status = parsedStatus,
+                        progress = entry.progress ?: progress ?: 0,
+                        progressVolumes = entry.progressVolumes ?: progressVolumes,
+                        score = entry.score?.toFloat() ?: 0f,
+                        advancedScores = entry.advancedScores ?: emptyMap(),
+                        notes = entry.notes.orEmpty(),
+                        repeat = entry.repeat ?: 0,
+                        priority = entry.priority ?: 0,
+                        isPrivate = entry.isPrivate ?: false,
+                        hiddenFromStatusLists = entry.hiddenFromStatusLists ?: false,
+                        startedAtMillis = entry.startedAt?.toMillisOrNull(),
+                        completedAtMillis = entry.completedAt?.toMillisOrNull(),
+                        isRewatching = parsedStatus == MediaListStatus.REPEATING,
+                        startedAtDate = entry.startedAt.toMirrorDate(),
+                        completedAtDate = entry.completedAt.toMirrorDate(),
+                    ),
+                )
+            }
+            is NetworkResult.Failure -> result
+        }
+    }
+
+    /**
+     * Mirror-only mutation: writes just the selected fields and deliberately
+     * omits private, hidden-from-status-lists and advanced scores.
+     */
+    suspend fun saveMirror(
+        entry: MirrorEntry,
+        values: AniListMirrorValues,
+        fields: Set<MirrorField>,
+    ): NetworkResult<Unit> {
+        if (fields.isEmpty()) return NetworkResult.Success(Unit)
+        val variables = buildMap<String, JsonElement> {
+            put("mediaId", JsonPrimitive(entry.aniListId))
+            if (MirrorField.STATUS in fields) {
+                put("status", JsonPrimitive(values.status.toApiValue()))
+            }
+            if (MirrorField.PROGRESS in fields) {
+                put("progress", JsonPrimitive(values.progress))
+            }
+            if (MirrorField.PROGRESS_VOLUMES in fields && entry.type == MediaType.MANGA) {
+                put("progressVolumes", JsonPrimitive(values.progressVolumes ?: 0))
+            }
+            if (MirrorField.SCORE in fields) {
+                put("score", JsonPrimitive(values.score))
+            }
+            if (MirrorField.NOTES in fields) {
+                put("notes", JsonPrimitive(values.notes))
+            }
+            if (MirrorField.REPEAT in fields) {
+                put("repeat", JsonPrimitive(values.repeat))
+            }
+            if (MirrorField.PRIORITY in fields) {
+                put("priority", JsonPrimitive(values.priority))
+            }
+            if (MirrorField.STARTED_AT in fields) {
+                put("startedAt", mirrorDateInput(values.startedAt))
+            }
+            if (MirrorField.COMPLETED_AT in fields) {
+                put("completedAt", mirrorDateInput(values.completedAt))
+            }
+        }
+        val request = AniListGraphQLRequest(
+            query = SaveMirrorMutation,
+            variables = JsonObject(variables),
+            operationName = "MirrorMediaListEntry",
+        )
         return graphQLClient.execute(request) { dataJson ->
-            AniListJson.decodeFromJsonElement(SaveProgressResponse.serializer(), dataJson)
+            AniListJson.decodeFromJsonElement(SaveMirrorResponse.serializer(), dataJson)
         }.map { }
     }
 

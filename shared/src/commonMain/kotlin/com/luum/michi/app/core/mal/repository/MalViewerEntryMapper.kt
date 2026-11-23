@@ -24,4 +24,16 @@ internal fun MalEntryStatus.toViewerEntry(aniListId: Int, isManga: Boolean): Med
         hiddenFromStatusLists = false,
         startedAtMillis = parseMalFuzzyDate(startDate)?.toEditorMillis(),
         completedAtMillis = parseMalFuzzyDate(finishDate)?.toEditorMillis(),
+        isRewatching = if (isManga) isRereading else isRewatching,
+        startedAtDate = parseMalFuzzyDate(startDate)?.toMirrorDate(),
+        completedAtDate = parseMalFuzzyDate(finishDate)?.toMirrorDate(),
     )
+
+private fun com.luum.michi.app.core.media.repository.dto.FuzzyDateDto?.toMirrorDate(): com.luum.michi.app.core.medialist.domain.MirrorDate? {
+    val year = this?.year ?: return null
+    return com.luum.michi.app.core.medialist.domain.MirrorDate(
+        year = year,
+        month = month,
+        day = day,
+    )
+}

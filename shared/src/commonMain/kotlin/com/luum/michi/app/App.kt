@@ -43,6 +43,7 @@ import com.luum.michi.app.core.storage.domain.SettingsStoreKeys
 import com.luum.michi.app.core.medialist.repository.StoreSortPersistence
 import com.luum.michi.app.root.AuthService
 import com.luum.michi.app.root.Root
+import com.luum.michi.app.accounts.ui.state.AccountsUiState
 import com.luum.michi.app.settings.ui.state.rememberSettingsState
 import com.luum.michi.app.ui.components.MessagePanel
 import com.luum.michi.app.ui.components.tabFadeSpec
@@ -54,6 +55,7 @@ import com.luum.michi.app.ui.language.LocalStrings
 import com.luum.michi.app.ui.network.LocalNetworkThrottle
 import com.luum.michi.app.ui.testTagsAsResourceIds
 import com.luum.michi.app.ui.theme.PlatformThemeModeEffect
+import com.luum.michi.app.ui.theme.ProviderBrands
 import com.luum.michi.app.ui.theme.Theme
 import kotlinx.coroutines.launch
 
@@ -72,6 +74,12 @@ fun App(
     val store = dependencies.settingsStore
     val session by dependencies.sessionManager.state.collectAsState()
     val lastLoginError by dependencies.sessionManager.lastLoginError.collectAsState()
+    val connectedAccounts by dependencies.sessionManager.connected.collectAsState()
+    val followedProvider by dependencies.sessionManager.followed.collectAsState()
+    val linkedLostAccess by dependencies.linkedAccountManager.lostAccess.collectAsState()
+    val linkedAutoCopy by dependencies.linkedAccountManager.autoCopy.collectAsState()
+    val linkError by dependencies.linkedAccountManager.linkError.collectAsState()
+    val mirrorOutbox by dependencies.mirrorController.state.collectAsState()
     val deepLinkDestination by dependencies.pendingDeepLink.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -128,14 +136,16 @@ fun App(
             },
             onLogin = {
                 dependencies.sessionManager.clearLoginError()
-                provider.open()
+                // Same pending-link path as Accounts: a callback can never
+                // replace a session the user did not ask to change.
+                dependencies.beginLink(provider.id)
             },
-            icon = if (isAniList) AppIcons.AniList else null,
-            brandHex = when {
-                isAniList -> ANILIST_BRAND_HEX
-                isMal -> MAL_BRAND_HEX
+            icon = when {
+                isAniList -> AppIcons.AniList
+                isMal -> AppIcons.Mal
                 else -> null
             },
+            brandHex = ProviderBrands.hex(provider.id),
         )
     }
     val loginErrorMessage = lastLoginError?.let { failed ->
@@ -143,6 +153,19 @@ fun App(
             ?.let { strings.authLoginFailed.replace("%s", it) }
     }
     val isAuthConfigured = dependencies.authProviders.any { it.isConfigured }
+    val authenticatedProvider = (session as? SessionState.Authenticated)?.provider
+    val labels = dependencies.authProviders
+        .filter { it.isConfigured }
+        .associate { it.id to it.label }
+    val accountsUiState = AccountsUiState(
+        connected = connectedAccounts,
+        followed = followedProvider,
+        labels = labels,
+        autoCopy = linkedAutoCopy,
+        lostAccess = linkedLostAccess,
+        linkError = linkError,
+        outbox = mirrorOutbox,
+    )
     // Sort memory backing (Settings persist toggle, per tab): store-owned,
     // session-independent — Root hydrates holders from it, holders save
     // into it. Local-only, like theme/language.
@@ -152,20 +175,20 @@ fun App(
     // survives Root being recomposed from scratch (login → error → retry):
     // seed from the Viewer + refresh the rest on authenticate; clear on
     // user → guest so a guest never inherits the account's 18+ gate.
-    val settingsViewerId = (session as? SessionState.Authenticated)?.viewer?.id
-    var lastSettingsViewerId by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(settingsViewerId) {
-        val previous = lastSettingsViewerId
-        if (settingsViewerId != previous) {
-            val viewer = (session as? SessionState.Authenticated)?.viewer
-            if (viewer != null) {
-                settingsState.seedFrom(viewer)
+    val settingsViewer = (session as? SessionState.Authenticated)?.viewer
+    val settingsViewerKey = settingsViewer?.let { it.id to it.provider }
+    var lastSettingsViewerKey by remember { mutableStateOf<Pair<Int, ProviderId>?>(null) }
+    LaunchedEffect(settingsViewerKey) {
+        val previous = lastSettingsViewerKey
+        if (settingsViewerKey != previous) {
+            if (settingsViewer != null) {
+                settingsState.seedFrom(settingsViewer)
                 // Pulls the rest (split completed, etc.) the Viewer does not carry.
                 settingsState.refresh(force = true)
             } else if (previous != null) {
                 settingsState.clearSynced()
             }
-            lastSettingsViewerId = settingsViewerId
+            lastSettingsViewerKey = settingsViewerKey
         }
     }
 
@@ -255,6 +278,7 @@ fun App(
                             profileRepository = dependencies.profileRepository,
                             favouriteRepository = dependencies.favouriteRepository,
                             notificationsRepository = dependencies.notificationsRepository,
+                            mirrorSyncCoordinator = dependencies.mirrorSyncCoordinator,
                             urlOpener = dependencies.urlOpener,
                             shareLauncher = dependencies.shareLauncher,
                             sortPersistence = sortPersistence,
@@ -262,6 +286,15 @@ fun App(
                             loginErrorMessage = loginErrorMessage,
                             onSignInDismissed = { dependencies.sessionManager.clearLoginError() },
                             isAuthConfigured = isAuthConfigured,
+                            accounts = accountsUiState,
+                            mirrorOutbox = mirrorOutbox,
+                            onConnectAccount = { dependencies.beginLink(it) },
+                            onDisconnectAccount = { dependencies.disconnectAccount(it) },
+                            onSetFollowed = { dependencies.setFollowed(it) },
+                            onDismissLostAccess = { dependencies.dismissLostAccess() },
+                            onSetAutoCopy = { dependencies.setAutoCopy(it) },
+                            onRetryMirror = { dependencies.retryMirror() },
+                            accountEvents = dependencies.accountEvents.events,
                             autoOpenSignIn = autoOpenSignIn,
                             onAutoSignInShown = {
                                 store.putBoolean(SettingsStoreKeys.SeenSignIn, true)
@@ -313,9 +346,3 @@ private enum class AppRoute {
     SHELL,
     ERROR,
 }
-
-/** AniList brand blue, raw hex (converted at the UI boundary). */
-private const val ANILIST_BRAND_HEX = "#02A9FF"
-
-/** MyAnimeList brand blue, raw hex (converted at the UI boundary). */
-private const val MAL_BRAND_HEX = "#2E51A2"

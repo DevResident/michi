@@ -16,6 +16,11 @@ internal data class MalListEntry(
     val startDate: String?,
     val finishDate: String?,
     val priority: Int?,
+    val isRewatching: Boolean = false,
+    val isRereading: Boolean = false,
+    val numTimesRewatched: Int = 0,
+    val numTimesReread: Int = 0,
+    val comments: String? = null,
     val node: MalNodeInfo = MalNodeInfo(),
 )
 

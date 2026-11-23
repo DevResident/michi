@@ -15,6 +15,10 @@ import com.luum.michi.app.core.media.repository.MediaIdBridge
 import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
+import com.luum.michi.app.core.medialist.domain.MalMirrorValues
+import com.luum.michi.app.core.medialist.domain.MirrorDate
+import com.luum.michi.app.core.medialist.domain.MirrorEntry
+import com.luum.michi.app.core.medialist.domain.MirrorField
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.core.network.domain.map
@@ -46,6 +50,8 @@ internal class MalMediaListEntryRepository(
         hiddenFromStatusLists: Boolean,
         startedAtMillis: Long?,
         completedAtMillis: Long?,
+        mediaType: MediaType,
+        changedFields: Set<MirrorField>?,
     ): NetworkResult<MediaListViewerEntry> {
         val aniListId = mediaRef.requireAniListId()
         val ref = when (val resolved = malRefFor(aniListId)) {
@@ -80,7 +86,8 @@ internal class MalMediaListEntryRepository(
         progress: Int?,
         status: MediaListStatus?,
         progressVolumes: Int?,
-    ): NetworkResult<Unit> {
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry> {
         val aniListId = mediaRef.requireAniListId()
         val ref = when (val resolved = malRefFor(aniListId)) {
             is NetworkResult.Failure -> return resolved
@@ -97,14 +104,30 @@ internal class MalMediaListEntryRepository(
         }
 
         if (progress == null && progressVolumes == null && malStatus == null) {
-            return NetworkResult.Success(Unit)
+            return NetworkResult.Success(
+                MediaListViewerEntry(
+                    id = aniListId,
+                    status = status,
+                    progress = progress ?: 0,
+                    progressVolumes = progressVolumes,
+                    score = 0f,
+                    notes = "",
+                    repeat = 0,
+                    priority = 0,
+                    isPrivate = false,
+                    hiddenFromStatusLists = false,
+                    startedAtMillis = null,
+                    completedAtMillis = null,
+                ),
+            )
         }
         val update = MalEntryUpdate(
             status = malStatus,
             progress = progress?.coerceAtLeast(0),
             progressVolumes = if (isManga) progressVolumes?.coerceAtLeast(0) else null,
         )
-        return client.save(aniListId, ref, update).map { }
+        return client.save(aniListId, ref, update)
+            .map { entry -> entry.toViewerEntry(aniListId, isManga) }
     }
 
     override suspend fun toggleFavourite(
@@ -113,6 +136,50 @@ internal class MalMediaListEntryRepository(
     ): NetworkResult<Unit> = NetworkResult.Failure(
         NetworkError.Http(400, "MyAnimeList does not support favourites"),
     )
+
+    /**
+     * Mirror-only PATCH: the selected fields are copied verbatim, including an
+     * empty date/comments/priority (a deliberate clear). The normal editor save
+     * keeps its omit-untouched behaviour.
+     */
+    suspend fun saveMirror(
+        entry: MirrorEntry,
+        values: MalMirrorValues,
+        fields: Set<MirrorField>,
+    ): NetworkResult<Unit> {
+        if (fields.isEmpty()) return NetworkResult.Success(Unit)
+        val ref = when (val resolved = malRefFor(entry.aniListId)) {
+            is NetworkResult.Failure -> return resolved
+            is NetworkResult.Success -> resolved.value
+                ?: return NetworkResult.Failure(NetworkError.EntryNotOnProvider)
+        }
+        val isManga = ref.type == MediaType.MANGA
+        val update = MalEntryUpdate(
+            status = if (MirrorField.STATUS in fields) values.status else null,
+            score = if (MirrorField.SCORE in fields) values.score else null,
+            progress = if (MirrorField.PROGRESS in fields) values.progress else null,
+            progressVolumes = if (MirrorField.PROGRESS_VOLUMES in fields && isManga) {
+                values.progressVolumes ?: 0
+            } else {
+                null
+            },
+            priority = if (MirrorField.PRIORITY in fields) values.priority else null,
+            repeat = if (MirrorField.REPEAT in fields) values.repeat else null,
+            comments = if (MirrorField.NOTES in fields) values.comments else null,
+            startDate = if (MirrorField.STARTED_AT in fields) {
+                values.startDate?.let(::formatMirrorDate).orEmpty()
+            } else {
+                null
+            },
+            finishDate = if (MirrorField.COMPLETED_AT in fields) {
+                values.finishDate?.let(::formatMirrorDate).orEmpty()
+            } else {
+                null
+            },
+            isRewatching = if (MirrorField.STATUS in fields) values.isRewatching else null,
+        )
+        return client.saveExact(entry.aniListId, ref, update).map { }
+    }
 
     override suspend fun deleteEntry(entryId: Int, mediaRef: EntityRef): NetworkResult<Unit> {
         val aniListId = mediaRef.requireAniListId()
@@ -131,4 +198,18 @@ internal class MalMediaListEntryRepository(
         } else {
             bridge.resolveMal(listId)
         }
+}
+
+/** MAL's partial date string: YYYY, YYYY-MM or YYYY-MM-DD. */
+private fun formatMirrorDate(date: MirrorDate): String = buildString {
+    append(date.year.toString().padStart(4, '0'))
+    val month = date.month
+    if (month != null) {
+        append('-')
+        append(month.toString().padStart(2, '0'))
+        date.day?.let {
+            append('-')
+            append(it.toString().padStart(2, '0'))
+        }
+    }
 }

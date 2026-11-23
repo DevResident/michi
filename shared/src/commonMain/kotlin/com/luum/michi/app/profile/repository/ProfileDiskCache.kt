@@ -74,6 +74,17 @@ internal class ProfileDiskCache(
         }
     }
 
+    /** Deletes one account's profile cache (disconnect/logout of that account). */
+    suspend fun clear(userId: Int) {
+        try {
+            files.delete(profileCacheFileName(userId))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            // A failed cleanup never breaks the logout/disconnect.
+        }
+    }
+
     suspend fun clear() {
         try {
             files.clear()

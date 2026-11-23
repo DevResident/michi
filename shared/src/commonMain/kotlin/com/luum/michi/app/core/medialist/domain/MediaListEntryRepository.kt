@@ -1,6 +1,7 @@
 package com.luum.michi.app.core.medialist.domain
 
 import com.luum.michi.app.core.media.domain.EntityRef
+import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.network.domain.NetworkResult
 
 internal interface MediaListEntryRepository {
@@ -18,19 +19,28 @@ internal interface MediaListEntryRepository {
         hiddenFromStatusLists: Boolean,
         startedAtMillis: Long?,
         completedAtMillis: Long?,
+        mediaType: MediaType,
+        /**
+         * Fields the user actually changed. The automatic mirror copies only
+         * these; null (a new entry or an older caller) means all non-empty
+         * fields.
+         */
+        changedFields: Set<MirrorField>? = null,
     ): NetworkResult<MediaListViewerEntry>
 
     /**
      * Partial progress save: null fields are omitted from the mutation, so
      * the server leaves them intact. Novels ([tracksByVolume]-style entries)
-     * send volumes only, with [progress] null.
+     * send volumes only, with [progress] null. The returned entry is the full
+     * resulting state, so the mirror can copy the right fields safely.
      */
     suspend fun saveProgress(
         mediaRef: EntityRef,
         progress: Int?,
         status: MediaListStatus? = null,
         progressVolumes: Int? = null,
-    ): NetworkResult<Unit>
+        mediaType: MediaType,
+    ): NetworkResult<MediaListViewerEntry>
 
     suspend fun toggleFavourite(mediaRef: EntityRef, isManga: Boolean): NetworkResult<Unit>
 

@@ -10,5 +10,6 @@ internal fun LanguageStrings.networkErrorMessage(error: NetworkError): String = 
     is NetworkError.GraphQL      -> errorServerLabel
     is NetworkError.NotFound     -> notFoundLabel
     NetworkError.EntryNotOnProvider -> entryNotOnProvider
+    NetworkError.LinkExpired     -> errorLinkExpiredLabel
     is NetworkError.Unknown      -> errorUnknownLabel
 }
