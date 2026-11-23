@@ -247,9 +247,65 @@ object SpanishStrings : LanguageStrings {
     override val profileFavoritesDoneAction = "Listo"
     override val profileRemoveFavoriteAction = "Quitar de favoritos"
     override val settingsGeneralSection = "General"
-    override val settingsAniListSection = "AniList"
-    override val settingsListsSection = "Listas"
     override val settingsInformationSection = "Información"
+    override val settingsAccountSection = "Cuenta"
+    override val settingsPreferencesSection = "Preferencias"
+    override val settingsAppearanceTitle = "Apariencia"
+    override val settingsMyListsTitle = "Mis listas"
+    override val settingsAppLanguageTitle = "Idioma de la app"
+    override val settingsOpenAppSection = "Al abrir la app"
+    override val settingsContentSection = "Contenido"
+    override val settingsContentSyncNote =
+        "Con AniList, esto se guarda en tu cuenta. Con MyAnimeList, solo en este dispositivo."
+    override val settingsImagesSection = "Imágenes"
+    override val settingsOrderScoreSection = "Orden y puntaje"
+    override val settingsSectionsSection = "Secciones"
+    override val settingsNoticesSection = "Avisos"
+    override val settingsNotificationsSyncNote = "Se guardan en tu cuenta de AniList."
+    override val settingsWhatsNewTitle = "Novedades"
+    override val settingsReportIssueSubtitle = "Proyecto personal · respondo cuando puedo"
+    override val settingsSupportTitle = "Apoyar el proyecto"
+    override val settingsVersionCopied = "Versión copiada"
+    override fun settingsAccountLostAccess(provider: String): String =
+        "$provider perdió el acceso · toca para reconectar"
+    override val releaseNotes = listOf(
+        ReleaseNotesVersion(
+            version = "1.1",
+            sections = listOf(
+                ReleaseNotesSection(
+                    title = "Soporte de MyAnimeList",
+                    items = listOf(
+                        "Inicia sesión con MyAnimeList además de AniList. Tus listas de anime y " +
+                            "manga de MAL aparecen en Michi, y lo que edites (estado, " +
+                            "puntuación, progreso, fechas, prioridad, repeticiones, notas) se " +
+                            "guarda en MAL.",
+                        "Michi sigue usando AniList para portadas, fichas y búsqueda. Las obras " +
+                            "que AniList no tiene también aparecen en tu lista, con los datos " +
+                            "de MAL y una pequeña etiqueta «MAL».",
+                        "Con MAL, el idioma de los títulos, el de los nombres del staff y el " +
+                            "contenido 18+ se guardan en tu dispositivo.",
+                    ),
+                ),
+                ReleaseNotesSection(
+                    title = "Privacidad",
+                    items = listOf(
+                        "Las credenciales de sesión de MyAnimeList y AniList no salen de tu " +
+                            "dispositivo: se excluyen de las copias de seguridad y las " +
+                            "transferencias entre dispositivos de Android.",
+                        "Para mostrar tu lista de MAL, Michi envía a AniList los ids de MAL de " +
+                            "tus obras para encontrar sus portadas y fichas.",
+                    ),
+                ),
+                ReleaseNotesSection(
+                    title = "Aviso al actualizar desde la 1.0.0",
+                    items = listOf(
+                        "Tu lista se guarda en un formato nuevo. Después de actualizar, no " +
+                            "aparecerá sin conexión hasta que Michi la cargue una vez con red.",
+                    ),
+                ),
+            ),
+        ),
+    )
     override val settingsThemeTitle = "Tema"
     override val settingsStyleTitle = "Estilo de color"
     override val settingsSurfaceTitle = "Estilo flotante"
@@ -312,7 +368,6 @@ object SpanishStrings : LanguageStrings {
     override val aboutLegalSection = "Legal"
     override val aboutSourceCodeTitle = "Código fuente"
     override val aboutReportIssueTitle = "Reportar un problema"
-    override val aboutReportIssueSubtitle = "Abre un issue en GitHub"
     override val aboutShareTitle = "Compartir Michi"
     override fun aboutShareText(url: String): String =
         "Michi, un cliente de AniList gratis y sin anuncios: $url"

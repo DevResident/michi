@@ -121,13 +121,6 @@ internal fun AboutScreen(
                     divider = false,
                 )
                 SettingsRow(
-                    label = strings.aboutReportIssueTitle,
-                    value = "",
-                    supportingText = strings.aboutReportIssueSubtitle,
-                    icon = AppIcons.BugReport,
-                    onClick = { onOpenUrl(AboutLinks.NewIssue) },
-                )
-                SettingsRow(
                     label = strings.aboutShareTitle,
                     value = "",
                     icon = AppIcons.Share,
@@ -170,7 +163,7 @@ internal fun AboutScreen(
     }
 }
 
-private object AboutLinks {
+internal object AboutLinks {
     const val SourceCode = "https://github.com/LuumGrid/michi"
     const val NewIssue = "https://github.com/LuumGrid/michi/issues/new"
     const val LatestRelease = "https://github.com/LuumGrid/michi/releases/latest"

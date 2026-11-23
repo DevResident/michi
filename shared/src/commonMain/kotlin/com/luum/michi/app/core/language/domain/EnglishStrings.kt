@@ -245,9 +245,63 @@ object EnglishStrings : LanguageStrings {
     override val profileFavoritesDoneAction = "Done"
     override val profileRemoveFavoriteAction = "Remove from favorites"
     override val settingsGeneralSection = "General"
-    override val settingsAniListSection = "AniList"
-    override val settingsListsSection = "Lists"
     override val settingsInformationSection = "Information"
+    override val settingsAccountSection = "Account"
+    override val settingsPreferencesSection = "Preferences"
+    override val settingsAppearanceTitle = "Appearance"
+    override val settingsMyListsTitle = "My lists"
+    override val settingsAppLanguageTitle = "App language"
+    override val settingsOpenAppSection = "When the app opens"
+    override val settingsContentSection = "Content"
+    override val settingsContentSyncNote =
+        "With AniList, this is saved to your account. With MyAnimeList, only on this device."
+    override val settingsImagesSection = "Images"
+    override val settingsOrderScoreSection = "Order & score"
+    override val settingsSectionsSection = "Sections"
+    override val settingsNoticesSection = "Notices"
+    override val settingsNotificationsSyncNote = "Saved to your AniList account."
+    override val settingsWhatsNewTitle = "What's new"
+    override val settingsReportIssueSubtitle = "Personal project · I reply when I can"
+    override val settingsSupportTitle = "Support the project"
+    override val settingsVersionCopied = "Version copied"
+    override fun settingsAccountLostAccess(provider: String): String =
+        "$provider lost access · tap to reconnect"
+    override val releaseNotes = listOf(
+        ReleaseNotesVersion(
+            version = "1.1",
+            sections = listOf(
+                ReleaseNotesSection(
+                    title = "MyAnimeList support",
+                    items = listOf(
+                        "Sign in with MyAnimeList as well as AniList. Your MAL anime and manga " +
+                            "lists show in Michi, and edits (status, score, progress, dates, " +
+                            "priority, rewatches, notes) are saved to MAL.",
+                        "Michi still uses AniList for covers, details and search. Titles AniList " +
+                            "doesn't have still show in your list, built from MAL's data, with " +
+                            "a small “MAL” tag.",
+                        "With MAL, the title language, staff-name language and 18+ settings are " +
+                            "stored on your device.",
+                    ),
+                ),
+                ReleaseNotesSection(
+                    title = "Privacy",
+                    items = listOf(
+                        "MyAnimeList and AniList sign-in tokens never leave your device: they " +
+                            "are excluded from Android backups and device transfers.",
+                        "To show your MAL list, Michi sends the MAL ids of your titles to AniList " +
+                            "to find their covers and details.",
+                    ),
+                ),
+                ReleaseNotesSection(
+                    title = "Heads-up when updating from 1.0.0",
+                    items = listOf(
+                        "Your list is stored in a new format. After updating, it won't show " +
+                            "offline until Michi has loaded it once with a connection.",
+                    ),
+                ),
+            ),
+        ),
+    )
     override val settingsThemeTitle = "Theme"
     override val settingsStyleTitle = "Color style"
     override val settingsSurfaceTitle = "Floating style"
@@ -269,7 +323,7 @@ object EnglishStrings : LanguageStrings {
     override val settingsTitleLanguageRomaji = "Romaji"
     override val settingsTitleLanguageEnglish = "English"
     override val settingsTitleLanguageNative = "Native"
-    override val settingsStaffNameTitle = "Name Format"
+    override val settingsStaffNameTitle = "Name format"
     override val settingsStaffNameWestern = "Romaji (Given Family)"
     override val settingsStaffNameRomaji = "Romaji (Family Given)"
     override val settingsStaffNameNative = "Native"
@@ -310,7 +364,6 @@ object EnglishStrings : LanguageStrings {
     override val aboutLegalSection = "Legal"
     override val aboutSourceCodeTitle = "Source code"
     override val aboutReportIssueTitle = "Report a problem"
-    override val aboutReportIssueSubtitle = "Opens an issue on GitHub"
     override val aboutShareTitle = "Share Michi"
     override fun aboutShareText(url: String): String =
         "Michi, a free AniList client with no ads: $url"

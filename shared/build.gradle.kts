@@ -80,6 +80,14 @@ val malClientIdValue: String =
         ?.takeIf { it.isNotBlank() }
         ?: System.getenv("MAL_CLIENT_ID").orEmpty()
 
+// Optional sponsor link. Empty keeps the "Support the project" row hidden;
+// set `sponsorUrl` in local.properties or MICHI_SPONSOR_URL in CI to enable it
+// without touching UI code.
+val sponsorUrlValue: String =
+    (localProperties["sponsorUrl"] as? String)
+        ?.takeIf { it.isNotBlank() }
+        ?: System.getenv("MICHI_SPONSOR_URL").orEmpty()
+
 // Test-only AniList token for the opt-in live suite (see `live` test package).
 // local.properties is gitignored; never commit or log this value.
 val anilistTestTokenValue: String =
@@ -126,6 +134,9 @@ abstract class GenerateMichiBuildConfigTask : DefaultTask() {
     @get:Input
     abstract val appVersionCode: Property<Int>
 
+    @get:Input
+    abstract val sponsorUrl: Property<String>
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -145,6 +156,7 @@ abstract class GenerateMichiBuildConfigTask : DefaultTask() {
             internal object MichiBuildConfig {
                 const val Version: String = "${appVersion.get()}"
                 const val VersionCode: Int = ${appVersionCode.get()}
+                const val SponsorUrl: String = "${sponsorUrl.get()}"
             }
             """.trimIndent() + "\n"
         )
@@ -154,6 +166,7 @@ abstract class GenerateMichiBuildConfigTask : DefaultTask() {
 val generateMichiBuildConfig = tasks.register<GenerateMichiBuildConfigTask>("generateMichiBuildConfig") {
     appVersion.set(michiVersion.versionName)
     appVersionCode.set(michiVersion.versionCode)
+    sponsorUrl.set(sponsorUrlValue)
     outputDir.set(layout.buildDirectory.dir("generated/source/michiConfig/commonMain/kotlin"))
 }
 
