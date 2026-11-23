@@ -16,6 +16,7 @@ import com.luum.michi.app.core.medialist.domain.MediaListEntryRepository
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MediaListViewerEntry
 import com.luum.michi.app.core.medialist.domain.MirrorField
+import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.mediaDetail.domain.media.MediaDetailRepository
@@ -149,6 +150,7 @@ private fun editorWired(
     advancedScoringAnimeNames: List<String> = emptyList(),
     capabilities: ProviderCapabilities = ProviderCapabilities.AniList,
     scoreMax: Float = 10f,
+    scoreFormat: ScoreFormat = ScoreFormat.POINT_10_DECIMAL,
     initialStatusOverride: MediaListStatus? = null,
     initialProgressOverride: Int? = null,
     onFavouriteChanged: (FavouriteTarget, Boolean) -> Unit = { _, _ -> },
@@ -165,6 +167,7 @@ private fun editorWired(
     advancedScoringAnimeNames = advancedScoringAnimeNames,
     capabilities = capabilities,
     scoreMax = scoreMax,
+    scoreFormat = scoreFormat,
     initialStatusOverride = initialStatusOverride,
     initialProgressOverride = initialProgressOverride,
     onFavouriteChanged = onFavouriteChanged,
@@ -286,6 +289,127 @@ class MediaEntryEditorIntegrationTest {
         )
 
         editor.load()
+        editor.updateStatus(MediaListStatus.PAUSED)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(setOf(MirrorField.STATUS), repository.changedFields)
+    }
+
+    @Test
+    fun aDecimalScoreChangeRoundedToTheSameMalIntegerNeverPassesScore() {
+        val decimalEntry = existingEntry().copy(score = 8.5f)
+        val repository = RecordingEntryRepository(decimalEntry)
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = decimalEntry,
+            entryRepository = repository,
+        )
+
+        editor.load()
+        editor.updateScore(9f)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(emptySet(), repository.changedFields, "8.5 and 9.0 are both MAL 9")
+    }
+
+    @Test
+    fun aDecimalScoreChangeThatMovesMalStillPassesScore() {
+        val decimalEntry = existingEntry().copy(score = 8.5f)
+        val repository = RecordingEntryRepository(decimalEntry)
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = decimalEntry,
+            entryRepository = repository,
+        )
+
+        editor.load()
+        editor.updateScore(8f)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(setOf(MirrorField.SCORE), repository.changedFields, "8.5 is MAL 9, 8.0 is MAL 8")
+    }
+
+    @Test
+    fun aCoarseStarChangeThatMovesMalStillPassesScore() {
+        val starEntry = existingEntry().copy(score = 4f)
+        val repository = RecordingEntryRepository(starEntry)
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = starEntry,
+            entryRepository = repository,
+            scoreMax = 5f,
+            scoreFormat = ScoreFormat.POINT_5_STARS,
+        )
+
+        editor.load()
+        editor.updateScore(5f)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(setOf(MirrorField.SCORE), repository.changedFields, "4★ is MAL 8, 5★ is MAL 10")
+    }
+
+    @Test
+    fun aCoarseSmileyChangeThatMovesMalStillPassesScore() {
+        val smileyEntry = existingEntry().copy(score = 1f)
+        val repository = RecordingEntryRepository(smileyEntry)
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = smileyEntry,
+            entryRepository = repository,
+            scoreMax = 3f,
+            scoreFormat = ScoreFormat.POINT_3_SMILEYS,
+        )
+
+        editor.load()
+        editor.updateScore(2f)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(setOf(MirrorField.SCORE), repository.changedFields, "1🙁 is MAL 3, 2🙂 is MAL 7")
+    }
+
+    @Test
+    fun aMalScoreChangeStillPassesScore() {
+        val malEntry = existingEntry().copy(score = 7f)
+        val repository = RecordingEntryRepository(malEntry)
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = malEntry,
+            entryRepository = repository,
+            capabilities = ProviderCapabilities.Mal,
+            scoreFormat = ScoreFormat.POINT_10,
+        )
+
+        editor.load()
+        editor.updateScore(8f)
+        var saved = false
+        editor.save { saved = true }
+
+        assertTrue(saved)
+        assertEquals(setOf(MirrorField.SCORE), repository.changedFields, "MAL 7 → 8 is a real change")
+    }
+
+    @Test
+    fun anEquivalentScoreEditWithAStatusChangePassesOnlyStatus() {
+        val decimalEntry = existingEntry().copy(score = 8.5f)
+        val repository = RecordingEntryRepository(decimalEntry)
+        val editor = editorWired(
+            graphQL = FakeGraphQL(emptyList()),
+            viewerEntry = decimalEntry,
+            entryRepository = repository,
+        )
+
+        editor.load()
+        editor.updateScore(9f)
         editor.updateStatus(MediaListStatus.PAUSED)
         var saved = false
         editor.save { saved = true }
