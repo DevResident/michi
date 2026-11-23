@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luum.michi.app.accounts.ui.state.AccountsStateHolder
 import com.luum.michi.app.accounts.ui.state.AccountsUiState
+import com.luum.michi.app.accounts.ui.state.accountsLinkErrorMessage
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.media.domain.ProviderId
@@ -175,8 +176,7 @@ internal fun AccountsScreen(
                 }
                 state.linkError?.let { error ->
                     Text(
-                        text = strings.accountsConnectFailed + " " +
-                            strings.networkErrorMessage(error),
+                        text = strings.accountsLinkErrorMessage(error),
                         style = MaterialTheme.typography.bodySmall,
                         color = LocalWarning.current,
                         modifier = Modifier.padding(vertical = 12.dp),

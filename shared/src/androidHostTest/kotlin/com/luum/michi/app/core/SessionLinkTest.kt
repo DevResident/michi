@@ -17,6 +17,7 @@ import com.luum.michi.app.core.session.domain.AccountEvents
 import com.luum.michi.app.core.session.domain.LinkedAccount
 import com.luum.michi.app.core.session.domain.LinkedViewer
 import com.luum.michi.app.core.session.domain.PendingLink
+import com.luum.michi.app.core.session.domain.PendingLinkTtlSeconds
 import com.luum.michi.app.core.session.domain.SessionState
 import com.luum.michi.app.core.session.domain.Viewer
 import com.luum.michi.app.testLinkedAccountManager
@@ -202,7 +203,126 @@ class SessionLinkTest {
             listOf(ProviderId.AniList, ProviderId.Mal),
             h.session.connected.value.map { it.provider },
         )
+        assertEquals(1, h.malProvider.callbackCalls)
         assertNull(h.pending.pending)
+    }
+
+    @Test
+    fun aColdStartCallbackWithoutAPendingLinkIsIgnoredUntilBootstrapRestoresTheSession() =
+        runBlocking {
+            val h = harness()
+
+            h.session.onOAuthCallback("michi://oauth/callback?code=mal")
+
+            assertTrue(h.session.state.value is SessionState.Loading)
+            assertEquals("anilist-token", h.sessionAniList.load()?.accessToken)
+            assertNull(h.sessionMal.load(), "the stray token is never stored")
+            assertEquals(0, h.malProvider.callbackCalls)
+            assertNull(h.linked.linked.value)
+
+            h.bootstrap()
+
+            val state = h.session.state.value
+            assertTrue(state is SessionState.Authenticated)
+            assertEquals(ProviderId.AniList, state.provider)
+            assertEquals("anilist-token", h.sessionAniList.load()?.accessToken)
+            assertNull(h.sessionMal.load())
+        }
+
+    @Test
+    fun aGuestFailureWithAPendingLinkStillOpensTheLoginError() = runBlocking {
+        val h = harness(withAniList = false, withMal = false)
+        h.malProvider.callbackResult = { NetworkResult.Failure(NetworkError.NoConnection) }
+        h.pending.save(PendingLink(ProviderId.Mal, currentEpochSeconds()))
+
+        h.session.onOAuthCallback("michi://oauth/callback?code=mal")
+
+        assertEquals(ProviderId.Mal, h.session.lastLoginError.value)
+        assertNull(h.pending.pending)
+        assertNull(h.linked.linkError.value, "a guest login failure is not a link error")
+        assertTrue(h.session.state.value is SessionState.Loading)
+    }
+
+    @Test
+    fun aPendingForTheAlreadyFollowedProviderIsDroppedWithoutReplacingTheSession() =
+        runBlocking {
+            val h = harness()
+            h.bootstrap()
+            h.aniListProvider.callbackResult = {
+                NetworkResult.Success(freshToken("unexpected-anilist"))
+            }
+            h.pending.save(PendingLink(ProviderId.AniList, currentEpochSeconds()))
+
+            h.session.onOAuthCallback("michi://oauth/callback#access_token=unexpected")
+
+            val state = h.session.state.value
+            assertTrue(state is SessionState.Authenticated)
+            assertEquals(ProviderId.AniList, state.provider)
+            assertEquals("anilist-token", h.sessionAniList.load()?.accessToken)
+            assertNull(h.pending.pending)
+            assertEquals(0, h.aniListProvider.callbackCalls)
+        }
+
+    @Test
+    fun aCancelledCallbackDropsThePendingWithoutLinkExpired() = runBlocking {
+        val h = harness()
+        h.bootstrap()
+        h.malProvider.callbackResult = { null }
+        h.malProvider.callbackOwned = { true }
+        h.pending.save(PendingLink(ProviderId.Mal, currentEpochSeconds()))
+
+        h.session.onOAuthCallback("michi://oauth/callback?error=access_denied&state=mal")
+
+        val state = h.session.state.value
+        assertTrue(state is SessionState.Authenticated)
+        assertEquals(ProviderId.AniList, state.provider)
+        assertEquals("anilist-token", h.sessionAniList.load()?.accessToken)
+        assertNull(h.sessionMal.load())
+        assertNull(h.pending.pending)
+        assertNull(h.linked.linkError.value)
+    }
+
+    @Test
+    fun anExpiredPendingDropsTheTokenAndShowsTheLinkExpiredNotice() = runBlocking {
+        val h = harness()
+        h.bootstrap()
+        h.pending.save(
+            PendingLink(
+                ProviderId.Mal,
+                currentEpochSeconds() - PendingLinkTtlSeconds - 1,
+            ),
+        )
+
+        h.session.onOAuthCallback("michi://oauth/callback?code=mal")
+
+        val state = h.session.state.value
+        assertTrue(state is SessionState.Authenticated)
+        assertEquals(ProviderId.AniList, state.provider)
+        assertEquals("anilist-token", h.sessionAniList.load()?.accessToken)
+        assertNull(h.sessionMal.load())
+        assertNull(h.linked.linked.value)
+        assertNull(h.pending.pending)
+        assertEquals(NetworkError.LinkExpired, h.linked.linkError.value)
+        assertEquals(0, h.malProvider.callbackCalls, "an expired link never exchanges a code")
+        assertEquals(1, h.malProvider.discardPendingCalls)
+    }
+
+    @Test
+    fun anUnsolicitedCallbackWithASessionIsIgnored() = runBlocking {
+        val h = harness()
+        h.bootstrap()
+
+        h.session.onOAuthCallback("michi://oauth/callback?code=mal")
+
+        val state = h.session.state.value
+        assertTrue(state is SessionState.Authenticated)
+        assertEquals(ProviderId.AniList, state.provider)
+        assertEquals("anilist-token", h.sessionAniList.load()?.accessToken)
+        assertNull(h.sessionMal.load())
+        assertNull(h.linked.linked.value)
+        assertNull(h.linked.linkError.value)
+        assertEquals(0, h.malProvider.callbackCalls)
+        assertEquals(1, h.malProvider.discardPendingCalls)
     }
 
     @Test

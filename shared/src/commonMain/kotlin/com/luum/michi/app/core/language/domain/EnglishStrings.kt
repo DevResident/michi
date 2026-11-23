@@ -437,6 +437,7 @@ object EnglishStrings : LanguageStrings {
     override val errorRateLimitedLabel = "Too many requests. Please wait a moment."
     override val errorServerLabel = "Something went wrong. Please try again."
     override val errorUnknownLabel = "Something went wrong. Please try again."
+    override val errorLinkExpiredLabel = "The link expired. Please try again."
     override val notFoundLabel = "This no longer exists on AniList"
 
     // Filter Sheet & Filter/Order Labels

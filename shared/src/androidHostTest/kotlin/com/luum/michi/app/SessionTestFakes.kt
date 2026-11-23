@@ -47,12 +47,18 @@ internal class TestAuthProvider(
     var viewerResult: NetworkResult<Viewer> = NetworkResult.Success(Viewer(id = 1, name = "user")),
     var refreshResult: NetworkResult<AuthToken>? = null,
     var callbackResult: (String) -> NetworkResult<AuthToken>? = { null },
+    /** Overrides the default ownership check when a test needs it. */
+    var callbackOwned: ((String) -> Boolean)? = null,
 ) : AuthProvider {
     var openCalls = 0
         private set
     var viewerCalls = 0
         private set
     var refreshCalls = 0
+        private set
+    var callbackCalls = 0
+        private set
+    var discardPendingCalls = 0
         private set
 
     var viewerGate: CompletableDeferred<Unit>? = null
@@ -62,8 +68,17 @@ internal class TestAuthProvider(
         openCalls++
     }
 
-    override suspend fun handleCallback(uri: String): NetworkResult<AuthToken>? =
-        callbackResult(uri)
+    override fun ownsCallback(uri: String): Boolean =
+        callbackOwned?.invoke(uri) ?: (callbackResult(uri) != null)
+
+    override fun discardPending() {
+        discardPendingCalls++
+    }
+
+    override suspend fun handleCallback(uri: String): NetworkResult<AuthToken>? {
+        callbackCalls++
+        return callbackResult(uri)
+    }
 
     override suspend fun refresh(token: AuthToken): NetworkResult<AuthToken>? {
         refreshCalls++

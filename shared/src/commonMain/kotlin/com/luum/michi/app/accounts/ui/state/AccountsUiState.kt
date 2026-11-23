@@ -1,5 +1,7 @@
 package com.luum.michi.app.accounts.ui.state
 
+import com.luum.michi.app.core.language.domain.LanguageStrings
+import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.medialist.repository.MirrorOutboxState
 import com.luum.michi.app.core.network.domain.NetworkError
@@ -30,3 +32,11 @@ internal data class AccountsUiState(
     fun account(provider: ProviderId): ConnectedAccount? =
         connected.firstOrNull { it.provider == provider }
 }
+
+/** An expired second-account link speaks for itself; other failures name the action. */
+internal fun LanguageStrings.accountsLinkErrorMessage(error: NetworkError): String =
+    if (error is NetworkError.LinkExpired) {
+        errorLinkExpiredLabel
+    } else {
+        accountsConnectFailed + " " + networkErrorMessage(error)
+    }

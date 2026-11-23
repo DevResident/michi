@@ -50,6 +50,7 @@ internal class SessionManager(
     private val onFollowedChanged: suspend (ProviderId) -> Unit = {},
     private val onAccountDisconnected: suspend (ProviderId) -> Unit = {},
     private val events: AccountEvents = AccountEvents(),
+    private val isDebug: Boolean = false,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -219,8 +220,29 @@ internal class SessionManager(
         provider.open()
     }
 
+    /**
+     * A guest's valid callback starts a session; an existing one only accepts a
+     * valid pending link for the other provider. An authenticated session is
+     * never replaced by an unprompted deep link.
+     */
     suspend fun onOAuthCallback(uri: String) {
         val pending = pendingLinkStore?.load()
+        if (hasSession()) {
+            handleSessionOAuthCallback(uri, pending)
+        } else {
+            handleGuestOAuthCallback(uri)
+        }
+    }
+
+    /**
+     * A persisted token counts as a session even while bootstrap is still
+     * running, so a callback arriving on a cold start cannot replace it.
+     */
+    private suspend fun hasSession(): Boolean =
+        _state.value is SessionState.Authenticated ||
+            tokenStorages.values.any { it.load() != null }
+
+    private suspend fun handleGuestOAuthCallback(uri: String) {
         val handled = providers.firstNotNullOfOrNull { provider ->
             provider.handleCallback(uri)?.let { provider to it }
         } ?: run {
@@ -231,32 +253,79 @@ internal class SessionManager(
         val (provider, result) = handled
         when (result) {
             is NetworkResult.Failure -> {
-                if (pending != null && pending.provider == provider.id) {
-                    pendingLinkStore?.clear()
-                    linkedAccounts?.onLinkFailed(result.error)
-                } else {
-                    _lastLoginError.value = provider.id
-                }
-                return
+                pendingLinkStore?.clear()
+                _lastLoginError.value = provider.id
             }
             is NetworkResult.Success -> {
                 _lastLoginError.value = null
-                val token = result.value
-                val isPending = pending != null &&
-                    pending.isValid(currentEpochSeconds()) &&
-                    pending.provider == provider.id
-                if (isPending) pendingLinkStore?.clear()
-
-                val authenticated = _state.value is SessionState.Authenticated
-                if (isPending && authenticated && provider.id != followedProvider) {
-                    if (linkedAccounts?.linked?.value?.provider == provider.id) return
-                    connectOther(provider, token)
-                    return
-                }
+                pendingLinkStore?.clear()
                 linkedAccounts?.clearLinkError()
-                loginWith(provider, token)
+                loginWith(provider, result.value)
             }
         }
+    }
+
+    private suspend fun handleSessionOAuthCallback(uri: String, pending: PendingLink?) {
+        if (pending == null) {
+            // A stray callback must not exchange a code or replace the session.
+            val owner = providers.firstOrNull { it.ownsCallback(uri) }
+            owner?.discardPending()
+            debugLog(
+                "OAuth callback ignored" +
+                    (owner?.let { " for ${it.id.value}" } ?: "") +
+                    ": no pending link",
+            )
+            return
+        }
+
+        val provider = providers.firstOrNull { it.id == pending.provider && it.isConfigured }
+        if (provider == null) {
+            pendingLinkStore?.clear()
+            debugLog(
+                "OAuth callback ignored for ${pending.provider.value}: provider is not configured",
+            )
+            return
+        }
+        if (!provider.ownsCallback(uri)) {
+            debugLog(
+                "OAuth callback ignored for ${pending.provider.value}: not that provider's callback",
+            )
+            return
+        }
+        if (pending.provider == followedProvider) {
+            pendingLinkStore?.clear()
+            debugLog(
+                "OAuth callback ignored for ${pending.provider.value}: provider is already followed",
+            )
+            return
+        }
+        if (!pending.isValid(currentEpochSeconds())) {
+            pendingLinkStore?.clear()
+            provider.discardPending()
+            linkedAccounts?.onLinkFailed(NetworkError.LinkExpired)
+            debugLog(
+                "OAuth callback ignored for ${pending.provider.value}: pending link expired",
+            )
+            return
+        }
+
+        val result = provider.handleCallback(uri) ?: run {
+            pendingLinkStore?.clear()
+            debugLog("OAuth callback ignored for ${provider.id.value}: callback cancelled")
+            return
+        }
+        pendingLinkStore?.clear()
+        when (result) {
+            is NetworkResult.Failure -> linkedAccounts?.onLinkFailed(result.error)
+            is NetworkResult.Success -> {
+                if (linkedAccounts?.linked?.value?.provider == provider.id) return
+                connectOther(provider, result.value)
+            }
+        }
+    }
+
+    private fun debugLog(message: String) {
+        if (isDebug) println("[Michi] $message")
     }
 
     /**

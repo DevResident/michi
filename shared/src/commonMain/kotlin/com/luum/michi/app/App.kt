@@ -136,7 +136,9 @@ fun App(
             },
             onLogin = {
                 dependencies.sessionManager.clearLoginError()
-                provider.open()
+                // Same pending-link path as Accounts: a callback can never
+                // replace a session the user did not ask to change.
+                dependencies.beginLink(provider.id)
             },
             icon = when {
                 isAniList -> AppIcons.AniList

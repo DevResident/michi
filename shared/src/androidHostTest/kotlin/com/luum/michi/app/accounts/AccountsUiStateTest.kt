@@ -1,8 +1,12 @@
 package com.luum.michi.app.accounts
 
 import com.luum.michi.app.accounts.ui.state.AccountsUiState
+import com.luum.michi.app.accounts.ui.state.accountsLinkErrorMessage
+import com.luum.michi.app.core.language.domain.EnglishStrings
+import com.luum.michi.app.core.language.domain.SpanishStrings
 import com.luum.michi.app.core.media.domain.ProviderId
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
+import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.session.domain.ConnectedAccount
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -59,5 +63,21 @@ class AccountsUiStateTest {
         )
 
         assertEquals("", state.summary)
+    }
+
+    @Test
+    fun anExpiredLinkShowsItsMessageWithoutTheGenericConnectPrefix() {
+        assertEquals(
+            "The link expired. Please try again.",
+            EnglishStrings.accountsLinkErrorMessage(NetworkError.LinkExpired),
+        )
+        assertEquals(
+            "El enlace caducó. Vuelve a intentarlo.",
+            SpanishStrings.accountsLinkErrorMessage(NetworkError.LinkExpired),
+        )
+        assertEquals(
+            EnglishStrings.accountsConnectFailed + " " + EnglishStrings.errorNoConnectionLabel,
+            EnglishStrings.accountsLinkErrorMessage(NetworkError.NoConnection),
+        )
     }
 }

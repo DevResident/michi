@@ -401,6 +401,7 @@ interface LanguageStrings {
     val errorRateLimitedLabel: String
     val errorServerLabel: String
     val errorUnknownLabel: String
+    val errorLinkExpiredLabel: String
     /** Generic text for [NetworkError.NotFound]; never names the entity or id. */
     val notFoundLabel: String
 

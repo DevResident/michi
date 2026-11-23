@@ -28,6 +28,12 @@ internal class AniListAuthProvider(
 
     override fun open() = browser.open(AniListOAuthConfig.buildAuthorizeUrl())
 
+    override fun ownsCallback(uri: String): Boolean =
+        uri.startsWith(AniListOAuthConfig.RedirectUri) &&
+            uri.substringAfter('#', "").isNotBlank()
+
+    override fun discardPending() = Unit
+
     override suspend fun handleCallback(uri: String): NetworkResult<AuthToken>? =
         parseAniListOAuthCallback(uri)?.let { NetworkResult.Success(it) }
 

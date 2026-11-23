@@ -471,6 +471,7 @@ class MichiDependencies internal constructor(
                 mirrorController.onAccountDisconnected(provider)
             },
             events = accountEvents,
+            isDebug = isDebug,
         )
 
     /**

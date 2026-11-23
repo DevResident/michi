@@ -440,6 +440,7 @@ object SpanishStrings : LanguageStrings {
     override val errorRateLimitedLabel = "Demasiadas solicitudes. Espera un momento."
     override val errorServerLabel = "Algo salió mal. Inténtalo de nuevo."
     override val errorUnknownLabel = "Algo salió mal. Inténtalo de nuevo."
+    override val errorLinkExpiredLabel = "El enlace caducó. Vuelve a intentarlo."
     override val notFoundLabel = "Esto ya no existe en AniList"
 
     // Filter Sheet & Filter/Order Labels
