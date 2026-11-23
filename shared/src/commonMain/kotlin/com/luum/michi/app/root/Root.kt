@@ -312,12 +312,14 @@ internal fun Root(
                                     bottomPadding = padding.calculateBottomPadding(),
                                     outbox = mirrorOutbox,
                                     onRetry = onRetryMirror,
+                                    providerLabel = { accounts.label(it) },
                                     onApplied = { state.closeSettingsMirror() },
                                 )
                             } else if (state.settingsAccountsOpen) {
                                 AccountsScreen(
                                     state = accounts,
                                     coordinator = mirrorSyncCoordinator,
+                                    previewHolder = holders.mirrorSync,
                                     bottomPadding = padding.calculateBottomPadding(),
                                     onConnect = onConnectAccount,
                                     onDisconnect = onDisconnectAccount,

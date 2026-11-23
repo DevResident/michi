@@ -54,8 +54,6 @@ import com.luum.michi.app.ui.components.PanelShape
 import com.luum.michi.app.ui.components.PickerSheet
 import com.luum.michi.app.ui.components.PullRefresh
 import com.luum.michi.app.ui.components.AppButton
-import com.luum.michi.app.ui.components.Avatar
-import com.luum.michi.app.ui.components.AvatarSize
 import com.luum.michi.app.ui.components.ButtonEmphasis
 import com.luum.michi.app.ui.components.ToggleRow
 import com.luum.michi.app.ui.icons.AppIcons
@@ -547,8 +545,8 @@ private fun ThemePaletteSection(
     )
 }
 
-/** First Settings section: the followed account + the connected services summary.
- *  Connected and guest share the same row; it always opens Accounts. */
+/** First Settings section: one standard row with the connected services summary.
+ *  Connected and guest share the row; it always opens Accounts. */
 @Composable
 private fun SettingsAccountsRow(
     viewer: Viewer?,
@@ -558,39 +556,17 @@ private fun SettingsAccountsRow(
     modifier: Modifier = Modifier,
 ) {
     OptionGroup(title = null, modifier = modifier) {
-        if (viewer != null) {
-            SettingsRow(
-                label = viewer.name,
-                value = "",
-                onClick = onOpenAccounts,
-                supportingText = accounts?.summary?.takeIf { it.isNotBlank() },
-                leading = {
-                    Avatar(
-                        imageUrl = viewer.avatarUrl,
-                        initials = initialsFor(viewer.name),
-                        size = AvatarSize.Row,
-                    )
-                },
-                divider = false,
-            )
-        } else {
-            SettingsRow(
-                label = strings.settingsSignInTitle,
-                value = "",
-                onClick = onOpenAccounts,
-                divider = false,
-            )
-        }
+        SettingsRow(
+            label = strings.accountsTitle,
+            value = if (viewer == null) {
+                strings.settingsSignInTitle
+            } else {
+                accounts?.summary.orEmpty()
+            },
+            onClick = onOpenAccounts,
+            divider = false,
+        )
     }
-}
-
-/** Up to two uppercase initials ("Fernando Hurtado" -> "FH", "Michi" -> "M"). */
-private fun initialsFor(name: String): String {
-    val parts = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-    if (parts.isEmpty()) return "?"
-    val first = parts.first().first().uppercaseChar()
-    val second = parts.getOrNull(1)?.first()?.uppercaseChar()
-    return if (second != null) "$first$second" else "$first"
 }
 
 /** Inline error with retry, shown only when the last load/save failed. Same frame

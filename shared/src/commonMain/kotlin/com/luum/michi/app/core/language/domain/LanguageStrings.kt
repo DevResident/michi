@@ -320,15 +320,14 @@ interface LanguageStrings {
     val accountsTitle: String
     val accountsConnectedSection: String
     val accountsFollowedSection: String
-    val accountsFollowedHint: String
+    fun accountsFollowedChip(provider: String): String
     val accountsSyncSection: String
+    fun accountsSyncDirection(followed: String, other: String): String
     val accountsSyncComparing: String
-    val accountsSyncUpToDate: String
     fun accountsSyncCopying(done: Int, total: Int): String
     fun accountsSyncPending(count: Int): String
     fun accountsSyncErrors(count: Int): String
-    fun accountsSyncNewer(count: Int, provider: String): String
-    fun accountsSyncRegression(count: Int): String
+    fun accountsQueueErrors(count: Int): String
     val accountsCompareTitle: String
     fun accountsCompareMessage(provider: String, additions: Int, updates: Int): String
     fun accountsCompareSkippedNewer(count: Int, provider: String): String
@@ -356,17 +355,19 @@ interface LanguageStrings {
     fun accountsEventLostAccess(provider: String): String
     fun accountsEventFollowed(provider: String): String
     val mirrorSyncTitle: String
+    val mirrorSyncLoading: String
     val mirrorSyncRegression: String
     val mirrorSyncAddSection: String
     val mirrorSyncUpdateSection: String
     val mirrorSyncLinkedOnlySection: String
-    fun mirrorSyncAddCount(count: Int): String
-    fun mirrorSyncUpdateCount(count: Int): String
-    fun mirrorSyncLinkedOnlyCount(count: Int): String
     fun mirrorSyncNoEquivalent(count: Int): String
     fun mirrorSyncPrivateOmitted(count: Int): String
     fun mirrorSyncApply(count: Int): String
-    val mirrorSyncSlowHint: String
+    val mirrorSyncApplying: String
+    val mirrorSyncBackgroundCopy: String
+    fun mirrorSyncSelection(selected: Int, total: Int, provider: String): String
+    val mirrorSyncSelectAll: String
+    val mirrorSyncClearSelection: String
     val mirrorSyncEmptyTitle: String
     val mirrorSyncEmptyMessage: String
     val mirrorSyncNewerInLinked: String

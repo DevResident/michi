@@ -45,6 +45,7 @@ internal class MirrorController(
     private val isConnected: (ProviderId) -> Boolean,
     private val scope: CoroutineScope,
     private val nowMillis: () -> Long = { currentEpochSeconds() * 1000L },
+    private val isDebug: Boolean = false,
 ) : MirrorSink {
 
     val state: StateFlow<MirrorOutboxState> = outbox.state
@@ -233,13 +234,23 @@ internal class MirrorController(
             outbox.clear()
             return
         }
+        val ref = operation.debugRef()
+        if (isDebug) {
+            println(
+                "[Michi] mirror op $ref target=${operation.targetProvider.value} " +
+                    "fields=${operation.fields.map { it.name }.sorted().joinToString(",")} " +
+                    "attempt=${operation.attempts}",
+            )
+        }
         if (!isConnected(operation.targetProvider)) {
             outbox.markPermanent(operation, "Account disconnected")
+            logResult(ref, "disconnected")
             return
         }
         val writer = writers[operation.targetProvider]
         if (writer == null) {
             outbox.markPermanent(operation, "No mirror writer for ${operation.targetProvider.value}")
+            logResult(ref, "no-writer")
             return
         }
         val result = try {
@@ -250,18 +261,32 @@ internal class MirrorController(
             NetworkResult.Failure(NetworkError.Unknown(throwable))
         }
         when (result) {
-            is NetworkResult.Success -> outbox.markSuccess(operation)
-            is NetworkResult.Failure -> when {
-                result.error is NetworkError.Unauthorized -> {
-                    // The provider client already reports the 401 to the session;
-                    // this account's queued copies are not retried.
-                    outbox.discardTarget(operation.targetProvider)
+            is NetworkResult.Success -> {
+                outbox.markSuccess(operation)
+                logResult(ref, result.debugLabel())
+            }
+            is NetworkResult.Failure -> {
+                when {
+                    result.error is NetworkError.Unauthorized -> {
+                        // The provider client already reports the 401 to the session;
+                        // this account's queued copies are not retried.
+                        outbox.discardTarget(operation.targetProvider)
+                    }
+                    isPermanent(result.error) ->
+                        outbox.markPermanent(operation, result.error.toString())
+                    else -> outbox.markTransient(operation, result.error.toString())
                 }
-                isPermanent(result.error) -> outbox.markPermanent(operation, result.error.toString())
-                else -> outbox.markTransient(operation, result.error.toString())
+                logResult(ref, result.debugLabel())
             }
         }
     }
+
+    private fun logResult(ref: String, result: String) {
+        if (isDebug) println("[Michi] mirror op $ref result=$result")
+    }
+
+    private fun MirrorOutboxOperation.debugRef(): String =
+        "${entry.type.name}:${entry.aniListId}/${entry.malId ?: "-"}"
 
     private fun isPermanent(error: NetworkError): Boolean = when (error) {
         NetworkError.EntryNotOnProvider -> true

@@ -53,6 +53,12 @@ internal data class MirrorOutboxState(
     val dropped: Int = 0,
     val nextAttemptAtEpochMillis: Long? = null,
     val batch: MirrorBatchProgress? = null,
+    /**
+     * Bumps only when a save/apply actually enqueues something. The transparent
+     * progress below does not move it, so UI caches (the Compare preview) can
+     * stay valid while the outbox drains.
+     */
+    val revision: Long = 0L,
 )
 
 internal data class MirrorBatchItem(
@@ -78,6 +84,7 @@ internal class MirrorOutbox(
     private var batchErrors = 0
     private var dropped = 0
     private var loaded = false
+    private var revision = 0L
 
     private val _state = MutableStateFlow(MirrorOutboxState())
     val state: StateFlow<MirrorOutboxState> = _state.asStateFlow()
@@ -110,6 +117,7 @@ internal class MirrorOutbox(
         mutex.withLock {
             val key = MirrorOutboxKey(entry.targetProvider(), entry.aniListId)
             operations[key] = mergeLocked(key, entry, fields)
+            revision += 1
             persistLocked()
             publishLocked()
         }
@@ -131,6 +139,7 @@ internal class MirrorOutbox(
             batchTotal = keys.size
             batchDone = 0
             batchErrors = 0
+            if (keys.isNotEmpty()) revision += 1
             persistLocked()
             publishLocked()
         }
@@ -326,6 +335,7 @@ internal class MirrorOutbox(
             } else {
                 null
             },
+            revision = revision,
         )
     }
 

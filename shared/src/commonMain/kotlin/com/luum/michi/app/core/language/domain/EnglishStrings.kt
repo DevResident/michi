@@ -327,24 +327,18 @@ object EnglishStrings : LanguageStrings {
     override val accountsTitle = "Accounts"
     override val accountsConnectedSection = "Connected accounts"
     override val accountsFollowedSection = "List you follow"
-    override val accountsFollowedHint =
-        "New changes are copied from this list to the other account."
+    override fun accountsFollowedChip(provider: String): String = "List you follow: $provider"
     override val accountsSyncSection = "Sync with both"
+    override fun accountsSyncDirection(followed: String, other: String): String =
+        "Copies from $followed to $other"
     override val accountsSyncComparing = "Comparing lists…"
-    override val accountsSyncUpToDate = "Up to date"
-    override fun accountsSyncCopying(done: Int, total: Int): String = "Copying $done/$total"
+    override fun accountsSyncCopying(done: Int, total: Int): String = "Copying $done of $total…"
     override fun accountsSyncPending(count: Int): String =
         if (count == 1) "1 pending" else "$count pending"
     override fun accountsSyncErrors(count: Int): String =
         if (count == 1) "1 with errors" else "$count with errors"
-    override fun accountsSyncNewer(count: Int, provider: String): String =
-        if (count == 1) {
-            "1 more recent in $provider"
-        } else {
-            "$count more recent in $provider"
-        }
-    override fun accountsSyncRegression(count: Int): String =
-        if (count == 1) "1 would move backwards" else "$count would move backwards"
+    override fun accountsQueueErrors(count: Int): String =
+        if (count == 1) "1 with errors · tap to review" else "$count with errors · tap to review"
     override val accountsCompareTitle = "Compare lists"
     override fun accountsCompareMessage(provider: String, additions: Int, updates: Int): String {
         val add = if (additions == 1) "1 missing title" else "$additions missing titles"
@@ -387,23 +381,22 @@ object EnglishStrings : LanguageStrings {
         "Lost access to $provider"
     override fun accountsEventFollowed(provider: String): String = "Now following $provider"
     override val mirrorSyncTitle = "Compare lists"
+    override val mirrorSyncLoading = "Reading your lists…"
     override val mirrorSyncRegression = "Would move backwards"
     override val mirrorSyncAddSection = "Add"
     override val mirrorSyncUpdateSection = "Update"
     override val mirrorSyncLinkedOnlySection = "Only in the other account"
-    override fun mirrorSyncAddCount(count: Int): String =
-        if (count == 1) "1 to add" else "$count to add"
-    override fun mirrorSyncUpdateCount(count: Int): String =
-        if (count == 1) "1 to update" else "$count to update"
-    override fun mirrorSyncLinkedOnlyCount(count: Int): String =
-        if (count == 1) "1 only in the other account" else "$count only in the other account"
     override fun mirrorSyncNoEquivalent(count: Int): String =
         if (count == 1) "1 without a match" else "$count without a match"
     override fun mirrorSyncPrivateOmitted(count: Int): String =
         if (count == 1) "1 private not copied" else "$count private not copied"
-    override fun mirrorSyncApply(count: Int): String =
-        if (count == 1) "Apply 1 change" else "Apply $count changes"
-    override val mirrorSyncSlowHint = "This may take a few minutes."
+    override fun mirrorSyncApply(count: Int): String = "Apply ($count)"
+    override val mirrorSyncApplying = "Applying…"
+    override val mirrorSyncBackgroundCopy = "Copies in the background"
+    override fun mirrorSyncSelection(selected: Int, total: Int, provider: String): String =
+        "$selected of $total · to $provider"
+    override val mirrorSyncSelectAll = "Select all"
+    override val mirrorSyncClearSelection = "Clear selection"
     override val mirrorSyncEmptyTitle = "Nothing to sync"
     override val mirrorSyncEmptyMessage = "Your lists already match."
     override val mirrorSyncNewerInLinked = "Updated later in the other account"

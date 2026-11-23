@@ -14,9 +14,14 @@ import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
 import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncSource
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -32,6 +37,18 @@ private class FakeSyncSource(
         applied = rows
         return NetworkResult.Success(Unit)
     }
+}
+
+private class SuspendingCompareSource : MirrorSyncSource {
+    val started = CompletableDeferred<Unit>()
+
+    override suspend fun loadPreview(): NetworkResult<MirrorDiff> {
+        started.complete(Unit)
+        awaitCancellation()
+    }
+
+    override suspend fun apply(rows: List<MirrorPreviewRow>): NetworkResult<Unit> =
+        NetworkResult.Success(Unit)
 }
 
 private fun values(progress: Int = 12) = MirrorPreviewValues(
@@ -97,6 +114,20 @@ private fun diff(vararg updates: MirrorPreviewRow) = MirrorDiff(
 class AccountsStateHolderTest {
 
     @Test
+    fun cancellingACompareClearsComparing() = runBlocking {
+        val source = SuspendingCompareSource()
+        val holder = AccountsStateHolder(source)
+
+        val job = launch { holder.compare() }
+        source.started.await()
+        assertTrue(holder.comparing)
+
+        job.cancelAndJoin()
+
+        assertFalse(holder.comparing)
+    }
+
+    @Test
     fun aSafeDifferenceOpensTheDialogAndCatchUpAppliesOnlyThoseRows() = runBlocking {
         val safe = row("safe")
         val newer = row("newer", newer = true)
@@ -114,6 +145,21 @@ class AccountsStateHolderTest {
 
         assertEquals(listOf("safe"), source.applied?.map { it.key })
         assertNull(holder.dialog)
+    }
+
+    @Test
+    fun applyingFromTheDialogInvalidatesTheAdoptedDiff() = runBlocking {
+        val source = FakeSyncSource(NetworkResult.Success(diff(row("safe"))))
+        val holder = AccountsStateHolder(source)
+
+        holder.compare()
+        assertNotNull(holder.lastDiff)
+
+        var invalidated = false
+        holder.applyCatchUp { invalidated = true }
+
+        assertTrue(invalidated)
+        assertNull(holder.lastDiff)
     }
 
     @Test
