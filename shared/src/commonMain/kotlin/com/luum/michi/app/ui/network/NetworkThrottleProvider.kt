@@ -13,4 +13,5 @@ internal val LocalNetworkThrottle = compositionLocalOf<NetworkThrottle> { NoOpNe
 
 private object NoOpNetworkThrottle : NetworkThrottle {
     override val waitingRequests: StateFlow<Int> = MutableStateFlow(0)
+    override suspend fun freePoints(): Int = Int.MAX_VALUE
 }

@@ -15,4 +15,11 @@ import kotlinx.coroutines.flow.StateFlow
  */
 internal interface NetworkThrottle {
     val waitingRequests: StateFlow<Int>
+
+    /**
+     * Points of the per-minute budget still free right now. Background work
+     * (a preload nobody is looking at) checks it so it never spends the points
+     * that the screens the user opens next are about to need.
+     */
+    suspend fun freePoints(): Int
 }
