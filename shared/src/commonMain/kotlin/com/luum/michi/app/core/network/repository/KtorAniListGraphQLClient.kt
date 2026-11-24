@@ -114,6 +114,13 @@ internal class KtorAniListGraphQLClient(
         }
 
         val body = response.bodyAsText()
+        if (debugLogging) {
+            println(
+                "[Michi] GraphQL ${request.operationName ?: "?"} HTTP ${response.status.value}" +
+                    " remaining=${response.headers["X-RateLimit-Remaining"]}" +
+                    " retryAfter=${response.headers["Retry-After"]}",
+            )
+        }
 
         if (!response.status.isSuccess()) {
             return when (response.status.value) {
