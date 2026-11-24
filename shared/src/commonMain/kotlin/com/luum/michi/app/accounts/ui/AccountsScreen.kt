@@ -492,7 +492,7 @@ private fun ProviderBadge(provider: ProviderId, modifier: Modifier = Modifier) {
 }
 
 private fun profileUrl(provider: ProviderId): String? = when (provider) {
-    ProviderId.AniList -> "https://anilist.co/settings/profile"
+    ProviderId.AniList -> "https://anilist.co/settings/"
     ProviderId.Mal -> "https://myanimelist.net/editprofile.php"
     else -> null
 }
@@ -500,5 +500,6 @@ private fun profileUrl(provider: ProviderId): String? = when (provider) {
 // Only AniList links a separate account-settings page; other providers get no row.
 private fun accountUrl(provider: ProviderId): String? = when (provider) {
     ProviderId.AniList -> "https://anilist.co/settings/account"
+    ProviderId.Mal -> "https://myanimelist.net/editprofile.php?go=myoptions"
     else -> null
 }
