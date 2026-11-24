@@ -2,6 +2,7 @@ package com.luum.michi.app.mediaDetail.domain.studio.model
 
 import com.luum.michi.app.core.media.domain.MediaGridItem
 import com.luum.michi.app.core.model.Page
+import com.luum.michi.app.core.network.domain.WebLinks
 
 internal data class StudioDetail(
     val id: Int,
@@ -13,7 +14,7 @@ internal data class StudioDetail(
 )
 
 /** Canonical AniList page for this studio. */
-internal fun StudioDetail.aniListUrl(): String = "https://anilist.co/studio/$id"
+internal fun StudioDetail.aniListUrl(): String = WebLinks.AniList.studio(id)
 
 /** Body used by the share sheet: name + canonical URL. */
 internal fun StudioDetail.shareText(): String = "$name\n${aniListUrl()}"

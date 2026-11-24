@@ -25,6 +25,7 @@ import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.label
 import com.luum.michi.app.core.model.ImageQuality
+import com.luum.michi.app.core.network.domain.WebLinks
 import com.luum.michi.app.core.session.domain.Viewer
 import com.luum.michi.app.settings.domain.model.ListSort
 import com.luum.michi.app.settings.domain.model.StaffNameLanguage
@@ -413,7 +414,7 @@ private fun SettingsIndex(
                 SettingsRow(
                     label = strings.aboutReportIssueTitle,
                     value = "↗",
-                    onClick = { onOpenUrl(AboutLinks.NewIssue) },
+                    onClick = { onOpenUrl(WebLinks.Repo.NewIssue) },
                     supportingText = strings.settingsReportIssueSubtitle,
                     showChevron = false,
                 )

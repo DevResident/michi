@@ -1,6 +1,7 @@
 package com.luum.michi.app.notifications.repository
 
 import com.luum.michi.app.core.media.repository.bestTitleOrNull
+import com.luum.michi.app.core.network.domain.WebLinks
 import com.luum.michi.app.notifications.domain.model.AppNotification
 import com.luum.michi.app.notifications.domain.model.NotificationFilter
 import com.luum.michi.app.notifications.domain.model.NotificationKind
@@ -60,12 +61,9 @@ private fun NotificationNodeDto.submissionSubject(kind: NotificationKind): Strin
     else -> null
 }
 
-/** Fallback destination: any notification without a usable id still opens the feed. */
-private const val AniListNotificationsUrl = "https://anilist.co/notifications"
-
 /**
  * The web destination of a non-media notification, decided by the data it
- * carries (all URLs are built here, the single place):
+ * carries (URLs come from [WebLinks.AniList]; any notification without a usable id still opens the feed):
  *  - an activity, reply, reply-like, mention, reply-subscribed or message has
  *    `activityId` → that activity;
  *  - a forum reply/like/subscribed has `thread { id }` (+ `commentId`) or a
@@ -75,18 +73,16 @@ private const val AniListNotificationsUrl = "https://anilist.co/notifications"
  *    the user can see what it is.
  */
 private fun NotificationNodeDto.webTarget(kind: NotificationKind): NotificationTarget {
-    activityId?.let { return NotificationTarget.Web("https://anilist.co/activity/$it") }
+    activityId?.let { return NotificationTarget.Web(WebLinks.AniList.activity(it)) }
     val forumThreadId = thread?.id ?: threadId
     if (forumThreadId != null) {
-        val forumCommentId = commentId
-        val commentPath = if (forumCommentId != null && forumCommentId > 0) "/comment/$forumCommentId" else ""
-        return NotificationTarget.Web("https://anilist.co/forum/thread/$forumThreadId$commentPath")
+        return NotificationTarget.Web(WebLinks.AniList.forumThread(forumThreadId, commentId))
     }
     val name = user?.name
     if (kind == NotificationKind.FOLLOWING && !name.isNullOrBlank()) {
-        return NotificationTarget.Web("https://anilist.co/user/$name")
+        return NotificationTarget.Web(WebLinks.AniList.user(name))
     }
-    return NotificationTarget.Web(AniListNotificationsUrl)
+    return NotificationTarget.Web(WebLinks.AniList.Notifications)
 }
 
 /** The API `type_in` list of a filter, or null for ALL (the unfiltered feed). */

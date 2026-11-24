@@ -1,6 +1,7 @@
 package com.luum.michi.app.discover.domain.genre.model
 
 import com.luum.michi.app.core.media.domain.MediaType
+import com.luum.michi.app.core.network.domain.WebLinks
 
 /**
  * Canonical AniList search page for a genre in one catalog. AniList has no
@@ -9,7 +10,7 @@ import com.luum.michi.app.core.media.domain.MediaType
  */
 internal fun genreAniListUrl(name: String, type: MediaType): String {
     val segment = if (type == MediaType.MANGA) "manga" else "anime"
-    return "https://anilist.co/search/$segment?genres=${name.urlEncodeQueryValue()}"
+    return WebLinks.AniList.genreSearch(segment, name.urlEncodeQueryValue())
 }
 
 /** Body used by the share sheet: genre name + canonical URL. */

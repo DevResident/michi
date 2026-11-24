@@ -4,6 +4,7 @@ import com.luum.michi.app.core.media.domain.EntityRef
 import com.luum.michi.app.core.media.domain.MalRef
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.ProviderId
+import com.luum.michi.app.core.network.domain.WebLinks
 
 /*
  * "MAL-only" entries: works on the viewer's MAL list that have no AniList
@@ -48,7 +49,7 @@ internal fun malIdOfMalOnly(id: Int): Int = malRefOfMalOnly(id).malId
 /** The work's public page on myanimelist.net. */
 internal fun malPageUrl(type: MediaType, malId: Int): String {
     val path = if (type == MediaType.MANGA) "manga" else "anime"
-    return "https://myanimelist.net/$path/$malId"
+    return WebLinks.Mal.media(path, malId)
 }
 
 /** MAL `media_type` in AniList's format vocabulary (what the list mappers parse). */
