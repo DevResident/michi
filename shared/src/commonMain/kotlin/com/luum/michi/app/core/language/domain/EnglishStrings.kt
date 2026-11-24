@@ -268,6 +268,42 @@ object EnglishStrings : LanguageStrings {
         "$provider lost access · tap to reconnect"
     override val releaseNotes = listOf(
         ReleaseNotesVersion(
+            version = "1.2",
+            sections = listOf(
+                ReleaseNotesSection(
+                    title = "Connected accounts",
+                    items = listOf(
+                        "Connect AniList and MyAnimeList at the same time from the new Accounts " +
+                            "page, and choose which list you follow. Switching between them " +
+                            "doesn't ask you to sign in again.",
+                        "Turn on “Sync with both” and the changes you save in the list you " +
+                            "follow are copied to the other account in the background.",
+                        "“Compare lists” shows what would be added or updated in the other " +
+                            "account before anything is copied, and you pick what to apply. It " +
+                            "never moves an entry backwards or erases values in the other account.",
+                        "If one account loses access, Michi tells you and lets you reconnect it " +
+                            "without signing you out.",
+                    ),
+                ),
+                ReleaseNotesSection(
+                    title = "Settings",
+                    items = listOf(
+                        "Settings is split into pages: General, Appearance, My lists and " +
+                            "Notifications.",
+                        "New “What's new” page with these notes.",
+                    ),
+                ),
+                ReleaseNotesSection(
+                    title = "Fixes",
+                    items = listOf(
+                        "On a fresh install, Discover, Lists and Profile no longer get stuck " +
+                            "waiting about a minute after signing in.",
+                        "Discover keeps the rails it already loaded when you sign in.",
+                    ),
+                ),
+            ),
+        ),
+        ReleaseNotesVersion(
             version = "1.1",
             sections = listOf(
                 ReleaseNotesSection(
