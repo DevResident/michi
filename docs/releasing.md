@@ -6,8 +6,8 @@
    ```bash
    git switch main
    git pull
-   git tag v1.1.0
-   git push origin v1.1.0
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
 
    El tag debe ser exactamente `vX.Y.Z`: el workflow solo se dispara con tags

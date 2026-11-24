@@ -270,6 +270,43 @@ object SpanishStrings : LanguageStrings {
         "$provider perdió el acceso · toca para reconectar"
     override val releaseNotes = listOf(
         ReleaseNotesVersion(
+            version = "1.2",
+            sections = listOf(
+                ReleaseNotesSection(
+                    title = "Cuentas conectadas",
+                    items = listOf(
+                        "Conecta AniList y MyAnimeList a la vez desde la nueva página Cuentas y " +
+                            "elige qué lista sigues. Cambiar entre ellas no te pide iniciar " +
+                            "sesión otra vez.",
+                        "Activa «Sincronizar con ambas» y los cambios que guardes en la lista " +
+                            "que sigues se copian a la otra cuenta en segundo plano.",
+                        "«Comparar listas» te enseña qué se añadiría o actualizaría en la otra " +
+                            "cuenta antes de copiar nada, y tú eliges qué aplicar. Nunca hace " +
+                            "retroceder una entrada ni borra datos de la otra cuenta.",
+                        "Si una cuenta pierde el acceso, Michi te avisa y te deja reconectarla " +
+                            "sin cerrar tu sesión.",
+                    ),
+                ),
+                ReleaseNotesSection(
+                    title = "Ajustes",
+                    items = listOf(
+                        "Ajustes se divide en páginas: General, Apariencia, Mis listas y " +
+                            "Notificaciones.",
+                        "Nueva página «Novedades» con estas notas.",
+                    ),
+                ),
+                ReleaseNotesSection(
+                    title = "Arreglos",
+                    items = listOf(
+                        "En una instalación nueva, Descubrir, Listas y Perfil ya no se quedan " +
+                            "esperando cerca de un minuto después de iniciar sesión.",
+                        "Descubrir conserva los carruseles que ya había cargado cuando inicias " +
+                            "sesión.",
+                    ),
+                ),
+            ),
+        ),
+        ReleaseNotesVersion(
             version = "1.1",
             sections = listOf(
                 ReleaseNotesSection(

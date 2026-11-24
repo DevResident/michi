@@ -29,7 +29,7 @@ class ReleaseNotesTest {
     fun theNewestVersionComesFirstAndHasContent() {
         val notes = EnglishStrings.releaseNotes
 
-        assertEquals(listOf("1.1"), notes.map { it.version })
+        assertEquals(listOf("1.2", "1.1"), notes.map { it.version })
         assertTrue(notes.first().sections.isNotEmpty())
         assertTrue(notes.first().sections.all { it.title.isNotBlank() && it.items.isNotEmpty() })
         assertTrue(notes.first().sections.flatMap { it.items }.all { it.isNotBlank() })
