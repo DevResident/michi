@@ -36,6 +36,7 @@ import com.luum.michi.app.ui.components.rememberResetListState
 import com.luum.michi.app.ui.icons.AppIcons
 import com.luum.michi.app.ui.TestTags
 import com.luum.michi.app.ui.language.Strings
+import com.luum.michi.app.ui.network.LocalNetworkThrottle
 
 /**
  * DISCOVER dashboard: an Anime/Manga selector over the holder's rails. Only
@@ -94,9 +95,14 @@ private fun DashboardContent(
         }
     val errorMessage = holder.error?.let { strings.networkErrorMessage(it) }
     // Once the visible type has content, warm the other type in the background
-    // (guarded inside; respects the cache, never surfaces an error).
+    // (guarded inside; respects the cache, never surfaces an error). Only with
+    // budget to spare: the other dashboard costs ~10 of AniList's 30 points a
+    // minute, and on a cold start Lists and Profile need them first.
+    val throttle = LocalNetworkThrottle.current
     LaunchedEffect(sections.isNotEmpty()) {
-        if (sections.isNotEmpty()) holder.preloadOther()
+        if (sections.isNotEmpty() && throttle.freePoints() >= PreloadMinFreePoints) {
+            holder.preloadOther()
+        }
     }
     Column(modifier = modifier.fillMaxSize()) {
         CatalogChipRail(
@@ -190,3 +196,7 @@ private fun MediaItem.statChips(kind: DashboardSectionKind): List<CoverStat> =
             DashboardCardStat.POPULARITY -> popularityBadge(popularity)
         }
     }
+
+/** Free points the other dashboard's preload leaves for the screens opened
+ *  next: its own ~10 plus as many again. */
+private const val PreloadMinFreePoints = 20

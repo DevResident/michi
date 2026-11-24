@@ -8,6 +8,7 @@ import com.luum.michi.app.core.network.domain.AniListGraphQLRequest
 import com.luum.michi.app.core.network.domain.AniListNetworkPolicy
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
+import com.luum.michi.app.core.network.domain.graphQLRequestCost
 import io.ktor.client.HttpClient
 import io.ktor.client.request.headers
 import io.ktor.client.request.post
@@ -77,8 +78,10 @@ internal class KtorAniListGraphQLClient(
         parseData: (JsonElement) -> T,
     ): NetworkResult<T> {
         val start = TimeSource.Monotonic.markNow()
+        // AniList charges each top-level field; the limiter spends the same.
+        val cost = graphQLRequestCost(request.query)
         return try {
-            executeWithRetry(request, parseData, retriesLeft = AniListNetworkPolicy.MAX_RATE_LIMIT_RETRIES)
+            executeWithRetry(request, parseData, cost, retriesLeft = AniListNetworkPolicy.MAX_RATE_LIMIT_RETRIES)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (throwable: Throwable) {
@@ -86,7 +89,7 @@ internal class KtorAniListGraphQLClient(
         } finally {
             if (debugLogging) {
                 val ms = start.elapsedNow().inWholeMilliseconds
-                println("[Michi] GraphQL ${request.operationName ?: "?"} ${ms}ms")
+                println("[Michi] GraphQL ${request.operationName ?: "?"} cost=$cost ${ms}ms")
             }
         }
     }
@@ -94,12 +97,13 @@ internal class KtorAniListGraphQLClient(
     private suspend fun <T> executeWithRetry(
         request: AniListGraphQLRequest,
         parseData: (JsonElement) -> T,
+        cost: Int,
         retriesLeft: Int,
     ): NetworkResult<T> {
         val token = tokenProvider()
 
         // The permit is held only for the round-trip and released in withPermit's finally,
-        val response = rateLimiter.withPermit {
+        val response = rateLimiter.withPermit(cost) {
             httpClient.post(AniListEndpoints.GraphQL) {
                 headers {
                     token?.let { append("Authorization", it.authorizationHeaderValue) }
@@ -110,6 +114,13 @@ internal class KtorAniListGraphQLClient(
         }
 
         val body = response.bodyAsText()
+        if (debugLogging) {
+            println(
+                "[Michi] GraphQL ${request.operationName ?: "?"} HTTP ${response.status.value}" +
+                    " remaining=${response.headers["X-RateLimit-Remaining"]}" +
+                    " retryAfter=${response.headers["Retry-After"]}",
+            )
+        }
 
         if (!response.status.isSuccess()) {
             return when (response.status.value) {
@@ -130,7 +141,7 @@ internal class KtorAniListGraphQLClient(
                     // NetworkThrottle.waitingRequests instead of an unseen delay.
                     rateLimiter.onRateLimited(retryAfterSeconds)
                     if (retriesLeft > 0) {
-                        executeWithRetry(request, parseData, retriesLeft - 1)
+                        executeWithRetry(request, parseData, cost, retriesLeft - 1)
                     } else {
                         NetworkResult.Failure(NetworkError.RateLimited(retryAfterSeconds.toInt()))
                     }

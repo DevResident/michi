@@ -126,6 +126,36 @@ internal class RootHolders(
 }
 
 /**
+ * Discover dashboard holder: session-independent (public catalog) and shared by
+ * guests. Root creates it outside `key(viewer?.provider)`: signing in (guest →
+ * AniList) must not throw the loaded rails away and fetch them again, since
+ * each dashboard costs ~10 of AniList's 30 points a minute and the lists and
+ * profile need them right after the login. Loads are explicit from the screen;
+ * the TTL dedups revisits and the 18+ gate lives in the holder (a gate flip
+ * still reloads). Keyed without `strings` so a language change keeps the
+ * Anime/Manga selection; the provider is read at launch so one request never
+ * mixes languages.
+ */
+@Composable
+internal fun rememberDashboardHolder(
+    dashboardRepository: DashboardRepository,
+    settingsState: SettingsState,
+    strings: LanguageStrings,
+): DashboardStateHolder {
+    val currentStrings by rememberUpdatedState(strings)
+    val scope = rememberCoroutineScope()
+    return remember(dashboardRepository, scope) {
+        createDashboardStateHolder(
+            repository = dashboardRepository,
+            scope = scope,
+            hideAdult = !settingsState.displayAdultContent,
+            // "Pestaña al abrir" → DISCOVER sub-choice; startup only, no load.
+            initialType = settingsState.startCatalogType.toDashboardMediaType(),
+        ) { currentStrings }
+    }
+}
+
+/**
  * Creates the shell's state holders with their original keys and returns them as
  * one stable [RootHolders]. Holder loads stay explicit (nothing fires from a
  * `remember`); the scopes are cancelled when they are replaced.
@@ -147,7 +177,8 @@ internal fun rememberRootHolders(
     studioDetailRepository: StudioDetailRepository,
     exploreRepository: ExploreRepository,
     calendarRepository: CalendarRepository,
-    dashboardRepository: DashboardRepository,
+    // Created by [rememberDashboardHolder] outside the per-provider key.
+    dashboardHolder: DashboardStateHolder,
     profileRepository: ProfileRepository,
     favouriteRepository: FavouriteRepository,
     notificationsRepository: NotificationsRepository,
@@ -192,22 +223,6 @@ internal fun rememberRootHolders(
                 onEntrySaved = { calendarHolder.invalidateEntries() },
             )
         }
-    }
-
-    // Discover dashboard holder: session-independent (public catalog) and
-    // shared by guests. Loads are explicit from the screen; the TTL dedups
-    // revisits and the 18+ gate lives in the holder. The holder is keyed
-    // without `strings` so a language change keeps the Anime/Manga selection;
-    // the provider is read at launch so one request never mixes languages.
-    val dashboardScope = rememberHolderScope(listScope)
-    val dashboardHolder = remember(dashboardRepository, dashboardScope) {
-        createDashboardStateHolder(
-            repository = dashboardRepository,
-            scope = dashboardScope,
-            hideAdult = !settingsState.displayAdultContent,
-            // "Pestaña al abrir" → DISCOVER sub-choice; startup only, no load.
-            initialType = settingsState.startCatalogType.toDashboardMediaType(),
-        ) { currentStrings }
     }
 
     // Explore holder: the DISCOVER search surface. Session-independent catalog

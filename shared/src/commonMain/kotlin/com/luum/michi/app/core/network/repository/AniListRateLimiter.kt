@@ -19,11 +19,17 @@ import kotlin.time.TimeSource
  * Proactive client-side throttle for a provider's request budget.
  *
  * Three layers of protection:
- *  1. Sliding-window token bucket: no more than [windowLimit] requests in any
- *     rolling [WINDOW_MILLIS] window. Callers suspend (not fail) until a slot opens.
- *     The default is AniList's 28/min; MAL uses its own instance with 60/min.
+ *  1. Sliding-window token bucket: no more than [windowLimit] points in any
+ *     rolling [WINDOW_MILLIS] window. Callers suspend (not fail) until enough
+ *     points open. A request spends its `cost`: AniList charges every top-level
+ *     field, so a dashboard query with nine `Page` aliases spends 9 (see
+ *     `graphQLRequestCost`). The default is AniList's 28/min (the server allows
+ *     30); MAL uses its own instance with 60/min and cost 1.
  *  2. Concurrency cap: at most [MAX_IN_FLIGHT] requests in flight at once.
- *  3. Proactive backoff: when the server signals remaining budget is critically low
+ *  3. Server sync: `X-RateLimit-Remaining` lowers the local free points to what
+ *     the server reports, so budget spent before a fresh install, or by another
+ *     client on the same account, is counted too.
+ *  4. Proactive backoff: when the server signals remaining budget is critically low
  *     (remaining <= [LOW_REMAINING_THRESHOLD]), or on a 429, all callers pause
  *     until a computed resume time.
  *
@@ -53,6 +59,8 @@ internal class AniListRateLimiter(
         const val WINDOW_MILLIS = 60_000L    // rolling window size in ms
         const val MAX_IN_FLIGHT = 5         // max concurrent HTTP calls
         const val LOW_REMAINING_THRESHOLD = 2
+        // Points the server allows above the local window (30 vs 28).
+        const val SERVER_MARGIN = 2
         const val FIXED_BACKOFF_MILLIS = 5_000L  // fallback when no reset header
         // Waits shorter than this are not surfaced: they would flicker the notice.
         const val MIN_VISIBLE_WAIT_MILLIS = 1_000L
@@ -62,7 +70,8 @@ internal class AniListRateLimiter(
     private val startMark = timeSource.markNow()
 
     private val mutex = Mutex()
-    // Monotonic timestamps (ms) of the last [windowLimit] send events.
+    // Monotonic timestamps (ms) of the points spent in the window: one entry per
+    // point, so a request of cost 9 adds nine entries.
     private val sendTimes = ArrayDeque<Long>(windowLimit)
     // Monotonic mark (ms since [startMark]): suspend new acquire() calls until this
     // instant. 0L means "no active pause" (it is always in the past since nowMs() grows
@@ -88,15 +97,21 @@ internal class AniListRateLimiter(
      * leak and stall future requests. Never throws for throttle reasons; cancellation
      * propagates as usual.
      */
-    suspend fun <T> withPermit(block: suspend () -> T): T {
+    suspend fun <T> withPermit(cost: Int = 1, block: suspend () -> T): T {
+        // A request dearer than the whole window would never fit: let it spend
+        // the full window instead of waiting forever.
+        val points = cost.coerceIn(1, windowLimit)
         // Phase 1: wait for the sliding window + any active backoff (guarded by
         // mutex). The send timestamp is recorded inside the same lock that
         // decides admission, so concurrent callers can never all read "room
         // left" before any of them records — a burst cannot jump the cap.
         while (true) {
             val waitMs = mutex.withLock {
-                val wait = computeWaitMs()
-                if (wait <= 0L) sendTimes.addLast(nowMs())
+                val wait = computeWaitMs(points)
+                if (wait <= 0L) {
+                    val now = nowMs()
+                    repeat(points) { sendTimes.addLast(now) }
+                }
                 wait
             }
             if (waitMs <= 0L) break
@@ -123,7 +138,9 @@ internal class AniListRateLimiter(
      * @param resetEpochSeconds  Value of `X-RateLimit-Reset` header (Unix epoch seconds), or null.
      */
     suspend fun onResponseHeaders(remaining: Int?, resetEpochSeconds: Long?) {
-        if (remaining == null || remaining > LOW_REMAINING_THRESHOLD) return
+        if (remaining == null) return
+        syncRemaining(remaining)
+        if (remaining > LOW_REMAINING_THRESHOLD) return
 
         val backoffMs = if (resetEpochSeconds != null) {
             // Convert server epoch to a monotonic delay duration.
@@ -135,6 +152,32 @@ internal class AniListRateLimiter(
         }
 
         if (backoffMs > 0L) extendPause(backoffMs)
+    }
+
+    override suspend fun freePoints(): Int = mutex.withLock {
+        val now = nowMs()
+        if (pauseUntilMark > now) return@withLock 0
+        evictExpired(now)
+        windowLimit - sendTimes.size
+    }
+
+    /**
+     * Lowers the local free points to the server's [remaining]. The missing
+     * points are recorded as spent now, the conservative guess: they age out
+     * one window from now. Never raises the free points: a header that left
+     * the server before later requests were admitted reads too high.
+     */
+    private suspend fun syncRemaining(remaining: Int) {
+        mutex.withLock {
+            evictExpired(nowMs())
+            val free = windowLimit - sendTimes.size
+            // The server allows a little more than [windowLimit] (30 vs 28);
+            // keep that margin so a fresh window still matches it.
+            val serverFree = remaining - SERVER_MARGIN
+            if (serverFree >= free) return@withLock
+            val now = nowMs()
+            repeat(free - serverFree.coerceAtLeast(0)) { sendTimes.addLast(now) }
+        }
     }
 
     /**
@@ -160,7 +203,7 @@ internal class AniListRateLimiter(
      * Returns how many milliseconds the caller should wait before sending.
      * Must be called while holding [mutex].
      */
-    private fun computeWaitMs(): Long {
+    private fun computeWaitMs(points: Int): Long {
         val now = nowMs()
 
         // 1. Honor any active proactive backoff first. Compare before subtracting so a
@@ -168,16 +211,22 @@ internal class AniListRateLimiter(
         if (pauseUntilMark > now) return pauseUntilMark - now
 
         // 2. Evict timestamps that have aged out of the rolling window.
+        evictExpired(now)
+
+        // 3. If there's still room for every point, no wait needed.
+        val overflow = sendTimes.size + points - windowLimit
+        if (overflow <= 0) return 0L
+
+        // 4. Wait until enough of the oldest points age out.
+        val freedAt = sendTimes[overflow - 1]
+        return (freedAt + WINDOW_MILLIS - now + 1L).coerceAtLeast(1L)
+    }
+
+    /** Drops the points that left the rolling window. Hold [mutex]. */
+    private fun evictExpired(now: Long) {
         val windowStart = now - WINDOW_MILLIS
         while (sendTimes.isNotEmpty() && sendTimes.first() <= windowStart) {
             sendTimes.removeFirst()
         }
-
-        // 3. If there's still room in the window, no wait needed.
-        if (sendTimes.size < windowLimit) return 0L
-
-        // 4. Oldest slot in the window: wait until it ages out.
-        val oldestTs = sendTimes.first()
-        return (oldestTs + WINDOW_MILLIS - now + 1L).coerceAtLeast(1L)
     }
 }

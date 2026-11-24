@@ -101,4 +101,68 @@ class AniListRateLimiterTest {
 
         assertEquals(0, limiter.waitingRequests.value)
     }
+
+    @Test
+    fun aRequestSpendsItsCostInPoints() = runBlocking {
+        val clock = TestTimeSource()
+        val observed = mutableListOf<Int>()
+        val limiter = virtualLimiter(clock, observed)
+
+        // Two 9-point dashboards and ten single queries fill the 28 points.
+        limiter.withPermit(9) { }
+        limiter.withPermit(9) { }
+        repeat(10) { limiter.withPermit { } }
+        assertEquals(0, limiter.freePoints())
+        assertEquals(emptyList(), observed, "28 points fit one window")
+
+        limiter.withPermit { }
+        assertEquals(listOf(1), observed, "the 29th point waits for the window")
+    }
+
+    @Test
+    fun aDearRequestWaitsUntilEnoughPointsAgeOut() = runBlocking {
+        val clock = TestTimeSource()
+        val observed = mutableListOf<Int>()
+        val limiter = virtualLimiter(clock, observed)
+        repeat(20) { limiter.withPermit { } }
+        clock += 30_000.milliseconds
+        repeat(5) { limiter.withPermit { } }
+
+        // 3 points free, the query needs 10: wait until the first 20 age out,
+        // 30 s later, not a full minute.
+        val before = clock.markNow()
+        limiter.withPermit(10) { }
+        val waited = before.elapsedNow().inWholeMilliseconds
+        assertEquals(30_001L, waited)
+    }
+
+    @Test
+    fun theServerRemainingLowersTheFreePoints() = runBlocking {
+        val clock = TestTimeSource()
+        val limiter = virtualLimiter(clock, mutableListOf())
+        limiter.withPermit { }
+        assertEquals(27, limiter.freePoints())
+
+        // Budget spent before this install: the server says 12 left (of 30).
+        limiter.onResponseHeaders(remaining = 12, resetEpochSeconds = null)
+        assertEquals(10, limiter.freePoints(), "server remaining minus the 2-point margin")
+
+        // A higher (stale) remaining never gives points back.
+        limiter.onResponseHeaders(remaining = 29, resetEpochSeconds = null)
+        assertEquals(10, limiter.freePoints())
+
+        // The synced points age out with the window.
+        clock += 60_001.milliseconds
+        assertEquals(28, limiter.freePoints())
+    }
+
+    @Test
+    fun aCostAboveTheWindowSpendsTheWholeWindowInsteadOfHanging() = runBlocking {
+        val clock = TestTimeSource()
+        val observed = mutableListOf<Int>()
+        val limiter = virtualLimiter(clock, observed)
+        limiter.withPermit(40) { }
+        assertEquals(0, limiter.freePoints())
+        assertEquals(emptyList(), observed)
+    }
 }

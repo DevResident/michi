@@ -218,6 +218,8 @@ internal fun Root(
     // detail entry drops its state (a new entry always starts at the top).
     val surfaceStates = rememberSaveableStateHolder()
 
+    // Outside the provider key: a sign-in keeps the loaded Discover rails.
+    val dashboardHolder = rememberDashboardHolder(dashboardRepository, settingsState, strings)
     val holders = key(viewer?.provider) {
         rememberRootHolders(
         viewerId = viewerId,
@@ -235,7 +237,7 @@ internal fun Root(
         studioDetailRepository = studioDetailRepository,
         exploreRepository = exploreRepository,
         calendarRepository = calendarRepository,
-        dashboardRepository = dashboardRepository,
+        dashboardHolder = dashboardHolder,
         profileRepository = profileRepository,
         favouriteRepository = favouriteRepository,
         notificationsRepository = notificationsRepository,
