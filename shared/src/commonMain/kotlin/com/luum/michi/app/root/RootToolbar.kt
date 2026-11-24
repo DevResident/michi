@@ -25,6 +25,7 @@ import com.luum.michi.app.profile.ui.model.favoritesCategoryOfOrNull
 import com.luum.michi.app.profile.ui.model.title
 import com.luum.michi.app.root.state.RootOverlay
 import com.luum.michi.app.root.state.State
+import com.luum.michi.app.settings.ui.model.SettingsPage
 import com.luum.michi.app.ui.components.Toolbar
 import com.luum.michi.app.ui.components.ToolbarAction
 import com.luum.michi.app.ui.components.ToolbarNavigation
@@ -400,11 +401,16 @@ private fun toolbarTitle(
     tab: TabSection,
     strings: LanguageStrings,
 ): String = if (state.isOpen(RootOverlay.Settings)) {
-    when {
-        state.settingsMirrorOpen -> strings.mirrorSyncTitle
-        state.settingsAccountsOpen -> strings.accountsTitle
-        state.settingsAboutOpen -> strings.settingsAboutTitle
-        else -> strings.settingsTitle
+    when (state.settingsPage) {
+        SettingsPage.Mirror -> strings.mirrorSyncTitle
+        SettingsPage.Accounts -> strings.accountsTitle
+        SettingsPage.About -> strings.settingsAboutTitle
+        SettingsPage.General -> strings.settingsGeneralSection
+        SettingsPage.Appearance -> strings.settingsAppearanceTitle
+        SettingsPage.MyLists -> strings.settingsMyListsTitle
+        SettingsPage.Notifications -> strings.notificationsSection
+        SettingsPage.WhatsNew -> strings.settingsWhatsNewTitle
+        SettingsPage.Main -> strings.settingsTitle
     }
 } else if (state.isOpen(RootOverlay.Calendar)) {
     strings.calendarTitle

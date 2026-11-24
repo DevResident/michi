@@ -78,6 +78,7 @@ import com.luum.michi.app.root.state.resolveStartDestination
 import com.luum.michi.app.root.state.startDestinationChoice
 import com.luum.michi.app.settings.ui.AboutScreen
 import com.luum.michi.app.settings.ui.SettingsScreen
+import com.luum.michi.app.settings.ui.model.SettingsPage
 import kotlinx.coroutines.delay
 import com.luum.michi.app.accounts.ui.AccountsScreen
 import com.luum.michi.app.accounts.ui.state.AccountsUiState
@@ -306,17 +307,20 @@ internal fun Root(
                 surfaceStates.SaveableStateProvider(surface) {
                     key(surface) {
                         if (state.isOpen(RootOverlay.Settings)) {
-                            if (state.settingsMirrorOpen && holders.mirrorSync != null) {
-                                MirrorSyncScreen(
-                                    holder = holders.mirrorSync,
-                                    bottomPadding = padding.calculateBottomPadding(),
-                                    outbox = mirrorOutbox,
-                                    onRetry = onRetryMirror,
-                                    providerLabel = { accounts.label(it) },
-                                    onApplied = { state.closeSettingsMirror() },
-                                )
-                            } else if (state.settingsAccountsOpen) {
-                                AccountsScreen(
+                            when (state.settingsPage) {
+                                SettingsPage.Mirror -> {
+                                    if (holders.mirrorSync != null) {
+                                        MirrorSyncScreen(
+                                            holder = holders.mirrorSync,
+                                            bottomPadding = padding.calculateBottomPadding(),
+                                            outbox = mirrorOutbox,
+                                            onRetry = onRetryMirror,
+                                            providerLabel = { accounts.label(it) },
+                                            onApplied = { state.closeSettingsPage() },
+                                        )
+                                    }
+                                }
+                                SettingsPage.Accounts -> AccountsScreen(
                                     state = accounts,
                                     coordinator = mirrorSyncCoordinator,
                                     previewHolder = holders.mirrorSync,
@@ -330,23 +334,21 @@ internal fun Root(
                                     onOpenPreview = { state.openSettingsMirror() },
                                     onLogout = onLogout,
                                 )
-                            } else if (state.settingsAboutOpen) {
-                                AboutScreen(
+                                SettingsPage.About -> AboutScreen(
                                     bottomPadding = padding.calculateBottomPadding(),
                                     onOpenUrl = { urlOpener.open(it) },
                                     onShare = { text, subject ->
                                         shareLauncher.share(text, subject)
                                     },
                                 )
-                            } else {
-                                SettingsScreen(
+                                else -> SettingsScreen(
                                     settingsState = settingsState,
                                     startDestination = startChoice,
                                     viewer = viewer,
                                     accounts = accounts,
-                                    onDismissLostAccess = onDismissLostAccess,
-                                    onOpenAccounts = { state.openSettingsAccounts() },
-                                    onOpenAbout = { state.openSettingsAbout() },
+                                    page = state.settingsPage,
+                                    onOpenPage = { state.openSettingsPage(it) },
+                                    onOpenUrl = { urlOpener.open(it) },
                                     bottomPadding = padding.calculateBottomPadding(),
                                 )
                             }
@@ -496,10 +498,7 @@ private fun AccountEventPill(
 
 /** Which saved surface the content area shows: the slot's tab + the view. */
 private fun surfaceKey(tab: TabSection, state: State): String = when {
-    state.isOpen(RootOverlay.Settings) && state.settingsMirrorOpen -> "${tab.name}:settings-mirror"
-    state.isOpen(RootOverlay.Settings) && state.settingsAccountsOpen -> "${tab.name}:settings-accounts"
-    state.isOpen(RootOverlay.Settings) && state.settingsAboutOpen -> "${tab.name}:settings-about"
-    state.isOpen(RootOverlay.Settings) -> "${tab.name}:settings"
+    state.isOpen(RootOverlay.Settings) -> "${tab.name}:settings-${state.settingsPage.name.lowercase()}"
     state.isDetailOpen -> detailSurfaceKey(tab, state.currentDetailEntryId)
     state.isOpen(RootOverlay.Calendar) -> "${tab.name}:calendar"
     state.isOpen(RootOverlay.Notifications) -> "${tab.name}:notifications"

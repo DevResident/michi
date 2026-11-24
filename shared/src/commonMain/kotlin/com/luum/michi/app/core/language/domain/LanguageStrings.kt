@@ -241,9 +241,26 @@ interface LanguageStrings {
     val profileFavoritesDoneAction: String
     val profileRemoveFavoriteAction: String
     val settingsGeneralSection: String
-    val settingsAniListSection: String
-    val settingsListsSection: String
     val settingsInformationSection: String
+    val settingsAccountSection: String
+    val settingsPreferencesSection: String
+    val settingsAppearanceTitle: String
+    val settingsMyListsTitle: String
+    val settingsAppLanguageTitle: String
+    val settingsOpenAppSection: String
+    val settingsContentSection: String
+    val settingsContentSyncNote: String
+    val settingsImagesSection: String
+    val settingsOrderScoreSection: String
+    val settingsSectionsSection: String
+    val settingsNoticesSection: String
+    val settingsNotificationsSyncNote: String
+    val settingsWhatsNewTitle: String
+    val settingsReportIssueSubtitle: String
+    val settingsSupportTitle: String
+    val settingsVersionCopied: String
+    fun settingsAccountLostAccess(provider: String): String
+    val releaseNotes: List<ReleaseNotesVersion>
     val settingsThemeTitle: String
     val settingsStyleTitle: String
     val settingsSurfaceTitle: String
@@ -305,7 +322,6 @@ interface LanguageStrings {
     val aboutLegalSection: String
     val aboutSourceCodeTitle: String
     val aboutReportIssueTitle: String
-    val aboutReportIssueSubtitle: String
     val aboutShareTitle: String
     fun aboutShareText(url: String): String
     val aboutPrivacyTitle: String

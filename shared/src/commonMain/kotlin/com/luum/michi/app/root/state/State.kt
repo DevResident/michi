@@ -13,6 +13,7 @@ import com.luum.michi.app.core.navigation.domain.DetailDestination
 import com.luum.michi.app.core.navigation.domain.DetailListKind
 import com.luum.michi.app.core.navigation.domain.TabSection
 import com.luum.michi.app.mediaList.domain.anime.model.AnimeListSection
+import com.luum.michi.app.settings.ui.model.SettingsPage
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.mediaList.domain.manga.model.MangaListSection
@@ -35,6 +36,7 @@ internal sealed interface BackStep {
     data object CloseSettingsAbout : BackStep
     data object CloseSettingsAccounts : BackStep
     data object CloseSettingsMirror : BackStep
+    data object CloseSettingsPage : BackStep
     data object CloseOverlay : BackStep
     data object CloseDetail : BackStep
     data object SystemDefault : BackStep
@@ -70,66 +72,49 @@ internal class State(
 
     fun open(overlay: RootOverlay) {
         // Settings always starts on the list, never on a subpage.
-        if (overlay == RootOverlay.Settings) {
-            settingsAboutOpen = false
-            settingsAccountsOpen = false
-            settingsMirrorOpen = false
-        }
+        if (overlay == RootOverlay.Settings) settingsStack = listOf(SettingsPage.Main)
         openOverlays = openOverlays + overlay
     }
 
     fun close(overlay: RootOverlay) {
         openOverlays = openOverlays - overlay
-        if (overlay == RootOverlay.Settings) {
-            settingsAboutOpen = false
-            settingsAccountsOpen = false
-            settingsMirrorOpen = false
-        }
+        if (overlay == RootOverlay.Settings) settingsStack = listOf(SettingsPage.Main)
     }
 
     /**
-     * The About page is a page inside the settings overlay: Root renders it in
-     * place of the list and back leaves it before closing Settings.
+     * Pages inside the settings overlay, bottom first. Main is always the base;
+     * Mirror stacks over Accounts, everything else opens directly from Main.
      */
-    var settingsAboutOpen: Boolean by mutableStateOf(false)
-        private set
+    private var settingsStack: List<SettingsPage> by mutableStateOf(listOf(SettingsPage.Main))
 
-    fun openSettingsAbout() {
-        settingsMirrorOpen = false
-        settingsAccountsOpen = false
-        settingsAboutOpen = true
+    /** The page currently painted by the settings overlay. */
+    val settingsPage: SettingsPage get() = settingsStack.last()
+
+    val settingsAboutOpen: Boolean get() = SettingsPage.About in settingsStack
+    val settingsAccountsOpen: Boolean get() = SettingsPage.Accounts in settingsStack
+    val settingsMirrorOpen: Boolean get() = SettingsPage.Mirror in settingsStack
+
+    fun openSettingsPage(page: SettingsPage) {
+        settingsStack = when (page) {
+            SettingsPage.Main -> listOf(SettingsPage.Main)
+            SettingsPage.Accounts -> listOf(SettingsPage.Main, SettingsPage.Accounts)
+            SettingsPage.About -> listOf(SettingsPage.Main, SettingsPage.About)
+            SettingsPage.Mirror -> listOf(
+                SettingsPage.Main,
+                SettingsPage.Accounts,
+                SettingsPage.Mirror,
+            )
+            else -> listOf(SettingsPage.Main, page)
+        }
     }
 
-    fun closeSettingsAbout() {
-        settingsAboutOpen = false
+    fun closeSettingsPage() {
+        if (settingsStack.size > 1) settingsStack = settingsStack.dropLast(1)
     }
 
-    /** Accounts page: another page inside the settings overlay. */
-    var settingsAccountsOpen: Boolean by mutableStateOf(false)
-        private set
-
-    fun openSettingsAccounts() {
-        settingsMirrorOpen = false
-        settingsAboutOpen = false
-        settingsAccountsOpen = true
-    }
-
-    fun closeSettingsAccounts() {
-        settingsAccountsOpen = false
-    }
-
-    /** Mirror preview: another page inside the settings overlay. */
-    var settingsMirrorOpen: Boolean by mutableStateOf(false)
-        private set
-
-    fun openSettingsMirror() {
-        settingsAboutOpen = false
-        settingsMirrorOpen = true
-    }
-
-    fun closeSettingsMirror() {
-        settingsMirrorOpen = false
-    }
+    fun openSettingsAbout() = openSettingsPage(SettingsPage.About)
+    fun openSettingsAccounts() = openSettingsPage(SettingsPage.Accounts)
+    fun openSettingsMirror() = openSettingsPage(SettingsPage.Mirror)
 
     /** In-context search: one active tab at a time, query preserved per tab. */
     var searchActiveTab: TabSection? by mutableStateOf(null)
@@ -252,6 +237,8 @@ internal class State(
             !isEditorOpen -> BackStep.CloseSettingsAccounts
         settingsAboutOpen && isOpen(RootOverlay.Settings) && !isOpen(RootOverlay.SignIn) &&
             !isEditorOpen -> BackStep.CloseSettingsAbout
+        settingsPage != SettingsPage.Main && isOpen(RootOverlay.Settings) &&
+            !isOpen(RootOverlay.SignIn) && !isEditorOpen -> BackStep.CloseSettingsPage
         // Surfaces drawn ABOVE the detail page (modal sheets + settings), plus
         // the editor, which is not part of the overlay set.
         isEditorOpen || openOverlays.any { it.layer == OverlayLayer.ABOVE_DETAIL } -> BackStep.CloseOverlay
@@ -292,15 +279,19 @@ internal class State(
             true
         }
         BackStep.CloseSettingsAbout -> {
-            closeSettingsAbout()
+            closeSettingsPage()
             true
         }
         BackStep.CloseSettingsMirror -> {
-            closeSettingsMirror()
+            closeSettingsPage()
             true
         }
         BackStep.CloseSettingsAccounts -> {
-            closeSettingsAccounts()
+            closeSettingsPage()
+            true
+        }
+        BackStep.CloseSettingsPage -> {
+            closeSettingsPage()
             true
         }
         BackStep.CloseOverlay -> {
@@ -401,9 +392,7 @@ internal class State(
         exploreSentQuery = ""
         favoritesEditing = false
         openOverlays = emptySet()
-        settingsAboutOpen = false
-        settingsAccountsOpen = false
-        settingsMirrorOpen = false
+        settingsStack = listOf(SettingsPage.Main)
     }
 }
 

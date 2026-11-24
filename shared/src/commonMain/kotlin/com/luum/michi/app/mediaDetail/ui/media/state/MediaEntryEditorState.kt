@@ -13,6 +13,8 @@ import com.luum.michi.app.mediaDetail.domain.media.model.MediaEntryEditorData
 import com.luum.michi.app.mediaDetail.domain.media.model.MediaDetailType
 import com.luum.michi.app.core.medialist.domain.MediaListStatus
 import com.luum.michi.app.core.medialist.domain.MirrorField
+import com.luum.michi.app.core.medialist.domain.MirrorTranslator
+import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.model.todayCalendarMillis
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +35,9 @@ internal class MediaEntryEditorState(
     private val advancedScoringAnimeNames: List<String> = emptyList(),
     private val advancedScoringMangaNames: List<String> = emptyList(),
     private val scoreMax: Float = 10f,
+    // The active provider's score format. The MAL projection decides whether a
+    // score edit is worth mirroring: 8.5 → 9.0 writes the same MAL 9.
+    private val scoreFormat: ScoreFormat = ScoreFormat.POINT_10_DECIMAL,
     // Tells Root's favourite router a favourite toggled here (optimistically,
     // and reverted on failure), so the detail page's heart never stays stale.
     private val onFavouriteChanged: (FavouriteTarget, Boolean) -> Unit = { _, _ -> },
@@ -280,19 +285,23 @@ internal class MediaEntryEditorState(
      * What the automatic mirror may copy: only fields whose value differs from
      * the loaded entry. A deliberate clear is included (the field is changed),
      * while a new entry returns null so the repository applies the shared
-     * empty-value rule. Score uses the differ's tolerance.
+     * empty-value rule. A score edit is copied only when it survives the step
+     * down to MAL's integer scale: 8.5 → 9.0 is both MAL 9 and must not enqueue.
      */
     private fun changedMirrorFields(): Set<MirrorField>? {
         if (!isExisting) return null
         val before = saveBaseline ?: return null
         val after = snapshot()
+        val scoreChanged = abs(after.score - before.score) > 0.01f &&
+            MirrorTranslator.toMalScore(after.score, scoreFormat) !=
+            MirrorTranslator.toMalScore(before.score, scoreFormat)
         return buildSet {
             if (after.status != before.status) add(MirrorField.STATUS)
             if (after.progress != before.progress) add(MirrorField.PROGRESS)
             if (after.progressVolumes != before.progressVolumes) {
                 add(MirrorField.PROGRESS_VOLUMES)
             }
-            if (abs(after.score - before.score) > 0.01f) add(MirrorField.SCORE)
+            if (scoreChanged) add(MirrorField.SCORE)
             if (after.notes != before.notes) add(MirrorField.NOTES)
             if (after.priority != before.priority) add(MirrorField.PRIORITY)
             if (after.repeat != before.repeat) add(MirrorField.REPEAT)
@@ -416,6 +425,7 @@ internal fun createMediaEntryEditorState(
     advancedScoringAnimeNames: List<String> = emptyList(),
     advancedScoringMangaNames: List<String> = emptyList(),
     scoreMax: Float = 10f,
+    scoreFormat: ScoreFormat = ScoreFormat.POINT_10_DECIMAL,
     onFavouriteChanged: (FavouriteTarget, Boolean) -> Unit = { _, _ -> },
     favouriteFromDetail: () -> Boolean? = { null },
     todayMillis: () -> Long = { todayCalendarMillis() },
@@ -432,6 +442,7 @@ internal fun createMediaEntryEditorState(
         advancedScoringAnimeNames = advancedScoringAnimeNames,
         advancedScoringMangaNames = advancedScoringMangaNames,
         scoreMax = scoreMax,
+        scoreFormat = scoreFormat,
         onFavouriteChanged = onFavouriteChanged,
         favouriteFromDetail = favouriteFromDetail,
         todayMillis = todayMillis,

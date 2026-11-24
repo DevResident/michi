@@ -1,62 +1,48 @@
 package com.luum.michi.app.settings.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Icon
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luum.michi.app.MichiBuildConfig
+import com.luum.michi.app.accounts.ui.state.AccountsUiState
 import com.luum.michi.app.core.language.domain.AppLanguage
 import com.luum.michi.app.core.language.domain.LanguageStrings
-import com.luum.michi.app.core.model.ImageQuality
-import com.luum.michi.app.core.media.domain.ProviderId
-import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.medialist.domain.ScoreFormat
 import com.luum.michi.app.core.medialist.domain.label
+import com.luum.michi.app.core.model.ImageQuality
+import com.luum.michi.app.core.session.domain.Viewer
 import com.luum.michi.app.settings.domain.model.ListSort
 import com.luum.michi.app.settings.domain.model.StaffNameLanguage
-import com.luum.michi.app.settings.ui.model.StartDestinationChoice
 import com.luum.michi.app.settings.domain.model.StartTabOption
 import com.luum.michi.app.settings.domain.model.TitleLanguage
-import com.luum.michi.app.settings.domain.model.label
-import com.luum.michi.app.core.session.domain.Viewer
-import com.luum.michi.app.accounts.ui.state.AccountsUiState
+import com.luum.michi.app.settings.domain.model.label as settingsLabel
+import com.luum.michi.app.settings.ui.model.SettingsPage
+import com.luum.michi.app.settings.ui.model.StartDestinationChoice
+import com.luum.michi.app.settings.ui.model.shortVersion
+import com.luum.michi.app.settings.ui.model.versionLabel
 import com.luum.michi.app.settings.ui.state.SettingsState
 import com.luum.michi.app.ui.components.ModalSheet
 import com.luum.michi.app.ui.components.OptionGroup
-import com.luum.michi.app.ui.components.SettingsRow
 import com.luum.michi.app.ui.components.OptionList
-import com.luum.michi.app.ui.components.PanelShape
 import com.luum.michi.app.ui.components.PickerSheet
 import com.luum.michi.app.ui.components.PullRefresh
-import com.luum.michi.app.ui.components.AppButton
-import com.luum.michi.app.ui.components.ButtonEmphasis
-import com.luum.michi.app.ui.components.ToggleRow
-import com.luum.michi.app.ui.icons.AppIcons
+import com.luum.michi.app.ui.components.SettingsRow
+import com.luum.michi.app.ui.components.rememberClipboardWriter
 import com.luum.michi.app.ui.language.Strings
 import com.luum.michi.app.ui.theme.AppFont
 import com.luum.michi.app.ui.theme.AppPalette
@@ -66,12 +52,13 @@ import com.luum.michi.app.ui.theme.SurfaceStyle
 import com.luum.michi.app.ui.theme.ThemeType
 import com.luum.michi.app.ui.theme.displayName
 import com.luum.michi.app.ui.theme.fontFamilyFor
+import kotlinx.coroutines.delay
 
 /**
- * App settings. Root owns the toolbar (back + title, no actions);
- * this screen never draws its own header. App appearance prefs (language,
- * theme, font, surfaces) live in [settingsState] as local prefs, like the
- * synced ones; only sheet visibility lives here.
+ * App settings host. Root owns the toolbar (back + title, no actions); this
+ * screen draws the index, its subpages and the sheet host. Synced values live
+ * in [settingsState]; only sheet visibility, the copied-version notice and page
+ * navigation (in Root's State) are UI state.
  */
 @Composable
 internal fun SettingsScreen(
@@ -79,261 +66,104 @@ internal fun SettingsScreen(
     startDestination: StartDestinationChoice = StartDestinationChoice(),
     viewer: Viewer?,
     accounts: AccountsUiState? = null,
-    onDismissLostAccess: () -> Unit = {},
-    onOpenAccounts: () -> Unit = {},
-    onOpenAbout: () -> Unit,
+    page: SettingsPage = SettingsPage.Main,
+    onOpenPage: (SettingsPage) -> Unit = {},
+    onOpenUrl: (String) -> Unit = {},
     bottomPadding: Dp,
     strings: LanguageStrings = Strings.current,
     modifier: Modifier = Modifier,
 ) {
     var openSheet: SettingsSheet? by remember { mutableStateOf(null) }
+    var versionCopied by remember { mutableStateOf(false) }
+    val writeClipboard = rememberClipboardWriter()
 
-    val listContent: @Composable () -> Unit = {
-        LazyColumn(
-            modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                top = 16.dp,
-                end = 16.dp,
-                // Clears the floating tab bar / navigation insets, like every
-                // other list (never a hardcoded per-feature value).
-                bottom = 16.dp + bottomPadding,
-            ),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item {
-                SettingsAccountsRow(
-                    viewer = viewer,
-                    accounts = accounts,
-                    strings = strings,
-                    onOpenAccounts = onOpenAccounts,
-                )
-            }
-            accounts?.lostAccess?.let { provider ->
-                item {
-                    OptionGroup(title = null) {
-                        SettingsRow(
-                            label = strings.accountsLostAccess(accounts.label(provider)),
-                            value = strings.accountsLostAccessDismiss,
-                            onClick = onDismissLostAccess,
-                            valueColor = LocalWarning.current,
-                            divider = false,
-                        )
-                    }
-                }
-            }
-            item {
-                OptionGroup(title = strings.settingsGeneralSection) {
-                    SettingsRow(
-                        label = strings.languageLabel,
-                        value = settingsState.language.displayName,
-                        onClick = { openSheet = SettingsSheet.Language },
-                        divider = false,
-                    )
-                    SettingsRow(
-                        label = strings.settingsThemeTitle,
-                        value = "${settingsState.themeType.label(strings)} · ${settingsState.palette.displayName}",
-                        onClick = { openSheet = SettingsSheet.Theme },
-                    )
-                    SettingsRow(
-                        label = strings.themeFontSection,
-                        value = settingsState.font.displayName,
-                        onClick = { openSheet = SettingsSheet.Font },
-                    )
-                    SettingsRow(
-                        label = strings.settingsSurfaceTitle,
-                        value = settingsState.surfaces.label(strings),
-                        onClick = { openSheet = SettingsSheet.Surface },
-                    )
-                    SettingsRow(
-                        label = strings.settingsStyleTitle,
-                        value = settingsState.themeStyle.displayName,
-                        // MONO always renders Monochrome, so the style choice
-                        // does not apply. The stored value is left untouched.
-                        onClick = if (settingsState.palette == AppPalette.MONO) {
-                            null
-                        } else {
-                            { openSheet = SettingsSheet.Style }
-                        },
-                        valueColor = if (settingsState.palette == AppPalette.MONO) {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    SettingsRow(
-                        label = strings.settingsImageQualityTitle,
-                        value = imageQualityLabel(settingsState.imageQuality, strings),
-                        onClick = { openSheet = SettingsSheet.ImageQuality },
-                    )
-                    SettingsRow(
-                        label = strings.settingsStartTabTitle,
-                        value = startDestination.tab.label(strings),
-                        onClick = { openSheet = SettingsSheet.StartTab },
-                    )
-                    // Dependent sub-choice: only the tabs that have one show it.
-                    startDestination.sectionTitle?.let { sectionTitle ->
-                        SettingsRow(
-                            label = sectionTitle,
-                            value = startDestination.sectionChoices
-                                .firstOrNull { it.value == startDestination.sectionValue }
-                                ?.label
-                                .orEmpty(),
-                            onClick = { openSheet = SettingsSheet.StartSection },
-                        )
-                    }
-                    // MAL has no synced AniList settings, so 18+ and the
-                    // title/staff-name languages become local app preferences
-                    // (guests keep the defaults with no rows).
-                    if (settingsState.useLocalAdultContent) {
-                        SettingsRow(
-                            label = strings.settingsTitleLanguageTitle,
-                            value = settingsState.titleLanguage.label(strings),
-                            onClick = { openSheet = SettingsSheet.TitleLanguage },
-                        )
-                        SettingsRow(
-                            label = strings.settingsStaffNameTitle,
-                            value = settingsState.staffNameLanguage.label(strings),
-                            onClick = { openSheet = SettingsSheet.StaffNameLanguage },
-                        )
-                        ToggleRow(
-                            title = strings.settingsAdultContentTitle,
-                            subtitle = strings.settingsAdultContentSubtitle,
-                            checked = settingsState.displayAdultContent,
-                            onCheckedChange = { settingsState.displayAdultContent = it },
-                        )
-                    }
-                }
-            }
-            if (settingsState.canSync) {
-                val error = settingsState.error
-                if (error != null) {
-                    item {
-                        SettingsErrorRow(
-                            message = strings.networkErrorMessage(error),
-                            retryLabel = strings.retryAction,
-                            onRetry = { settingsState.refresh(force = true) },
-                        )
-                    }
-                }
-                item {
-                    OptionGroup(title = strings.settingsAniListSection) {
-                        SettingsRow(
-                            label = strings.settingsTitleLanguageTitle,
-                            value = settingsState.titleLanguage.label(strings),
-                            onClick = { openSheet = SettingsSheet.TitleLanguage },
-                            divider = false,
-                        )
-                        SettingsRow(
-                            label = strings.settingsStaffNameTitle,
-                            value = settingsState.staffNameLanguage.label(strings),
-                            onClick = { openSheet = SettingsSheet.StaffNameLanguage },
-                        )
-                        ToggleRow(
-                            title = strings.settingsAdultContentTitle,
-                            subtitle = strings.settingsAdultContentSubtitle,
-                            checked = settingsState.displayAdultContent,
-                            onCheckedChange = { settingsState.displayAdultContent = it },
-                        )
-                        SettingsRow(
-                            label = strings.settingsScoreFormatTitle,
-                            value = settingsState.scoreFormat.label(strings),
-                            onClick = { openSheet = SettingsSheet.ScoreFormat },
-                        )
-                    }
-                }
-                item {
-                    OptionGroup(title = strings.settingsListsSection) {
-                        SettingsRow(
-                            label = strings.settingsListSortTitle,
-                            value = settingsState.listSort.label(strings),
-                            onClick = { openSheet = SettingsSheet.Sort },
-                            divider = false,
-                        )
-                        ToggleRow(
-                            title = strings.settingsSplitCompletedAnimeTitle,
-                            subtitle = strings.settingsSplitCompletedAnimeSubtitle,
-                            checked = settingsState.splitCompletedAnime,
-                            onCheckedChange = { settingsState.splitCompletedAnime = it },
-                        )
-                        ToggleRow(
-                            title = strings.settingsSplitCompletedMangaTitle,
-                            subtitle = strings.settingsSplitCompletedMangaSubtitle,
-                            checked = settingsState.splitCompletedManga,
-                            onCheckedChange = { settingsState.splitCompletedManga = it },
-                        )
-                        ToggleRow(
-                            title = strings.settingsAdvancedScoringTitle,
-                            subtitle = strings.settingsAdvancedScoringSubtitle,
-                            checked = settingsState.advancedScoring,
-                            onCheckedChange = { settingsState.advancedScoring = it },
-                        )
-                        ToggleRow(
-                            title = strings.settingsPersistSortTitle,
-                            subtitle = strings.settingsPersistSortSubtitle,
-                            checked = settingsState.persistListSort,
-                            onCheckedChange = { settingsState.persistListSort = it },
-                        )
-                    }
-                }
-                item {
-                    OptionGroup(title = strings.notificationsSection) {
-                        ToggleRow(
-                            title = strings.notificationsAiringTitle,
-                            subtitle = null,
-                            checked = settingsState.notifications.airing,
-                            onCheckedChange = {
-                                settingsState.notifications =
-                                    settingsState.notifications.copy(airing = it)
-                            },
-                            divider = false,
-                        )
-                        ToggleRow(
-                            title = strings.notificationsMessagesTitle,
-                            subtitle = null,
-                            checked = settingsState.notifications.messages,
-                            onCheckedChange = {
-                                settingsState.notifications =
-                                    settingsState.notifications.copy(messages = it)
-                            },
-                        )
-                        ToggleRow(
-                            title = strings.notificationsMediaTitle,
-                            subtitle = null,
-                            checked = settingsState.notifications.media,
-                            onCheckedChange = {
-                                settingsState.notifications =
-                                    settingsState.notifications.copy(media = it)
-                            },
-                        )
-                    }
-                }
-            }
-            item {
-                OptionGroup(title = strings.settingsInformationSection) {
-                    SettingsRow(
-                        label = strings.settingsAboutTitle,
-                        value = "${strings.settingsAboutVersionLabel} ${MichiBuildConfig.Version}",
-                        onClick = onOpenAbout,
-                        divider = false,
-                    )
-                }
-            }
+    LaunchedEffect(page) { openSheet = null }
+    // An account switch can leave a page that no longer applies (Notifications
+    // exists only for AniList). Return to the index instead of painting a blank
+    // page under a stale title.
+    LaunchedEffect(page, settingsState.canSync) {
+        if (page == SettingsPage.Notifications && !settingsState.canSync) {
+            onOpenPage(SettingsPage.Main)
+        }
+    }
+    LaunchedEffect(versionCopied) {
+        if (versionCopied) {
+            delay(3_000)
+            versionCopied = false
         }
     }
 
-    // Pull-to-refresh only when sync means something: guests are
-    // local-only, and a dead pull with no feedback is worse than none.
-    // Sheets stay outside the refresh box (modal overlays, no gesture share).
-    if (settingsState.canSync) {
+    val versionText = versionLabel(MichiBuildConfig.Version, MichiBuildConfig.VersionCode)
+    val sponsorUrl = MichiBuildConfig.SponsorUrl.takeIf { it.isNotBlank() }
+
+    val content: @Composable () -> Unit = {
+        when (page) {
+            SettingsPage.General -> SettingsGeneralPage(
+                settingsState = settingsState,
+                startDestination = startDestination,
+                bottomPadding = bottomPadding,
+                onOpenSheet = { openSheet = it },
+                strings = strings,
+                modifier = modifier,
+            )
+            SettingsPage.Appearance -> SettingsAppearancePage(
+                settingsState = settingsState,
+                bottomPadding = bottomPadding,
+                onOpenSheet = { openSheet = it },
+                strings = strings,
+                modifier = modifier,
+            )
+            SettingsPage.MyLists -> SettingsMyListsPage(
+                settingsState = settingsState,
+                bottomPadding = bottomPadding,
+                onOpenSheet = { openSheet = it },
+                strings = strings,
+                modifier = modifier,
+            )
+            SettingsPage.Notifications -> SettingsNotificationsPage(
+                settingsState = settingsState,
+                bottomPadding = bottomPadding,
+                strings = strings,
+                modifier = modifier,
+            )
+            SettingsPage.WhatsNew -> WhatsNewScreen(
+                bottomPadding = bottomPadding,
+                strings = strings,
+                modifier = modifier,
+            )
+            else -> SettingsIndex(
+                settingsState = settingsState,
+                viewer = viewer,
+                accounts = accounts,
+                versionText = versionText,
+                versionCopied = versionCopied,
+                sponsorUrl = sponsorUrl,
+                onCopyVersion = {
+                    writeClipboard(versionText)
+                    versionCopied = true
+                },
+                onOpenPage = onOpenPage,
+                onOpenUrl = onOpenUrl,
+                bottomPadding = bottomPadding,
+                strings = strings,
+                modifier = modifier,
+            )
+        }
+    }
+
+    val refreshable = page == SettingsPage.Main ||
+        page == SettingsPage.General ||
+        page == SettingsPage.MyLists ||
+        page == SettingsPage.Notifications
+    if (refreshable && settingsState.canSync) {
         PullRefresh(
             isRefreshing = settingsState.isRefreshing,
             onRefresh = { settingsState.refresh(force = true) },
         ) {
-            listContent()
+            content()
         }
     } else {
-        listContent()
+        content()
     }
 
     if (openSheet == SettingsSheet.Language) {
@@ -431,7 +261,7 @@ internal fun SettingsScreen(
             onDismiss = { openSheet = null },
             options = StartTabOption.entries,
             selected = startDestination.tab,
-            label = { it.label(strings) },
+            label = { it.settingsLabel(strings) },
             onSelect = { settingsState.startTab = it },
         )
     }
@@ -460,7 +290,7 @@ internal fun SettingsScreen(
             onDismiss = { openSheet = null },
             options = TitleLanguage.entries,
             selected = settingsState.titleLanguage,
-            label = { it.label(strings) },
+            label = { it.settingsLabel(strings) },
             onSelect = { settingsState.titleLanguage = it },
         )
     }
@@ -472,7 +302,7 @@ internal fun SettingsScreen(
             onDismiss = { openSheet = null },
             options = StaffNameLanguage.entries,
             selected = settingsState.staffNameLanguage,
-            label = { it.label(strings) },
+            label = { it.settingsLabel(strings) },
             onSelect = { settingsState.staffNameLanguage = it },
         )
     }
@@ -496,11 +326,125 @@ internal fun SettingsScreen(
             onDismiss = { openSheet = null },
             options = ListSort.entries,
             selected = settingsState.listSort,
-            label = { it.label(strings) },
+            label = { it.settingsLabel(strings) },
             onSelect = { settingsState.listSort = it },
         )
     }
+}
 
+@Composable
+private fun SettingsIndex(
+    settingsState: SettingsState,
+    viewer: Viewer?,
+    accounts: AccountsUiState?,
+    versionText: String,
+    versionCopied: Boolean,
+    sponsorUrl: String?,
+    onCopyVersion: () -> Unit,
+    onOpenPage: (SettingsPage) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    bottomPadding: Dp,
+    strings: LanguageStrings,
+    modifier: Modifier,
+) {
+    val accountValue = if (viewer == null) {
+        strings.settingsSignInTitle
+    } else {
+        accounts?.summary?.takeIf { it.isNotBlank() }
+            ?: accounts?.label(viewer.provider)
+            ?: viewer.provider.value
+    }
+    val lostAccess = accounts?.lostAccess?.let { provider ->
+        strings.settingsAccountLostAccess(accounts.label(provider))
+    }
+
+    SettingsLazyColumn(bottomPadding = bottomPadding, modifier = modifier) {
+        item(key = "account") {
+            OptionGroup(title = strings.settingsAccountSection) {
+                SettingsRow(
+                    label = strings.accountsTitle,
+                    // A lost account owns the row: the warning gets the width
+                    // under the label instead of competing with the summary.
+                    value = if (lostAccess != null) "" else accountValue,
+                    supportingText = lostAccess,
+                    supportingColor = LocalWarning.current,
+                    onClick = { onOpenPage(SettingsPage.Accounts) },
+                    divider = false,
+                )
+            }
+        }
+        item(key = "preferences") {
+            OptionGroup(title = strings.settingsPreferencesSection) {
+                SettingsRow(
+                    label = strings.settingsGeneralSection,
+                    value = "",
+                    onClick = { onOpenPage(SettingsPage.General) },
+                    divider = false,
+                )
+                SettingsRow(
+                    label = strings.settingsAppearanceTitle,
+                    value = settingsState.themeType.label(strings),
+                    onClick = { onOpenPage(SettingsPage.Appearance) },
+                )
+                if (viewer != null) {
+                    SettingsRow(
+                        label = strings.settingsMyListsTitle,
+                        value = "",
+                        onClick = { onOpenPage(SettingsPage.MyLists) },
+                    )
+                }
+                if (settingsState.canSync) {
+                    SettingsRow(
+                        label = strings.notificationsSection,
+                        value = "",
+                        onClick = { onOpenPage(SettingsPage.Notifications) },
+                    )
+                }
+            }
+        }
+        item(key = "information") {
+            OptionGroup(title = strings.settingsInformationSection) {
+                SettingsRow(
+                    label = strings.settingsWhatsNewTitle,
+                    value = shortVersion(MichiBuildConfig.Version),
+                    onClick = { onOpenPage(SettingsPage.WhatsNew) },
+                    divider = false,
+                )
+                SettingsRow(
+                    label = strings.aboutReportIssueTitle,
+                    value = "↗",
+                    onClick = { onOpenUrl(AboutLinks.NewIssue) },
+                    supportingText = strings.settingsReportIssueSubtitle,
+                    showChevron = false,
+                )
+                SettingsRow(
+                    label = strings.settingsAboutTitle,
+                    value = "",
+                    onClick = { onOpenPage(SettingsPage.About) },
+                )
+                SettingsRow(
+                    label = strings.settingsAboutVersionLabel,
+                    value = versionText,
+                    supportingText = if (versionCopied) strings.settingsVersionCopied else null,
+                    supportingColor = if (versionCopied) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    onClick = onCopyVersion,
+                    showChevron = false,
+                )
+                if (sponsorUrl != null) {
+                    SettingsRow(
+                        label = strings.settingsSupportTitle,
+                        value = "↗",
+                        onClick = { onOpenUrl(sponsorUrl) },
+                        showChevron = false,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -545,99 +489,8 @@ private fun ThemePaletteSection(
     )
 }
 
-/** First Settings section: one standard row with the connected services summary.
- *  Connected and guest share the row; it always opens Accounts. */
-@Composable
-private fun SettingsAccountsRow(
-    viewer: Viewer?,
-    accounts: AccountsUiState?,
-    strings: LanguageStrings,
-    onOpenAccounts: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OptionGroup(title = null, modifier = modifier) {
-        SettingsRow(
-            label = strings.accountsTitle,
-            value = if (viewer == null) {
-                strings.settingsSignInTitle
-            } else {
-                accounts?.summary.orEmpty()
-            },
-            onClick = onOpenAccounts,
-            divider = false,
-        )
-    }
-}
-
-/** Inline error with retry, shown only when the last load/save failed. Same frame
- * language as [OptionGroup] ([PanelShape] + 1dp border) with the border in error
- * and no fill, so a failed sync reads as an error while aligning with the groups. */
-@Composable
-private fun SettingsErrorRow(
-    message: String,
-    retryLabel: String,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // The whole card retries (like group rows): Surface carries the tap with
-    // its shape-bound ripple, the inner retry row is static layout.
-    Surface(
-        onClick = onRetry,
-        modifier = modifier.fillMaxWidth(),
-        shape = PanelShape,
-        border = BorderStroke(
-            width = 1.dp,
-            color = LocalWarning.current,
-        ),
-        color = MaterialTheme.colorScheme.surface,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = AppIcons.Warning,
-                contentDescription = null,
-                tint = LocalWarning.current,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = LocalWarning.current,
-                modifier = Modifier.weight(1f),
-            )
-            // Same metrics as SettingsRow (12dp vertical, 4dp gap, 20dp
-            // chevron): a TextButton carries its own 12dp content padding
-            // and 48dp floor, so its chevron can never sit where the
-            // groups' chevrons sit.
-            Row(
-                modifier = Modifier.padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = retryLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = LocalWarning.current,
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = AppIcons.ChevronRight,
-                    contentDescription = null,
-                    tint = LocalWarning.current,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-    }
-}
-
-/** The one settings sheet open at a time; null = none. The sign-out confirm
- *  stacks on the account sheet through its own flag. */
-private enum class SettingsSheet {
+/** The one settings sheet open at a time; null = none. */
+internal enum class SettingsSheet {
     Language,
     Theme,
     Font,
@@ -652,19 +505,18 @@ private enum class SettingsSheet {
     Sort,
 }
 
-private fun ThemeType.label(strings: LanguageStrings): String = when (this) {
+internal fun ThemeType.label(strings: LanguageStrings): String = when (this) {
     ThemeType.SYSTEM -> strings.settingsThemeSystem
     ThemeType.LIGHT -> strings.settingsThemeLight
     ThemeType.DARK -> strings.settingsThemeDark
 }
 
-private fun SurfaceStyle.label(strings: LanguageStrings): String = when (this) {
+internal fun SurfaceStyle.label(strings: LanguageStrings): String = when (this) {
     SurfaceStyle.GLASS -> strings.surfaceGlassLabel
     SurfaceStyle.SOLID -> strings.surfaceSolidLabel
 }
 
-
-private fun imageQualityLabel(quality: ImageQuality, strings: LanguageStrings): String = when (quality) {
+internal fun imageQualityLabel(quality: ImageQuality, strings: LanguageStrings): String = when (quality) {
     ImageQuality.AUTO -> strings.settingsImageQualityAuto
     ImageQuality.HIGH -> strings.settingsImageQualityHigh
     ImageQuality.LOW -> strings.settingsImageQualityLow

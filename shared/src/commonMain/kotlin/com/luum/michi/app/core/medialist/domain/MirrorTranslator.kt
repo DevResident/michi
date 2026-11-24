@@ -151,15 +151,24 @@ internal object MirrorTranslator {
     }
 
     /**
-     * The MAL integers an AniList score may correspond to: the floor and the
-     * ceiling of the score on MAL's 0–10 scale. A score that lands exactly on
-     * an integer only accepts that integer. So 8.5 accepts 8 and 9, 87/100
-     * accepts 8 and 9, and 9/10 only accepts 9. A non-zero score never accepts
+     * The MAL integers an AniList score may correspond to.
+     *
+     * Decimal and 100-point scores are finer than MAL's integer scale, so they
+     * accept the floor and the ceiling: 8.5 accepts 8 and 9, 87/100 accepts 8
+     * and 9, and an exact 9 only accepts 9. A non-zero score never accepts
      * MAL's 0 ("unrated").
+     *
+     * Stars and smileys are coarser than MAL's integer scale: each value writes
+     * exactly one integer (4★ → 8, 2🙂 → 7), so only that integer is equivalent.
+     * Widening them to their floor/ceiling would hide real changes (e.g. MAL 4
+     * against 1🙁, which writes 3).
      */
     fun malScoreCandidates(value: Float, format: ScoreFormat): Set<Int> {
         val percent = normalizeScore(value, format)
         if (percent <= 0f) return setOf(0)
+        if (format == ScoreFormat.POINT_5_STARS || format == ScoreFormat.POINT_3_SMILEYS) {
+            return setOf(toMalScore(value, format))
+        }
         val tenths = percent / 10f
         val rounded = tenths.roundToInt()
         if (abs(tenths - rounded) < SCORE_EPSILON) {
@@ -203,9 +212,13 @@ internal object MirrorTranslator {
                 (percent / 10f).roundToInt().coerceIn(1, 10).toFloat()
             ScoreFormat.POINT_5_STARS ->
                 (percent / 20f).roundToInt().coerceIn(1, 5).toFloat()
+            // Nearest smiley, not a 33/67 threshold: MAL 7 is 70 %, closer to
+            // 2🙂 (67 %) than to 3🙂 (100 %), and 2🙂 writes MAL 7, so the
+            // round trip is stable. The 50 % boundary stays on 2 to match the
+            // existing 50/100 → 2🙂 behaviour.
             ScoreFormat.POINT_3_SMILEYS -> when {
-                percent <= (100f / 3f) -> 1f
-                percent <= (200f / 3f) -> 2f
+                percent < 50f -> 1f
+                percent < (250f / 3f) -> 2f
                 else -> 3f
             }
         }

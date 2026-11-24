@@ -100,6 +100,7 @@ internal fun RootModals(
                 advancedScoringAnimeNames = settingsState.advancedScoringAnime,
                 advancedScoringMangaNames = settingsState.advancedScoringManga,
                 scoreMax = scoreMax,
+                scoreFormat = editorScoreFormat,
                 onFavouriteChanged = holders.onFavouriteChanged,
                 favouriteFromDetail = { holders.mediaDetail.favouriteFor(editorId) },
             )

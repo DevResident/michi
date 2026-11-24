@@ -40,6 +40,8 @@ internal fun SettingsRow(
     modifier: Modifier = Modifier,
     divider: Boolean = true,
     valueColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    /** False for a tappable row that does not navigate (copy, external arrow). */
+    showChevron: Boolean = onClick != null,
     // Trailing widget instead of the chevron (e.g. an edit-mode remove button).
     // It is painted as a centered end overlay, so a 48dp control never grows
     // the row (the same row measures the same height in both modes).
@@ -109,7 +111,7 @@ internal fun SettingsRow(
                     if (trailing != null) {
                         // The overlay's footprint: 48dp touch target + the usual 8dp gap.
                         Spacer(modifier = Modifier.width(TrailingSlotWidth))
-                    } else if (onClick != null) {
+                    } else if (onClick != null && showChevron) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             imageVector = AppIcons.ChevronRight,

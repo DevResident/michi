@@ -88,6 +88,65 @@ class MirrorTranslatorTest {
     }
 
     @Test
+    fun coarseScoresOnlyAcceptTheMalIntegerTheyWrite() {
+        // Stars already landed on one integer; the point is to keep it that way.
+        assertEquals(setOf(2), MirrorTranslator.malScoreCandidates(1f, ScoreFormat.POINT_5_STARS))
+        assertEquals(setOf(4), MirrorTranslator.malScoreCandidates(2f, ScoreFormat.POINT_5_STARS))
+        assertEquals(setOf(6), MirrorTranslator.malScoreCandidates(3f, ScoreFormat.POINT_5_STARS))
+        assertEquals(setOf(8), MirrorTranslator.malScoreCandidates(4f, ScoreFormat.POINT_5_STARS))
+        assertEquals(setOf(10), MirrorTranslator.malScoreCandidates(5f, ScoreFormat.POINT_5_STARS))
+
+        // Smileys write 3/7/10, not their floor/ceiling pair.
+        assertEquals(setOf(3), MirrorTranslator.malScoreCandidates(1f, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(setOf(7), MirrorTranslator.malScoreCandidates(2f, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(setOf(10), MirrorTranslator.malScoreCandidates(3f, ScoreFormat.POINT_3_SMILEYS))
+
+        assertTrue(MirrorTranslator.scoresEquivalent(1f, ScoreFormat.POINT_3_SMILEYS, 3f, ScoreFormat.POINT_10))
+        assertTrue(MirrorTranslator.scoresEquivalent(2f, ScoreFormat.POINT_3_SMILEYS, 7f, ScoreFormat.POINT_10))
+        assertFalse(
+            MirrorTranslator.scoresEquivalent(
+                1f,
+                ScoreFormat.POINT_3_SMILEYS,
+                4f,
+                ScoreFormat.POINT_10,
+            ),
+            "MAL 4 is a real difference from one smiley (which writes 3)",
+        )
+        assertFalse(
+            MirrorTranslator.scoresEquivalent(
+                2f,
+                ScoreFormat.POINT_3_SMILEYS,
+                6f,
+                ScoreFormat.POINT_10,
+            ),
+            "MAL 6 is a real difference from two smileys (which write 7)",
+        )
+        assertFalse(
+            MirrorTranslator.scoresEquivalent(
+                4f,
+                ScoreFormat.POINT_5_STARS,
+                7f,
+                ScoreFormat.POINT_10,
+            ),
+            "4 stars write MAL 8, so MAL 7 is a real difference",
+        )
+    }
+
+    @Test
+    fun malPoint3UsesTheNearestSmiley() {
+        assertEquals(1f, MirrorTranslator.toAniListScore(4f, ScoreFormat.POINT_10, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(2f, MirrorTranslator.toAniListScore(5f, ScoreFormat.POINT_10, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(2f, MirrorTranslator.toAniListScore(7f, ScoreFormat.POINT_10, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(2f, MirrorTranslator.toAniListScore(8f, ScoreFormat.POINT_10, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(3f, MirrorTranslator.toAniListScore(9f, ScoreFormat.POINT_10, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(3f, MirrorTranslator.toAniListScore(10f, ScoreFormat.POINT_10, ScoreFormat.POINT_3_SMILEYS))
+
+        assertEquals(1f, MirrorTranslator.toAniListScore(1f, ScoreFormat.POINT_3_SMILEYS, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(2f, MirrorTranslator.toAniListScore(2f, ScoreFormat.POINT_3_SMILEYS, ScoreFormat.POINT_3_SMILEYS))
+        assertEquals(3f, MirrorTranslator.toAniListScore(3f, ScoreFormat.POINT_3_SMILEYS, ScoreFormat.POINT_3_SMILEYS))
+    }
+
+    @Test
     fun aniListTargetScoresUseItsScoreFormat() {
         assertEquals(85f, MirrorTranslator.toAniListScore(8.5f, ScoreFormat.POINT_10_DECIMAL, ScoreFormat.POINT_100))
         assertEquals(8.5f, MirrorTranslator.toAniListScore(85f, ScoreFormat.POINT_100, ScoreFormat.POINT_10_DECIMAL))
