@@ -1,5 +1,6 @@
 package com.luum.michi.app.mediaDetail.domain.staff.model
 import com.luum.michi.app.core.model.CoverSizes
+import com.luum.michi.app.core.network.domain.WebLinks
 import com.luum.michi.app.mediaDetail.domain.common.ExternalLink
 import com.luum.michi.app.core.model.Page
 import com.luum.michi.app.mediaDetail.domain.common.BiographyStat
@@ -50,7 +51,7 @@ internal data class StaffCharacterItem(
 )
 
 /** Canonical AniList page for this staff member. */
-internal fun StaffDetail.aniListUrl(): String = "https://anilist.co/staff/$id"
+internal fun StaffDetail.aniListUrl(): String = WebLinks.AniList.staff(id)
 
 /** Body used by the share sheet: name + canonical URL. */
 internal fun StaffDetail.shareText(): String = "$name\n${aniListUrl()}"

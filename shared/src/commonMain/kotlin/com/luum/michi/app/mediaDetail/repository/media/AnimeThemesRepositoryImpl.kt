@@ -2,6 +2,7 @@ package com.luum.michi.app.mediaDetail.repository.media
 
 import com.luum.michi.app.core.network.domain.NetworkError
 import com.luum.michi.app.core.network.domain.NetworkResult
+import com.luum.michi.app.core.network.domain.WebLinks
 import com.luum.michi.app.core.network.repository.AniListJson
 import com.luum.michi.app.mediaDetail.domain.media.AnimeThemesRepository
 import com.luum.michi.app.mediaDetail.domain.media.model.AnimeTheme
@@ -18,7 +19,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 private const val AnimeThemesUrl = "https://api.animethemes.moe/anime"
-private const val AnimeThemesAnimeUrl = "https://animethemes.moe/anime"
 
 /** Last N anime kept in memory; failures are not cached. */
 private const val AnimeThemesCacheSize = 50
@@ -137,7 +137,7 @@ private fun AnimeThemesResponseDto.toThemes(): List<AnimeTheme> {
             artists = artists,
             episodes = episodes,
             animeName = animeName,
-            pageUrl = "$AnimeThemesAnimeUrl/$animeSlug/$slug",
+            pageUrl = WebLinks.AnimeThemes.theme(animeSlug, slug),
         )
     }
 }

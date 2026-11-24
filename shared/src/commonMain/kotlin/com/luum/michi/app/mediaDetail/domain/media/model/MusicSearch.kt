@@ -1,5 +1,6 @@
 package com.luum.michi.app.mediaDetail.domain.media.model
 
+import com.luum.michi.app.core.network.domain.WebLinks
 import io.ktor.http.encodeURLParameter
 
 /** Music services offered as search links for a theme song: no extra API, the query is title + artists. */
@@ -11,9 +12,9 @@ internal enum class MusicService(val label: String, val brandHex: String) {
     fun searchUrl(query: String): String {
         val q = query.encodeURLParameter(spaceToPlus = false)
         return when (this) {
-            SPOTIFY -> "https://open.spotify.com/search/$q"
-            YOUTUBE_MUSIC -> "https://music.youtube.com/search?q=$q"
-            APPLE_MUSIC -> "https://music.apple.com/search?term=$q"
+            SPOTIFY -> WebLinks.Media.spotifySearch(q)
+            YOUTUBE_MUSIC -> WebLinks.Media.youtubeMusicSearch(q)
+            APPLE_MUSIC -> WebLinks.Media.appleMusicSearch(q)
         }
     }
 }
@@ -22,5 +23,4 @@ internal fun AnimeTheme.searchQuery(): String = (listOf(title) + artists).joinTo
 
 /** YouTube search for the theme's video: anime name + label + song ("Sousou no Frieren OP1 Yuusha"). */
 internal fun AnimeTheme.videoSearchUrl(): String =
-    "https://www.youtube.com/results?search_query=" +
-        "$animeName $label $title".encodeURLParameter(spaceToPlus = false)
+    WebLinks.Media.youtubeSearch("$animeName $label $title".encodeURLParameter(spaceToPlus = false))

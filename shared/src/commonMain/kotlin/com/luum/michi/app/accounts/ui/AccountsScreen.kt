@@ -39,6 +39,7 @@ import com.luum.michi.app.accounts.ui.state.accountsLinkErrorMessage
 import com.luum.michi.app.core.language.domain.LanguageStrings
 import com.luum.michi.app.core.language.domain.networkErrorMessage
 import com.luum.michi.app.core.media.domain.ProviderId
+import com.luum.michi.app.core.network.domain.WebLinks
 import com.luum.michi.app.mediaList.repository.mirror.MirrorSyncSource
 import com.luum.michi.app.mirror.ui.state.MirrorSyncStateHolder
 import com.luum.michi.app.ui.components.AppButton
@@ -283,12 +284,14 @@ internal fun AccountsScreen(
         orderedAccounts.forEach { account ->
             item(key = "account-${account.provider.value}") {
                 OptionGroup(title = strings.accountsProviderSection(state.label(account.provider))) {
-                    SettingsRow(
-                        label = strings.accountsEditProfile,
-                        value = "",
-                        onClick = { onOpenUrl(profileUrl(account.provider)) },
-                        divider = false,
-                    )
+                    profileUrl(account.provider)?.let { editUrl ->
+                        SettingsRow(
+                            label = strings.accountsEditProfile,
+                            value = "",
+                            onClick = { onOpenUrl(editUrl) },
+                            divider = false,
+                        )
+                    }
                     accountUrl(account.provider)?.let { manageUrl ->
                         SettingsRow(
                             label = strings.accountsManageAccount,
@@ -489,16 +492,14 @@ private fun ProviderBadge(provider: ProviderId, modifier: Modifier = Modifier) {
     }
 }
 
-private fun profileUrl(provider: ProviderId): String =
-    if (provider == ProviderId.AniList) {
-        "https://anilist.co/settings/profile"
-    } else {
-        "https://myanimelist.net/editprofile.php"
-    }
+private fun profileUrl(provider: ProviderId): String? = when (provider) {
+    ProviderId.AniList -> WebLinks.AniList.SettingsProfile
+    ProviderId.Mal -> WebLinks.Mal.EditProfile
+    else -> null
+}
 
-private fun accountUrl(provider: ProviderId): String? =
-    if (provider == ProviderId.AniList) {
-        "https://anilist.co/settings/account"
-    } else {
-        null
-    }
+// Only AniList links a separate account-settings page; other providers get no row.
+private fun accountUrl(provider: ProviderId): String? = when (provider) {
+    ProviderId.AniList -> WebLinks.AniList.SettingsAccount
+    else -> null
+}

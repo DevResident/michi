@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.luum.michi.app.MichiBuildConfig
 import com.luum.michi.app.core.language.domain.LanguageStrings
+import com.luum.michi.app.core.network.domain.WebLinks
 import com.luum.michi.app.ui.components.FlatChip
 import com.luum.michi.app.ui.components.OptionGroup
 import com.luum.michi.app.ui.components.PanelShape
@@ -117,14 +118,14 @@ internal fun AboutScreen(
                     value = "",
                     supportingText = "GitHub",
                     icon = AppIcons.Code,
-                    onClick = { onOpenUrl(AboutLinks.SourceCode) },
+                    onClick = { onOpenUrl(WebLinks.Repo.Home) },
                     divider = false,
                 )
                 SettingsRow(
                     label = strings.aboutShareTitle,
                     value = "",
                     icon = AppIcons.Share,
-                    onClick = { onShare(strings.aboutShareText(AboutLinks.LatestRelease), "Michi") },
+                    onClick = { onShare(strings.aboutShareText(WebLinks.Repo.LatestRelease), "Michi") },
                 )
             }
         }
@@ -134,7 +135,7 @@ internal fun AboutScreen(
                     label = strings.aboutPrivacyTitle,
                     value = "",
                     icon = AppIcons.Shield,
-                    onClick = { onOpenUrl(AboutLinks.PrivacyPolicy) },
+                    onClick = { onOpenUrl(WebLinks.Repo.PrivacyPolicy) },
                     divider = false,
                 )
                 SettingsRow(
@@ -142,34 +143,23 @@ internal fun AboutScreen(
                     value = "",
                     supportingText = "GPL-3.0",
                     icon = AppIcons.Description,
-                    onClick = { onOpenUrl(AboutLinks.License) },
+                    onClick = { onOpenUrl(WebLinks.Repo.License) },
                 )
                 SettingsRow(
                     label = strings.aboutDataByTitle,
                     value = "",
                     supportingText = strings.aboutNotAffiliatedText,
                     icon = AppIcons.AniList,
-                    onClick = { onOpenUrl(AboutLinks.AniList) },
+                    onClick = { onOpenUrl(WebLinks.AniList.Home) },
                 )
                 SettingsRow(
                     label = strings.aboutThemesByTitle,
                     value = "",
                     supportingText = "animethemes.moe",
                     icon = AppIcons.Play,
-                    onClick = { onOpenUrl(AboutLinks.AnimeThemes) },
+                    onClick = { onOpenUrl(WebLinks.AnimeThemes.Home) },
                 )
             }
         }
     }
-}
-
-internal object AboutLinks {
-    const val SourceCode = "https://github.com/LuumGrid/michi"
-    const val NewIssue = "https://github.com/LuumGrid/michi/issues/new"
-    const val LatestRelease = "https://github.com/LuumGrid/michi/releases/latest"
-    const val PrivacyPolicy =
-        "https://github.com/LuumGrid/michi/blob/main/docs/privacy.md"
-    const val License = "https://github.com/LuumGrid/michi/blob/main/LICENSE"
-    const val AniList = "https://anilist.co"
-    const val AnimeThemes = "https://animethemes.moe"
 }

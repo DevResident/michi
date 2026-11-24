@@ -8,6 +8,7 @@ import com.luum.michi.app.core.media.domain.MediaType
 import com.luum.michi.app.core.media.domain.MediaWorkStatus
 import com.luum.michi.app.core.media.domain.label
 import com.luum.michi.app.core.model.CoverSizes
+import com.luum.michi.app.core.network.domain.WebLinks
 import com.luum.michi.app.mediaDetail.domain.common.ExternalLink
 import com.luum.michi.app.core.model.Page
 
@@ -116,7 +117,7 @@ internal fun MediaDetail.workStatusLabel(strings: LanguageStrings): String? =
 /** Canonical AniList page for this entry. */
 internal fun MediaDetail.aniListUrl(): String {
     val segment = if (type == MediaDetailType.MANGA) "manga" else "anime"
-    return "https://anilist.co/$segment/$id"
+    return WebLinks.AniList.media(segment, id)
 }
 
 /** Body used by the share sheet: title + canonical URL. */
